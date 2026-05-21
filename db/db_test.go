@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 func setupTestDB(t *testing.T) {
@@ -14,7 +14,7 @@ func setupTestDB(t *testing.T) {
 		c.pool.Close()
 	}
 	delete(configs, "main")
-	err := Init("sqlite3", "file::memory:?cache=shared")
+	err := Init("sqlite", "file::memory:?cache=shared")
 	if err != nil {
 		t.Fatal(err)
 	}
