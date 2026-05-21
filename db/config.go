@@ -1,0 +1,124 @@
+package db
+
+import (
+	"database/sql"
+	"fmt"
+	"time"
+)
+
+// Config holds database connection configuration.
+type Config struct {
+	ID         string
+	DriverName string
+	DSN        string
+	Dialect    Dialect
+	MaxOpen    int
+	MaxIdle    int
+	MaxLife    time.Duration
+	Printer    func(sql string, args ...interface{})
+	pool       *sql.DB
+}
+
+// ConfigOption is a functional option for Config.
+type ConfigOption func(*Config)
+
+// WithDialect sets the database dialect.
+func WithDialect(d Dialect) ConfigOption {
+	return func(c *Config) { c.Dialect = d }
+}
+
+// WithMaxOpen sets max open connections.
+func WithMaxOpen(n int) ConfigOption {
+	return func(c *Config) { c.MaxOpen = n }
+}
+
+// WithMaxIdle sets max idle connections.
+func WithMaxIdle(n int) ConfigOption {
+	return func(c *Config) { c.MaxIdle = n }
+}
+
+// WithMaxLife sets connection max lifetime.
+func WithMaxLife(d time.Duration) ConfigOption {
+	return func(c *Config) { c.MaxLife = d }
+}
+
+// WithPrinter sets the SQL log printer.
+func WithPrinter(fn func(string, ...interface{})) ConfigOption {
+	return func(c *Config) { c.Printer = fn }
+}
+
+var configs = map[string]*Config{}
+var defaultConfigID = "main"
+
+// Init initializes the default database.
+func Init(driverName, dsn string, opts ...ConfigOption) error {
+	return InitWithID(defaultConfigID, driverName, dsn, opts...)
+}
+
+// InitWithID initializes a database with a specific config ID.
+func InitWithID(configID, driverName, dsn string, opts ...ConfigOption) error {
+	c := &Config{
+		ID:         configID,
+		DriverName: driverName,
+		DSN:        dsn,
+	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	if c.Dialect == nil {
+		c.Dialect = NewDialect(driverName)
+	}
+	configs[configID] = c
+	return nil
+}
+
+// GetConfig returns a Config by ID (default "main").
+func GetConfig(id ...string) *Config {
+	key := defaultConfigID
+	if len(id) > 0 && id[0] != "" {
+		key = id[0]
+	}
+	return configs[key]
+}
+
+// Pool returns the sql.DB connection pool (lazy init).
+func (c *Config) Pool() (*sql.DB, error) {
+	if c.pool != nil {
+		return c.pool, nil
+	}
+	db, err := sql.Open(c.DriverName, c.DSN)
+	if err != nil {
+		return nil, fmt.Errorf("db open error: %w", err)
+	}
+	if c.MaxOpen > 0 {
+		db.SetMaxOpenConns(c.MaxOpen)
+	}
+	if c.MaxIdle > 0 {
+		db.SetMaxIdleConns(c.MaxIdle)
+	}
+	if c.MaxLife > 0 {
+		db.SetConnMaxLifetime(c.MaxLife)
+	}
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("db ping error: %w", err)
+	}
+	c.pool = db
+	return db, nil
+}
+
+// CreateDao creates a new Dao instance.
+func (c *Config) CreateDao() *Dao {
+	return &Dao{config: c}
+}
+
+// GetDialect returns the dialect.
+func (c *Config) GetDialect() Dialect {
+	return c.Dialect
+}
+
+// logSQL logs SQL if printer is set.
+func (c *Config) logSQL(sql string, args ...interface{}) {
+	if c.Printer != nil {
+		c.Printer(sql, args...)
+	}
+}

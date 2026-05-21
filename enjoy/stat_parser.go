@@ -1,0 +1,522 @@
+package enjoy
+
+import (
+	"fmt"
+	"strings"
+)
+
+// StatList is a list of statements.
+type StatList struct {
+	Stats []Stat
+}
+
+func (s *StatList) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	for _, stat := range s.Stats {
+		if ctrl.Return || ctrl.Break || ctrl.Continue {
+			return
+		}
+		stat.Exec(env, scope, writer, ctrl)
+	}
+}
+
+// Text outputs raw text.
+type Text struct {
+	Content string
+}
+
+func (s *Text) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	writer.WriteString(s.Content)
+}
+
+// Output evaluates and outputs an expression: #(expr).
+type Output struct {
+	Expr Expr
+}
+
+func (s *Output) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	v := s.Expr.Eval(scope, ctrl)
+	if v != nil {
+		writer.WriteString(fmt.Sprintf("%v", v))
+	}
+}
+
+// If represents #if / #elseif / #else / #end.
+type IfStat struct {
+	Cond     Expr
+	Then     Stat
+	ElseIfs  []ElseIfStat
+	ElseStat Stat
+}
+
+type ElseIfStat struct {
+	Cond Expr
+	Then Stat
+}
+
+func (s *IfStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	if isTruthy(s.Cond.Eval(scope, ctrl)) {
+		s.Then.Exec(env, scope, writer, ctrl)
+		return
+	}
+	for _, ei := range s.ElseIfs {
+		if isTruthy(ei.Cond.Eval(scope, ctrl)) {
+			ei.Then.Exec(env, scope, writer, ctrl)
+			return
+		}
+	}
+	if s.ElseStat != nil {
+		s.ElseStat.Exec(env, scope, writer, ctrl)
+	}
+}
+
+// ForStat represents #for.
+type ForStat struct {
+	VarName  string
+	IterExpr Expr
+	Body     Stat
+	Init     Stat
+	Cond     Expr
+	Update   Stat
+	IsRange  bool
+}
+
+func (s *ForStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	if s.IsRange {
+		s.execRange(env, scope, writer, ctrl)
+	} else {
+		s.execTrad(env, scope, writer, ctrl)
+	}
+}
+
+func (s *ForStat) execRange(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	val := s.IterExpr.Eval(scope, ctrl)
+	items := toSlice(val)
+	for i, item := range items {
+		if ctrl.Return {
+			return
+		}
+		child := scope.NewChild()
+		child.Set(s.VarName, item)
+		child.Set("index", i)
+		child.Set("size", len(items))
+		child.Set("first", i == 0)
+		child.Set("last", i == len(items)-1)
+		ctrl.Reset()
+		s.Body.Exec(env, child, writer, ctrl)
+	}
+	ctrl.Reset()
+}
+
+func (s *ForStat) execTrad(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	if s.Init != nil {
+		s.Init.Exec(env, scope, writer, ctrl)
+	}
+	for {
+		if ctrl.Return {
+			return
+		}
+		if s.Cond != nil && !isTruthy(s.Cond.Eval(scope, ctrl)) {
+			break
+		}
+		ctrl.Reset()
+		s.Body.Exec(env, scope, writer, ctrl)
+		if ctrl.Break {
+			break
+		}
+		if s.Update != nil {
+			s.Update.Exec(env, scope, writer, ctrl)
+		}
+	}
+	ctrl.Reset()
+}
+
+// SetStat represents #set, #setLocal, #setGlobal.
+type SetStat struct {
+	Name     string
+	Expr     Expr
+	ScopeTyp string
+}
+
+func (s *SetStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	v := s.Expr.Eval(scope, ctrl)
+	switch s.ScopeTyp {
+	case "local":
+		scope.SetLocal(s.Name, v)
+	case "global":
+		scope.SetGlobal(s.Name, v)
+	default:
+		scope.Set(s.Name, v)
+	}
+}
+
+// DefineStat represents #define.
+type DefineStat struct {
+	Name   string
+	Params []string
+	Body   Stat
+}
+
+func (s *DefineStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	env.AddFunction(s.Name, s)
+}
+
+// CallStat represents #call or #@name.
+type CallStat struct {
+	FuncName string
+	Args     []Expr
+}
+
+func (s *CallStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	def := env.GetFunction(s.FuncName)
+	if def == nil {
+		return
+	}
+	args := make([]interface{}, len(s.Args))
+	for i, a := range s.Args {
+		args[i] = a.Eval(scope, ctrl)
+	}
+	childScope := NewScope(make(map[string]interface{}))
+	for i, name := range def.Params {
+		if i < len(args) {
+			childScope.Set(name, args[i])
+		}
+	}
+	def.Body.Exec(env, childScope, writer, ctrl)
+}
+
+// BreakStat represents #break.
+type BreakStat struct{}
+
+func (s *BreakStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	ctrl.Break = true
+}
+
+// ContinueStat represents #continue.
+type ContinueStat struct{}
+
+func (s *ContinueStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	ctrl.Continue = true
+}
+
+// ReturnStat represents #return.
+type ReturnStat struct {
+	Expr Expr
+}
+
+func (s *ReturnStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	if s.Expr != nil {
+		ctrl.Attachment = s.Expr.Eval(scope, ctrl)
+	}
+	ctrl.Return = true
+}
+
+// NullStat is an empty statement.
+type NullStat struct{}
+
+func (s *NullStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {}
+
+// SetAsStat wraps an Expr as a Stat.
+type SetAsStat struct {
+	Expr Expr
+}
+
+func (s *SetAsStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	if s.Expr != nil {
+		s.Expr.Eval(scope, ctrl)
+	}
+}
+
+// ---- Template Parser ----
+
+// ParseTemplate parses template tokens into a Stat AST.
+func ParseTemplate(lexer *Lexer, env *Env) (Stat, error) {
+	return parseStatList(lexer, env, TokEOF)
+}
+
+func parseStatList(lexer *Lexer, env *Env, endTok TokType) (Stat, error) {
+	var stats []Stat
+	for {
+		tok := lexer.Scan()
+		if tok.Type == TokEOF || tok.Type == endTok {
+			break
+		}
+		stat, err := parseOneStat(tok, lexer, env)
+		if err != nil {
+			return nil, err
+		}
+		if stat != nil {
+			stats = append(stats, stat)
+		}
+	}
+	if len(stats) == 0 {
+		return &NullStat{}, nil
+	}
+	if len(stats) == 1 {
+		return stats[0], nil
+	}
+	return &StatList{Stats: stats}, nil
+}
+
+func parseOneStat(tok Token, lexer *Lexer, env *Env) (Stat, error) {
+	switch tok.Type {
+	case TokText:
+		return &Text{Content: tok.Val}, nil
+	case TokOutput:
+		ex, err := ParseExpr(tok.Val)
+		if err != nil {
+			return nil, fmt.Errorf("output expression error: %w", err)
+		}
+		return &Output{Expr: ex}, nil
+	case TokIf:
+		return parseIfStat(tok.Val, lexer, env)
+	case TokFor:
+		return parseForStat(tok.Val, lexer, env)
+	case TokSet:
+		return parseSetStat(tok.Val, "")
+	case TokSetLocal:
+		return parseSetStat(tok.Val, "local")
+	case TokSetGlobal:
+		return parseSetStat(tok.Val, "global")
+	case TokDefine:
+		return parseDefineStat(tok.Val, lexer, env)
+	case TokCall:
+		return parseCallStat(tok.Val)
+	case TokBreak:
+		return &BreakStat{}, nil
+	case TokContinue:
+		return &ContinueStat{}, nil
+	case TokReturn, TokReturnIf:
+		return parseReturnStat(tok.Val)
+	default:
+		return &NullStat{}, nil
+	}
+}
+
+func parseIfStat(condStr string, lexer *Lexer, env *Env) (Stat, error) {
+	cond, err := ParseExpr(condStr)
+	if err != nil {
+		return nil, err
+	}
+
+	thenBody, thenTokens, err := collectUntil(lexer, env, TokElseIf, TokElse, TokEnd)
+	if err != nil {
+		return nil, err
+	}
+
+	var elseIfs []ElseIfStat
+	var elseStat Stat
+
+	for _, t := range thenTokens {
+		if t.Type == TokElseIf {
+			eiCond, _ := ParseExpr(t.Val)
+			eiBody, eiTokens, err := collectUntil(lexer, env, TokElseIf, TokElse, TokEnd)
+			if err != nil {
+				return nil, err
+			}
+			elseIfs = append(elseIfs, ElseIfStat{Cond: eiCond, Then: eiBody})
+			thenTokens = eiTokens
+			continue
+		}
+		if t.Type == TokElse {
+			elseBody, _, err := collectUntil(lexer, env, TokEnd)
+			if err != nil {
+				return nil, err
+			}
+			elseStat = elseBody
+			break
+		}
+		if t.Type == TokEnd {
+			break
+		}
+	}
+
+	return &IfStat{Cond: cond, Then: thenBody, ElseIfs: elseIfs, ElseStat: elseStat}, nil
+}
+
+func collectUntil(lexer *Lexer, env *Env, stopToks ...TokType) (Stat, []Token, error) {
+	var toks []Token
+	depth := 0
+
+	for {
+		tok := lexer.Scan()
+		if tok.Type == TokEOF {
+			break
+		}
+
+		shouldStop := false
+		for _, st := range stopToks {
+			if tok.Type == st && depth == 0 {
+				shouldStop = true
+				break
+			}
+		}
+		if shouldStop {
+			stat, err := tokensToStat(toks, env)
+			return stat, []Token{tok}, err
+		}
+
+		if tok.Type == TokIf || tok.Type == TokFor || tok.Type == TokDefine || tok.Type == TokSwitch {
+			depth++
+		}
+		if tok.Type == TokEnd {
+			if depth > 0 {
+				depth--
+			} else {
+				stat, err := tokensToStat(toks, env)
+				return stat, []Token{tok}, err
+			}
+		}
+
+		toks = append(toks, tok)
+	}
+
+	stat, err := tokensToStat(toks, env)
+	return stat, nil, err
+}
+
+func tokensToStat(toks []Token, env *Env) (Stat, error) {
+	if len(toks) == 0 {
+		return &NullStat{}, nil
+	}
+	var stats []Stat
+	for _, tok := range toks {
+		stat, err := parseOneStat(tok, nil, env)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := stat.(*NullStat); !ok {
+			stats = append(stats, stat)
+		}
+	}
+	if len(stats) == 0 {
+		return &NullStat{}, nil
+	}
+	if len(stats) == 1 {
+		return stats[0], nil
+	}
+	return &StatList{Stats: stats}, nil
+}
+
+func parseForStat(header string, lexer *Lexer, env *Env) (Stat, error) {
+	body, _, err := collectUntil(lexer, env, TokEnd)
+	if err != nil {
+		return nil, err
+	}
+
+	header = strings.TrimSpace(header)
+
+	if idx := strings.Index(header, " : "); idx != -1 {
+		varName := strings.TrimSpace(header[:idx])
+		iterStr := strings.TrimSpace(header[idx+3:])
+		iterExpr, err := ParseExpr(iterStr)
+		if err != nil {
+			return nil, err
+		}
+		return &ForStat{VarName: varName, IterExpr: iterExpr, Body: body, IsRange: true}, nil
+	}
+	if idx := strings.Index(header, " in "); idx != -1 {
+		varName := strings.TrimSpace(header[:idx])
+		iterStr := strings.TrimSpace(header[idx+4:])
+		iterExpr, err := ParseExpr(iterStr)
+		if err != nil {
+			return nil, err
+		}
+		return &ForStat{VarName: varName, IterExpr: iterExpr, Body: body, IsRange: true}, nil
+	}
+
+	parts := strings.Split(header, ";")
+	if len(parts) >= 3 {
+		initExpr, _ := ParseExpr(strings.TrimSpace(parts[0]))
+		condExpr, _ := ParseExpr(strings.TrimSpace(parts[1]))
+		updateExpr, _ := ParseExpr(strings.TrimSpace(parts[2]))
+		return &ForStat{
+			Body:    body,
+			IsRange: false,
+			Init:    &SetAsStat{Expr: initExpr},
+			Cond:    condExpr,
+			Update:  &SetAsStat{Expr: updateExpr},
+		}, nil
+	}
+
+	return &NullStat{}, nil
+}
+
+func parseSetStat(val string, scopeType string) (Stat, error) {
+	idx := strings.Index(val, "=")
+	if idx == -1 {
+		return &NullStat{}, nil
+	}
+	name := strings.TrimSpace(val[:idx])
+	exprStr := strings.TrimSpace(val[idx+1:])
+	ex, err := ParseExpr(exprStr)
+	if err != nil {
+		return nil, err
+	}
+	return &SetStat{Name: name, Expr: ex, ScopeTyp: scopeType}, nil
+}
+
+func parseDefineStat(header string, lexer *Lexer, env *Env) (Stat, error) {
+	header = strings.TrimSpace(header)
+	parenIdx := strings.Index(header, "(")
+	name := header
+	var params []string
+	if parenIdx != -1 {
+		name = strings.TrimSpace(header[:parenIdx])
+		if len(header) > parenIdx+1 {
+			paramStr := header[parenIdx+1:]
+			if idx := strings.Index(paramStr, ")"); idx != -1 {
+				paramStr = paramStr[:idx]
+			}
+			for _, p := range strings.Split(paramStr, ",") {
+				p = strings.TrimSpace(p)
+				if p != "" {
+					params = append(params, p)
+				}
+			}
+		}
+	}
+	body, _, err := collectUntil(lexer, env, TokEnd)
+	if err != nil {
+		return nil, err
+	}
+	return &DefineStat{Name: name, Params: params, Body: body}, nil
+}
+
+func parseCallStat(val string) (Stat, error) {
+	val = strings.TrimSpace(val)
+	parenIdx := strings.Index(val, "(")
+	name := val
+	var args []Expr
+	if parenIdx != -1 {
+		name = strings.TrimSpace(val[:parenIdx])
+		if len(val) > parenIdx+1 {
+			argStr := val[parenIdx+1:]
+			if idx := strings.Index(argStr, ")"); idx != -1 {
+				argStr = argStr[:idx]
+			}
+			for _, a := range strings.Split(argStr, ",") {
+				a = strings.TrimSpace(a)
+				if a != "" {
+					ex, err := ParseExpr(a)
+					if err != nil {
+						continue
+					}
+					args = append(args, ex)
+				}
+			}
+		}
+	}
+	return &CallStat{FuncName: name, Args: args}, nil
+}
+
+func parseReturnStat(val string) (Stat, error) {
+	val = strings.TrimSpace(val)
+	if val == "" {
+		return &ReturnStat{}, nil
+	}
+	ex, err := ParseExpr(val)
+	if err != nil {
+		return nil, err
+	}
+	return &ReturnStat{Expr: ex}, nil
+}
