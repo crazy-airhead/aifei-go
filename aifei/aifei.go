@@ -1,7 +1,6 @@
 package aifei
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,7 +8,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 )
 
 // Version is the framework version.
@@ -21,7 +19,7 @@ type Aifei struct {
 	router      *Router
 	middlewares []Middleware
 	plugins     []Plugin
-	server      *http.Server
+	server      Server
 }
 
 // New creates a new Aifei instance.
@@ -137,13 +135,12 @@ func (a *Aifei) Start(addr string) error {
 		a.config.OnStart()
 	}
 
-	a.server = &http.Server{
-		Addr:    addr,
-		Handler: a,
+	if a.server == nil {
+		a.server = NewDefaultServer(addr)
 	}
 
 	fmt.Printf("[AIFEI] Server starting on %s (version %s)\n", addr, Version)
-	return a.server.ListenAndServe()
+	return a.server.Start(a)
 }
 
 // Stop gracefully shuts down the server.
@@ -152,10 +149,7 @@ func (a *Aifei) Stop() error {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := a.server.Shutdown(ctx); err != nil {
+	if err := a.server.Stop(); err != nil {
 		return err
 	}
 

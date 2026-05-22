@@ -4,6 +4,7 @@ package aifei
 type Config struct {
 	Middlewares []Middleware
 	Plugins     []Plugin
+	Server      Server
 	OnStart     func()
 	OnStop      func()
 }
@@ -22,6 +23,13 @@ func WithMiddleware(m ...Middleware) Option {
 func WithPlugin(p ...Plugin) Option {
 	return func(a *Aifei) {
 		a.plugins = append(a.plugins, p...)
+	}
+}
+
+// WithServer sets a custom HTTP server backend.
+func WithServer(s Server) Option {
+	return func(a *Aifei) {
+		a.server = s
 	}
 }
 
