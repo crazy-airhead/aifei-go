@@ -5,6 +5,8 @@ import (
 
 	"github.com/crazy-airhead/aifei-go"
 	"github.com/crazy-airhead/aifei-go/db"
+
+	_ "modernc.org/sqlite"
 )
 
 func main() {
