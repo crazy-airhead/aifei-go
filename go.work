@@ -1,0 +1,11 @@
+go 1.26
+
+use (
+	./aifei
+	./enjoy
+	./db
+	./json
+	./log
+	./_example/demo
+	./_example/db_sqlite_test
+)

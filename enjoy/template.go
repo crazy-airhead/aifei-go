@@ -6,7 +6,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/aifei/aifei/enjoy/source"
+	"github.com/crazy-airhead/aifei-go/enjoy/source"
 )
 
 // Template represents a compiled template.

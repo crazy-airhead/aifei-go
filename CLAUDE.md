@@ -5,31 +5,52 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Test
 
 ```bash
-# Run all tests
-/usr/local/go/bin/go test ./...
+# Run all tests (workspace mode)
+go test ./aifei ./enjoy ./db ./json ./log ./_example/db_sqlite_test
 
-# Run tests for a single package
-/usr/local/go/bin/go test ./enjoy
-/usr/local/go/bin/go test ./db
-/usr/local/go/bin/go test ./json
-/usr/local/go/bin/go test ./log
+# Run tests for a single module
+go test ./aifei
+go test ./enjoy
+go test ./db
+go test ./json
+go test ./log
+
+# Run db integration tests (requires sqlite)
+go test ./_example/db_sqlite_test
 
 # Run a single test
-/usr/local/go/bin/go test ./enjoy -run TestOutputExpr
+go test ./enjoy -run TestOutputExpr
 
 # Run the demo
-/usr/local/go/bin/go run ./_example/demo
+go run ./_example/demo
 ```
 
-Go is at `/usr/local/go/bin/go` (not on default PATH).
+## Module Structure (Go Workspace)
+
+This project uses Go workspace (`go.work`) with independent modules. Each library module has zero external dependencies.
+
+| Module | Path | External Dependencies |
+|--------|------|-----------------------|
+| `github.com/crazy-airhead/aifei-go` | `./aifei` | None |
+| `github.com/crazy-airhead/aifei-go/enjoy` | `./enjoy` | None |
+| `github.com/crazy-airhead/aifei-go/db` | `./db` | None |
+| `github.com/crazy-airhead/aifei-go/json` | `./json` | None |
+| `github.com/crazy-airhead/aifei-go/log` | `./log` | None |
+| `_example/demo` | `./_example/demo` | `modernc.org/sqlite` |
+| `_example/db_sqlite_test` | `./_example/db_sqlite_test` | `modernc.org/sqlite` |
+
+Users can import individual modules without pulling unwanted dependencies:
+- `go get github.com/crazy-airhead/aifei-go/enjoy` — template engine only, zero external deps
+- `go get github.com/crazy-airhead/aifei-go/db` — database access only, zero external deps (user provides their own driver)
+- `go get github.com/crazy-airhead/aifei-go` — core web framework, zero external deps
+
+Requires Go 1.26. All library code uses only the Go standard library.
 
 ## Architecture
 
-Aifei-Go is a lightweight Go web framework ported from a Java version (`/Users/airhead/WorkSpace/aifei/aifei`). It follows a "Just Service" philosophy — flat architecture, no Controller/Service/DAO layers.
+Aifei-Go is a lightweight Go web framework ported from [Aifei Java](https://github.com/jfinal/aifei). It follows a "Just Service" philosophy — flat architecture, no Controller/Service/DAO layers.
 
-Module: `github.com/aifei/aifei`, requires Go 1.26. Only external dependency: `modernc.org/sqlite` (pure-Go SQLite driver). Everything else uses the Go standard library.
-
-### Core (`/` root package)
+### Core (`./aifei`)
 
 - **`aifei.go`** — `Aifei` struct: entry point with `New()`, `Use()`, route methods (`GET`/`POST`/etc.), `Register()` for struct-based routing, `Run()`/`Start()`/`Stop()`. Implements `http.Handler`.
 - **`context.go`** — `Context`: unified request/response object (merges Java's Input + Output). Lazy body reading, chain control via `Next()`/`Abort()`. JSON/text/HTML response helpers.
@@ -38,7 +59,7 @@ Module: `github.com/aifei/aifei`, requires Go 1.26. Only external dependency: `m
 - **`middleware.go`** — Built-in middleware: `Logger`, `Recover`, `CORS`, `BasicAuth`, `RequestID`, `Timeout`, `Static`.
 - **`config.go`** — `Config` with functional options pattern.
 
-### Enjoy Template Engine (`/enjoy`)
+### Enjoy Template Engine (`./enjoy`)
 
 ~2600 lines, the framework's signature feature. Custom template language with its own lexer/parser:
 - **DKFF algorithm** for tokenization, **DLRD recursive descent** for parsing
@@ -47,7 +68,7 @@ Module: `github.com/aifei/aifei`, requires Go 1.26. Only external dependency: `m
 - `Engine` → `Template` → `Env`/`Scope` execution model
 - Configured via `EngineConfig` (custom directives, shared functions/objects)
 
-### Database (`/db`)
+### Database (`./db`)
 
 - **`Db`** (`db.go`) — Top-level convenience functions: `Use()`, `SQL()`, `Select()`, `Insert()`, `Update()`, `Delete()`, `FindByID()`, `FindBy()`, etc.
 - **`Dao`** (`dao.go`) — Chainable query builder for single-table CRUD operations
@@ -59,8 +80,13 @@ Module: `github.com/aifei/aifei`, requires Go 1.26. Only external dependency: `m
 
 ### Other Packages
 
-- **`/json`** — Lightweight JSON marshal/unmarshal wrappers
-- **`/log`** — Logging interface with default implementation
+- **`./json`** — Lightweight JSON marshal/unmarshal wrappers
+- **`./log`** — Logging interface with default implementation
+
+### Examples
+
+- **`./_example/demo`** — Full web app demo using core + db with SQLite driver
+- **`./_example/db_sqlite_test`** — Database integration tests (requires SQLite driver)
 
 ## Design Decisions (Java → Go)
 

@@ -116,6 +116,22 @@ func (c *Config) GetDialect() Dialect {
 	return c.Dialect
 }
 
+// Close releases the connection pool.
+func (c *Config) Close() {
+	if c.pool != nil {
+		c.pool.Close()
+		c.pool = nil
+	}
+}
+
+// ResetConfigs removes all registered configs and closes their pools (for testing).
+func ResetConfigs() {
+	for _, c := range configs {
+		c.Close()
+	}
+	configs = map[string]*Config{}
+}
+
 // logSQL logs SQL if printer is set.
 func (c *Config) logSQL(sql string, args ...interface{}) {
 	if c.Printer != nil {

@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/aifei/aifei"
-	"github.com/aifei/aifei/db"
+	"github.com/crazy-airhead/aifei-go"
+	"github.com/crazy-airhead/aifei-go/db"
 )
 
 func main() {
