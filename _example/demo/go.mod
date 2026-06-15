@@ -28,5 +28,3 @@ replace (
 )
 
 replace github.com/crazy-airhead/aifei-go/enjoy => ../../enjoy
-
-replace github.com/crazy-airhead/aifei-go/db/sql => ../../db/sql

@@ -22,5 +22,3 @@ require (
 replace github.com/crazy-airhead/aifei-go/db => ../../db
 
 replace github.com/crazy-airhead/aifei-go/enjoy => ../../enjoy
-
-replace github.com/crazy-airhead/aifei-go/db/sql => ../../db/sql
