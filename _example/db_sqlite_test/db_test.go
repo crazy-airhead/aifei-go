@@ -293,3 +293,693 @@ func TestFindIn(t *testing.T) {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 }
+
+// ---- Enjoy SQL Tests ----
+
+func TestEnjoySqlParaNamed(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "james").Set("age", 18))
+
+	rows, err := db.Sql("select * from user where id = #para(id)", map[string]interface{}{
+		"id": 1,
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "james" {
+		t.Fatalf("expected name=james, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlParaPositional(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "james").Set("age", 18))
+	db.Insert(db.NewRow("user").Set("name", "alice").Set("age", 20))
+
+	rows, err := db.SqlWithArgs("select * from user where age > #para(0) and age < #para(1)", 17, 19).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "james" {
+		t.Fatalf("expected name=james, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlParaLike(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "james").Set("age", 18))
+	db.Insert(db.NewRow("user").Set("name", "jamie").Set("age", 20))
+	db.Insert(db.NewRow("user").Set("name", "alice").Set("age", 25))
+
+	rows, err := db.Sql("select * from user where name like #para(name, 'like')", map[string]interface{}{
+		"name": "jam",
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+}
+
+func TestEnjoySqlParaLikeLeft(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "james").Set("age", 18))
+	db.Insert(db.NewRow("user").Set("name", "alice").Set("age", 25))
+
+	rows, err := db.Sql("select * from user where name like #para(name, '%like')", map[string]interface{}{
+		"name": "mes",
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "james" {
+		t.Fatalf("expected name=james, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlParaLikeRight(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "james").Set("age", 18))
+	db.Insert(db.NewRow("user").Set("name", "alice").Set("age", 25))
+
+	rows, err := db.Sql("select * from user where name like #para(name, 'like%')", map[string]interface{}{
+		"name": "ja",
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "james" {
+		t.Fatalf("expected name=james, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlWhereEqual(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "alice").Set("age", 20))
+	db.Insert(db.NewRow("user").Set("name", "bob").Set("age", 25))
+
+	rows, err := db.Sql("select * from user #where(age, '=', age)", map[string]interface{}{
+		"age": 20,
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "alice" {
+		t.Fatalf("expected name=alice, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlWhereGreaterThan(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "a").Set("age", 10))
+	db.Insert(db.NewRow("user").Set("name", "b").Set("age", 20))
+	db.Insert(db.NewRow("user").Set("name", "c").Set("age", 30))
+
+	rows, err := db.Sql("select * from user #where(age, '>', age)", map[string]interface{}{
+		"age": 15,
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+}
+
+func TestEnjoySqlWhereNilSkips(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "a").Set("age", 10))
+	db.Insert(db.NewRow("user").Set("name", "b").Set("age", 20))
+
+	// When age is nil, #where should generate no WHERE clause
+	rows, err := db.Sql("select * from user #where(age, '=', age)", map[string]interface{}{
+		"age": nil,
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (no filter), got %d", len(rows))
+	}
+}
+
+func TestEnjoySqlWhereIsNull(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "a").Set("email", "a@test.com"))
+	db.Insert(db.NewRow("user").Set("name", "b")) // email is nil
+
+	rows, err := db.Sql("select * from user #where(email, 'is null')", map[string]interface{}{
+		"email": true,
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row with null email, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "b" {
+		t.Fatalf("expected name=b, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlWhereIsNotNull(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "a").Set("email", "a@test.com"))
+	db.Insert(db.NewRow("user").Set("name", "b")) // email is nil
+
+	rows, err := db.Sql("select * from user #where(email, 'is not null')", map[string]interface{}{
+		"email": true,
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row with non-null email, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "a" {
+		t.Fatalf("expected name=a, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlWhereLike(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "james").Set("age", 18))
+	db.Insert(db.NewRow("user").Set("name", "jamie").Set("age", 20))
+	db.Insert(db.NewRow("user").Set("name", "alice").Set("age", 25))
+
+	rows, err := db.Sql("select * from user #where(name, 'like', name)", map[string]interface{}{
+		"name": "jam",
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+}
+
+func TestEnjoySqlWhereContains(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "hello").Set("age", 10))
+	db.Insert(db.NewRow("user").Set("name", "world").Set("age", 20))
+
+	rows, err := db.Sql("select * from user #where(name, 'contains', name)", map[string]interface{}{
+		"name": "ell",
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "hello" {
+		t.Fatalf("expected name=hello, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlWhereStartsWith(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "james").Set("age", 18))
+	db.Insert(db.NewRow("user").Set("name", "alice").Set("age", 25))
+
+	rows, err := db.Sql("select * from user #where(name, 'startsWith', name)", map[string]interface{}{
+		"name": "ja",
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "james" {
+		t.Fatalf("expected name=james, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlWhereEndsWith(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "james").Set("age", 18))
+	db.Insert(db.NewRow("user").Set("name", "alice").Set("age", 25))
+
+	rows, err := db.Sql("select * from user #where(name, 'endsWith', name)", map[string]interface{}{
+		"name": "ice",
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "alice" {
+		t.Fatalf("expected name=alice, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlWhereIn(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "a").Set("age", 10))
+	db.Insert(db.NewRow("user").Set("name", "b").Set("age", 20))
+	db.Insert(db.NewRow("user").Set("name", "c").Set("age", 30))
+
+	rows, err := db.Sql("select * from user #where(age, 'in', ages)", map[string]interface{}{
+		"ages": []int{10, 30},
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+}
+
+func TestEnjoySqlWhereNotIn(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "a").Set("age", 10))
+	db.Insert(db.NewRow("user").Set("name", "b").Set("age", 20))
+	db.Insert(db.NewRow("user").Set("name", "c").Set("age", 30))
+
+	rows, err := db.Sql("select * from user #where(age, 'not in', ages)", map[string]interface{}{
+		"ages": []int{10, 30},
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "b" {
+		t.Fatalf("expected name=b, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlWhereBetween(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "a").Set("age", 10))
+	db.Insert(db.NewRow("user").Set("name", "b").Set("age", 20))
+	db.Insert(db.NewRow("user").Set("name", "c").Set("age", 30))
+
+	rows, err := db.Sql("select * from user #where(age, 'between', ageRange)", map[string]interface{}{
+		"ageRange": []int{15, 25},
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "b" {
+		t.Fatalf("expected name=b, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlWhereAnd(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "a").Set("age", 10))
+	db.Insert(db.NewRow("user").Set("name", "b").Set("age", 20))
+	db.Insert(db.NewRow("user").Set("name", "c").Set("age", 30))
+
+	rows, err := db.Sql("select * from user #where(age, '>', minAge) #and(age, '<', maxAge)", map[string]interface{}{
+		"minAge": 5,
+		"maxAge": 25,
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+}
+
+func TestEnjoySqlWhereAndNilSkips(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "a").Set("age", 10))
+	db.Insert(db.NewRow("user").Set("name", "b").Set("age", 20))
+
+	// minAge is nil, so only maxAge condition should apply
+	rows, err := db.Sql(
+		"select * from user #where(age, '>', minAge) #and(age, '<', maxAge)",
+		map[string]interface{}{
+			"minAge": nil,
+			"maxAge": 15,
+		},
+	).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "a" {
+		t.Fatalf("expected name=a, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlWhereDifferentFieldNames(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "james").Set("age", 18))
+
+	// Field name in SQL (age) differs from parameter name (userAge)
+	rows, err := db.Sql("select * from user #where(age, '=', userAge)", map[string]interface{}{
+		"userAge": 18,
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+}
+
+func TestEnjoySqlWhereAfterLiteralWhere(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "a").Set("age", 10))
+	db.Insert(db.NewRow("user").Set("name", "b").Set("age", 20))
+
+	// #and after a literal WHERE clause (no #where directive)
+	rows, err := db.Sql("select * from user where age > 5 #and(name, '=', name)", map[string]interface{}{
+		"name": "b",
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "b" {
+		t.Fatalf("expected name=b, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlOrderBy(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "c").Set("age", 30))
+	db.Insert(db.NewRow("user").Set("name", "a").Set("age", 10))
+	db.Insert(db.NewRow("user").Set("name", "b").Set("age", 20))
+
+	rows, err := db.Sql("select * from user #orderBy(age)", map[string]interface{}{
+		"orderBy": map[string]interface{}{
+			"field": "age",
+			"order": "asc",
+		},
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "a" {
+		t.Fatalf("expected first row name=a, got %s", rows[0].GetStr("name"))
+	}
+	if rows[2].GetStr("name") != "c" {
+		t.Fatalf("expected last row name=c, got %s", rows[2].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlOrderByDesc(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "c").Set("age", 30))
+	db.Insert(db.NewRow("user").Set("name", "a").Set("age", 10))
+	db.Insert(db.NewRow("user").Set("name", "b").Set("age", 20))
+
+	rows, err := db.Sql("select * from user #orderBy(age)", map[string]interface{}{
+		"orderBy": map[string]interface{}{
+			"field": "age",
+			"order": "desc",
+		},
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows[0].GetStr("name") != "c" {
+		t.Fatalf("expected first row name=c, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlOrderByCustomName(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "c").Set("age", 30))
+	db.Insert(db.NewRow("user").Set("name", "a").Set("age", 10))
+
+	rows, err := db.Sql("select * from user #orderBy($sort, age)", map[string]interface{}{
+		"sort": map[string]interface{}{
+			"field": "age",
+			"order": "asc",
+		},
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows[0].GetStr("name") != "a" {
+		t.Fatalf("expected first row name=a, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlAddAndGetById(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "james").Set("age", 18))
+	db.Insert(db.NewRow("user").Set("name", "alice").Set("age", 20))
+
+	sql := `#sql("findByName")
+select * from user where name = #para(0)
+#end`
+	db.AddSql("findByName", sql)
+
+	rows, err := db.SqlByIdWithArgs("findByName", "james").Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "james" {
+		t.Fatalf("expected name=james, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlAddAndGetByIdWithWhere(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "james").Set("age", 18))
+	db.Insert(db.NewRow("user").Set("name", "alice").Set("age", 20))
+	db.Insert(db.NewRow("user").Set("name", "bob").Set("age", 25))
+
+	sql := `#sql("findByFilter")
+select * from user #where(age, '>', age) #and(name, 'like', name)
+#end`
+	db.AddSql("findByFilter", sql)
+
+	// age > 15 AND name LIKE '%a%' — matches james and alice
+	rows, err := db.SqlById("findByFilter", map[string]interface{}{
+		"age": 15, "name": "a",
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+}
+
+func TestEnjoySqlInsert(t *testing.T) {
+	setupTestDB(t)
+
+	_, err := db.Sql("insert into user(name, age) values(#para(name), #para(age))", map[string]interface{}{
+		"name": "james",
+		"age":  18,
+	}).Update()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	count, _ := db.Count("user")
+	if count != 1 {
+		t.Fatalf("expected 1 row, got %d", count)
+	}
+}
+
+func TestEnjoySqlUpdate(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "james").Set("age", 18))
+
+	_, err := db.Sql("update user set age = #para(newAge) where id = #para(id)", map[string]interface{}{
+		"newAge": 25,
+		"id":     1,
+	}).Update()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	found, _ := db.FindByID("user", 1)
+	if found.GetInt("age") != 25 {
+		t.Fatalf("expected age=25, got %d", found.GetInt("age"))
+	}
+}
+
+func TestEnjoySqlDelete(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "james").Set("age", 18))
+	db.Insert(db.NewRow("user").Set("name", "alice").Set("age", 20))
+
+	_, err := db.Sql("delete from user #where(age, '>', age)", map[string]interface{}{
+		"age": 19,
+	}).Update()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	count, _ := db.Count("user")
+	if count != 1 {
+		t.Fatalf("expected 1 row remaining, got %d", count)
+	}
+}
+
+func TestEnjoySqlPaginate(t *testing.T) {
+	setupTestDB(t)
+	for i := 0; i < 25; i++ {
+		db.Insert(db.NewRow("user").Set("name", "user").Set("age", i))
+	}
+
+	page, err := db.Sql("select * from user #where(age, '>', age)", map[string]interface{}{
+		"age": 10,
+	}).Paginate(1, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.TotalRows != 14 {
+		t.Fatalf("expected totalRows=14, got %d", page.TotalRows)
+	}
+	if len(page.Rows) != 5 {
+		t.Fatalf("expected 5 rows, got %d", len(page.Rows))
+	}
+}
+
+func TestEnjoySqlFieldExpression(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "james").Set("age", 18))
+	db.Insert(db.NewRow("user").Set("name", "alice").Set("age", 20))
+
+	// String field expression in #where
+	rows, err := db.Sql("select * from user #where('age + 1', '>', age)", map[string]interface{}{
+		"age": 19,
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "alice" {
+		t.Fatalf("expected name=alice, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlWhereNotEqual(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "a").Set("age", 10))
+	db.Insert(db.NewRow("user").Set("name", "b").Set("age", 20))
+	db.Insert(db.NewRow("user").Set("name", "c").Set("age", 30))
+
+	rows, err := db.Sql("select * from user #where(age, '!=', age)", map[string]interface{}{
+		"age": 20,
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+}
+
+func TestEnjoySqlWhereGreaterOrEqual(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "a").Set("age", 10))
+	db.Insert(db.NewRow("user").Set("name", "b").Set("age", 20))
+
+	rows, err := db.Sql("select * from user #where(age, '>=', age)", map[string]interface{}{
+		"age": 20,
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "b" {
+		t.Fatalf("expected name=b, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlWhereLessThan(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "a").Set("age", 10))
+	db.Insert(db.NewRow("user").Set("name", "b").Set("age", 20))
+
+	rows, err := db.Sql("select * from user #where(age, '<', age)", map[string]interface{}{
+		"age": 20,
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "a" {
+		t.Fatalf("expected name=a, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlWhereLessOrEqual(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "a").Set("age", 10))
+	db.Insert(db.NewRow("user").Set("name", "b").Set("age", 20))
+
+	rows, err := db.Sql("select * from user #where(age, '<=', age)", map[string]interface{}{
+		"age": 10,
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].GetStr("name") != "a" {
+		t.Fatalf("expected name=a, got %s", rows[0].GetStr("name"))
+	}
+}
+
+func TestEnjoySqlOrderByFieldMapping(t *testing.T) {
+	setupTestDB(t)
+	db.Insert(db.NewRow("user").Set("name", "c").Set("age", 30))
+	db.Insert(db.NewRow("user").Set("name", "a").Set("age", 10))
+	db.Insert(db.NewRow("user").Set("name", "b").Set("age", 20))
+
+	// Map client field "userAge" to SQL field "age"
+	rows, err := db.Sql("select * from user #orderBy('age:userAge')", map[string]interface{}{
+		"orderBy": map[string]interface{}{
+			"field": "userAge",
+			"order": "asc",
+		},
+	}).Find()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows[0].GetStr("name") != "a" {
+		t.Fatalf("expected first row name=a, got %s", rows[0].GetStr("name"))
+	}
+}

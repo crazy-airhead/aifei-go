@@ -37,3 +37,11 @@ func (el *ExprList) Length() int {
 	}
 	return len(el.Exprs)
 }
+
+// GetExpr returns the expression at the given index.
+func (el *ExprList) GetExpr(index int) Expr {
+	if index >= len(el.Exprs) {
+		return nil
+	}
+	return el.Exprs[index]
+}

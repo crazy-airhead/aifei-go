@@ -139,6 +139,11 @@ func (e *Engine) GetConfig() *EngineConfig {
 	return e.config
 }
 
+// NewTemplate creates a Template from an Env and Stat (for use by SQL directives).
+func NewTemplate(env *Env, ast Stat) *Template {
+	return &Template{env: env, ast: ast}
+}
+
 // errorStat outputs an error message.
 type errorStat struct {
 	err error

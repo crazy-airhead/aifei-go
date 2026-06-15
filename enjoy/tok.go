@@ -32,4 +32,5 @@ const (
 type Token struct {
 	Type TokType
 	Val  string
+	Name string // directive name when Type is TokID
 }

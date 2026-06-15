@@ -15,7 +15,7 @@ func NewLexer(input string) *Lexer {
 // Scan returns the next token.
 func (l *Lexer) Scan() Token {
 	if l.pos >= l.length {
-		return Token{TokEOF, ""}
+		return Token{TokEOF, "", ""}
 	}
 
 	if l.pos < l.length && l.input[l.pos] != '#' {
@@ -23,7 +23,7 @@ func (l *Lexer) Scan() Token {
 	}
 
 	if l.pos >= l.length {
-		return Token{TokEOF, ""}
+		return Token{TokEOF, "", ""}
 	}
 
 	// Comment: #-- ... --#
@@ -36,7 +36,7 @@ func (l *Lexer) Scan() Token {
 			}
 			l.pos++
 		}
-		return Token{TokEOF, ""}
+		return Token{TokEOF, "", ""}
 	}
 
 	// Raw block: #[[ ... ]]#
@@ -47,11 +47,11 @@ func (l *Lexer) Scan() Token {
 			if l.input[l.pos:l.pos+3] == "]]#" {
 				val := l.input[start:l.pos]
 				l.pos += 3
-				return Token{TokText, val}
+				return Token{TokText, val, ""}
 			}
 			l.pos++
 		}
-		return Token{TokText, l.input[start:]}
+		return Token{TokText, l.input[start:], ""}
 	}
 
 	// Single-line comment: ###
@@ -83,7 +83,7 @@ func (l *Lexer) scanText() Token {
 		}
 		l.pos++
 	}
-	return Token{TokText, l.input[start:l.pos]}
+	return Token{TokText, l.input[start:l.pos], ""}
 }
 
 func (l *Lexer) scanOutput() Token {
@@ -115,7 +115,7 @@ func (l *Lexer) scanOutput() Token {
 	if l.pos < l.length {
 		l.pos++
 	}
-	return Token{TokOutput, val}
+	return Token{TokOutput, val, ""}
 }
 
 func (l *Lexer) scanDirective() Token {
@@ -123,7 +123,7 @@ func (l *Lexer) scanDirective() Token {
 
 	if l.pos < l.length && l.input[l.pos] == '@' {
 		l.pos++
-		return l.scanDirectiveContent(TokCall)
+		return Token{TokCall, trimRight(l.input[l.pos:]), ""}
 	}
 
 	start := l.pos
@@ -133,6 +133,11 @@ func (l *Lexer) scanDirective() Token {
 	name := l.input[start:l.pos]
 
 	para := ""
+	// Skip whitespace between directive name and parameter.
+	// e.g. #for (f : fields) → skip the space, then enter paren path.
+	for l.pos < l.length && l.input[l.pos] == ' ' {
+		l.pos++
+	}
 	if l.pos < l.length && l.input[l.pos] == '(' {
 		l.pos++
 		depth := 1
@@ -152,8 +157,7 @@ func (l *Lexer) scanDirective() Token {
 		if l.pos < l.length {
 			l.pos++
 		}
-	} else if l.pos < l.length && l.input[l.pos] == ' ' {
-		l.pos++
+	} else {
 		pstart := l.pos
 		for l.pos < l.length && l.input[l.pos] != '\n' && l.input[l.pos] != '#' {
 			l.pos++
@@ -161,15 +165,8 @@ func (l *Lexer) scanDirective() Token {
 		para = trimRight(l.input[pstart:l.pos])
 	}
 
-	return Token{l.mapDirective(name), para}
-}
-
-func (l *Lexer) scanDirectiveContent(tokType TokType) Token {
-	start := l.pos
-	for l.pos < l.length && l.input[l.pos] != '\n' && l.input[l.pos] != '#' {
-		l.pos++
-	}
-	return Token{tokType, trimRight(l.input[start:l.pos])}
+	tokType := l.mapDirective(name)
+	return Token{tokType, para, name}
 }
 
 func (l *Lexer) mapDirective(name string) TokType {

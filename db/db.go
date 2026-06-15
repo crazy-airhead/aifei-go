@@ -10,9 +10,39 @@ func UseWithID(configID string) *Dao {
 	return GetConfig(configID).CreateDao()
 }
 
-// SQL creates a Dao with the given query.
+// SQL creates a Dao with the given raw SQL query.
 func SQL(query string, args ...interface{}) *Dao {
 	return Use().SQL(query, args...)
+}
+
+// Sql creates a Dao with an Enjoy SQL template and named parameters.
+func Sql(sqlStr string, data map[string]interface{}) *Dao {
+	return Use().Sql(sqlStr, data)
+}
+
+// SqlWithArgs creates a Dao with an Enjoy SQL template and positional arguments.
+func SqlWithArgs(sqlStr string, args ...interface{}) *Dao {
+	return Use().SqlWithArgs(sqlStr, args...)
+}
+
+// SqlById creates a Dao with a cached SQL template by ID and named parameters.
+func SqlById(sqlID string, data map[string]interface{}) *Dao {
+	return Use().SqlById(sqlID, data)
+}
+
+// SqlByIdWithArgs creates a Dao with a cached SQL template by ID and positional arguments.
+func SqlByIdWithArgs(sqlID string, args ...interface{}) *Dao {
+	return Use().SqlByIdWithArgs(sqlID, args...)
+}
+
+// AddSql adds a named SQL template to the default config's SqlKit.
+func AddSql(sqlID, sql string) {
+	GetConfig().GetSqlKit().AddSql(sqlID, sql)
+}
+
+// AddSqlWithID adds a named SQL template to a specific config's SqlKit.
+func AddSqlWithID(configID, sqlID, sql string) {
+	GetConfig(configID).GetSqlKit().AddSql(sqlID, sql)
 }
 
 // Select creates a Dao with the given select fields.

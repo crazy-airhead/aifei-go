@@ -5,6 +5,7 @@ go 1.26
 require (
 	github.com/crazy-airhead/aifei-go v0.0.0
 	github.com/crazy-airhead/aifei-go/db v0.0.0
+	github.com/crazy-airhead/aifei-go/generator v0.0.0
 	modernc.org/sqlite v1.50.1
 )
 
@@ -23,4 +24,9 @@ require (
 replace (
 	github.com/crazy-airhead/aifei-go => ../../aifei
 	github.com/crazy-airhead/aifei-go/db => ../../db
+	github.com/crazy-airhead/aifei-go/generator => ../../generator
 )
+
+replace github.com/crazy-airhead/aifei-go/enjoy => ../../enjoy
+
+replace github.com/crazy-airhead/aifei-go/db/sql => ../../db/sql

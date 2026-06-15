@@ -4,6 +4,8 @@ use (
 	./aifei
 	./enjoy
 	./db
+	./db/sql
+	./generator
 	./json
 	./log
 	./_example/demo

@@ -25,7 +25,7 @@ func TestOutputExpr(t *testing.T) {
 
 func TestIfStat(t *testing.T) {
 	engine := NewEngine("test3")
-	tpl := engine.GetTemplateByString("#if(show)visible#end")
+	tpl := engine.GetTemplateByString("#if (show)visible#end")
 	result := tpl.RenderToString(map[string]interface{}{"show": true})
 	if result != "visible" {
 		t.Fatalf("expected 'visible', got '%s'", result)

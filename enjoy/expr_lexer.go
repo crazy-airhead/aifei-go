@@ -252,7 +252,7 @@ func (l *ExprLexer) scanENumber() (ETok, string) {
 }
 
 func eIsIDStart(ch byte) bool {
-	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_'
+	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_' || ch == '$'
 }
 
 func eIsIDPart(ch byte) bool { return eIsIDStart(ch) || eIsDigit(ch) }

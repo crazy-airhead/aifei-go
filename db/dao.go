@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+
+	dbsql "github.com/crazy-airhead/aifei-go/db/sql"
 )
 
 // Dao provides chainable database operations.
@@ -13,6 +15,7 @@ type Dao struct {
 	sqlArgs   []interface{}
 	selFields string
 	fromTable string
+	sqlPara   *dbsql.SqlPara
 }
 
 // SQL sets the SQL query and args.
@@ -28,18 +31,56 @@ func (d *Dao) Select(fields string) *Dao {
 	return d
 }
 
+// Sql sets an Enjoy SQL template with named parameters.
+func (d *Dao) Sql(sqlStr string, data map[string]interface{}) *Dao {
+	d.sqlPara = d.config.GetSqlKit().GetSqlPara(sqlStr, data)
+	return d
+}
+
+// SqlWithArgs sets an Enjoy SQL template with positional arguments.
+func (d *Dao) SqlWithArgs(sqlStr string, args ...interface{}) *Dao {
+	d.sqlPara = d.config.GetSqlKit().GetSqlParaWithArgs(sqlStr, args...)
+	return d
+}
+
+// SqlById sets a cached SQL template by ID with named parameters.
+func (d *Dao) SqlById(sqlID string, data map[string]interface{}) *Dao {
+	d.sqlPara = d.config.GetSqlKit().GetSqlParaByID(sqlID, data)
+	return d
+}
+
+// SqlByIdWithArgs sets a cached SQL template by ID with positional arguments.
+func (d *Dao) SqlByIdWithArgs(sqlID string, args ...interface{}) *Dao {
+	d.sqlPara = d.config.GetSqlKit().GetSqlParaByIDWithArgs(sqlID, args...)
+	return d
+}
+
+// SqlPara sets a pre-built SqlPara directly.
+func (d *Dao) SqlPara(sp *dbsql.SqlPara) *Dao {
+	d.sqlPara = sp
+	return d
+}
+
+// sqlAndArgs returns the SQL string and arguments, preferring sqlPara.
+func (d *Dao) sqlAndArgs() (string, []interface{}) {
+	if d.sqlPara != nil {
+		return d.sqlPara.Sql, d.sqlPara.Paras
+	}
+	return d.sqlStr, d.sqlArgs
+}
+
 // Find executes the query and returns multiple rows.
 func (d *Dao) Find() ([]*Row, error) {
 	pool, err := d.config.Pool()
 	if err != nil {
 		return nil, err
 	}
-	query := d.sqlStr
+	query, args := d.sqlAndArgs()
 	if d.selFields != "" && d.fromTable != "" {
 		query = "SELECT " + d.selFields + " FROM " + d.fromTable
 	}
-	d.config.logSQL(query, d.sqlArgs...)
-	rows, err := pool.Query(query, d.sqlArgs...)
+	d.config.logSQL(query, args...)
+	rows, err := pool.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -66,13 +107,13 @@ func (d *Dao) Paginate(pageNum, pageSize int) (*Page, error) {
 		return nil, err
 	}
 
-	query := d.sqlStr
+	query, args := d.sqlAndArgs()
 
 	// COUNT query - wrap as subquery
 	countSQL := "SELECT COUNT(*) FROM (" + query + ")"
-	d.config.logSQL(countSQL, d.sqlArgs...)
+	d.config.logSQL(countSQL, args...)
 	var totalRows int64
-	err = pool.QueryRow(countSQL, d.sqlArgs...).Scan(&totalRows)
+	err = pool.QueryRow(countSQL, args...).Scan(&totalRows)
 	if err != nil {
 		return nil, err
 	}
@@ -80,8 +121,8 @@ func (d *Dao) Paginate(pageNum, pageSize int) (*Page, error) {
 	// Data query with LIMIT/OFFSET
 	offset := (pageNum - 1) * pageSize
 	paginateSQL := fmt.Sprintf("%s LIMIT %d OFFSET %d", query, pageSize, offset)
-	d.config.logSQL(paginateSQL, d.sqlArgs...)
-	rows, err := pool.Query(paginateSQL, d.sqlArgs...)
+	d.config.logSQL(paginateSQL, args...)
+	rows, err := pool.Query(paginateSQL, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -101,8 +142,9 @@ func (d *Dao) Update() (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	d.config.logSQL(d.sqlStr, d.sqlArgs...)
-	result, err := pool.Exec(d.sqlStr, d.sqlArgs...)
+	query, args := d.sqlAndArgs()
+	d.config.logSQL(query, args...)
+	result, err := pool.Exec(query, args...)
 	if err != nil {
 		return 0, err
 	}

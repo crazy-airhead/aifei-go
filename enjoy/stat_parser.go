@@ -287,9 +287,115 @@ func parseOneStat(tok Token, lexer *Lexer, env *Env) (Stat, error) {
 		return &ContinueStat{}, nil
 	case TokReturn, TokReturnIf:
 		return parseReturnStat(tok.Val)
+	case TokID:
+		return parseDirectiveStat(tok, lexer, env)
 	default:
 		return &NullStat{}, nil
 	}
+}
+
+// DirectiveStat wraps a custom directive for execution.
+type DirectiveStat struct {
+	Directive Directive
+	Body      Stat
+}
+
+func (s *DirectiveStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	s.Directive.Exec(env, scope, writer, ctrl)
+}
+
+func parseDirectiveStat(tok Token, lexer *Lexer, env *Env) (Stat, error) {
+	config := env.GetEngineConfig()
+	if config == nil || config.directiveMap == nil {
+		return &NullStat{}, nil
+	}
+
+	factory, ok := config.directiveMap[tok.Name]
+	if !ok {
+		return &NullStat{}, nil
+	}
+
+	directive := factory()
+
+	// Parse parameters into ExprList
+	exprList := NewExprList()
+	if tok.Val != "" {
+		exprs, err := parseExprList(tok.Val)
+		if err != nil {
+			return nil, fmt.Errorf("directive #%s parameter error: %w", tok.Name, err)
+		}
+		exprList = exprs
+	}
+
+	directive.SetExprList(exprList)
+
+	if !directive.HasEnd() {
+		return &DirectiveStat{Directive: directive}, nil
+	}
+
+	// Collect body until #end
+	body, _, err := collectUntil(lexer, env, TokEnd)
+	if err != nil {
+		return nil, err
+	}
+	directive.SetStat(body)
+	return &DirectiveStat{Directive: directive, Body: body}, nil
+}
+
+// parseExprList parses a comma-separated list of expressions.
+func parseExprList(s string) (*ExprList, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return NewExprList(), nil
+	}
+
+	parts := splitByComma(s)
+	exprs := make([]Expr, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		ex, err := ParseExpr(part)
+		if err != nil {
+			return nil, err
+		}
+		exprs = append(exprs, ex)
+	}
+	return NewExprList(exprs...), nil
+}
+
+// splitByComma splits a string by commas, respecting nested parentheses and quotes.
+func splitByComma(s string) []string {
+	var result []string
+	depth := 0
+	inQuote := byte(0)
+	start := 0
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if inQuote != 0 {
+			if ch == '\\' {
+				i++
+			} else if ch == inQuote {
+				inQuote = 0
+			}
+			continue
+		}
+		if ch == '"' || ch == '\'' {
+			inQuote = ch
+			continue
+		}
+		if ch == '(' {
+			depth++
+		} else if ch == ')' {
+			depth--
+		} else if ch == ',' && depth == 0 {
+			result = append(result, s[start:i])
+			start = i + 1
+		}
+	}
+	result = append(result, s[start:])
+	return result
 }
 
 func parseIfStat(condStr string, lexer *Lexer, env *Env) (Stat, error) {

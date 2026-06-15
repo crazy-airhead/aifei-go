@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/crazy-airhead/aifei-go"
+	"github.com/crazy-airhead/aifei-go/_example/demo/internal/model/user"
 	"github.com/crazy-airhead/aifei-go/db"
 
 	_ "modernc.org/sqlite"
@@ -18,8 +20,14 @@ func main() {
 		panic(err)
 	}
 
-	// Create table
-	db.SQL("CREATE TABLE IF NOT EXISTS user (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, age INTEGER, email TEXT, created_at TEXT)").Update()
+	// Ensure table exists
+	db.SQL(`CREATE TABLE IF NOT EXISTS user (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		age INTEGER DEFAULT 0,
+		email TEXT,
+		created_at TEXT DEFAULT CURRENT_TIMESTAMP
+	)`).Update()
 
 	app := aifei.New()
 
@@ -31,7 +39,7 @@ func main() {
 		c.Text("Aifei Go %s", aifei.Version)
 	})
 
-	// RESTful routes
+	// RESTful routes using generated code
 	app.GET("/api/user/list", UserList)
 	app.GET("/api/user/:id", UserGet)
 	app.POST("/api/user/save", UserSave)
@@ -53,7 +61,7 @@ func main() {
 	app.Run(":8080")
 }
 
-// ---- Handlers ----
+// ---- Handlers using generated user package ----
 
 func UserList(c *aifei.Context) {
 	name := c.GetStr("name")
@@ -74,13 +82,17 @@ func UserList(c *aifei.Context) {
 }
 
 func UserGet(c *aifei.Context) {
-	id := c.Param("id")
-	row, err := db.FindByID("user", id)
-	if err != nil || row == nil {
+	id, _ := strconv.Atoi(c.Param("id"))
+	u, err := user.FindById(id)
+	if err != nil || u == nil {
 		c.JsonFail("user not found")
 		return
 	}
-	c.JsonOK(row)
+	c.JsonOK(map[string]interface{}{
+		"id":   u.Id(),
+		"name": u.Name(),
+		"age":  u.Age(),
+	})
 }
 
 func UserSave(c *aifei.Context) {
@@ -96,16 +108,22 @@ func UserSave(c *aifei.Context) {
 	}
 
 	if input.ID > 0 {
-		row := db.NewRow("user").ID(input.ID).Set("name", input.Name).Set("age", input.Age).Set("email", input.Email)
-		_, err := db.Update(row)
-		if err != nil {
+		// Update using generated Row
+		u, err := user.FindById(int(input.ID))
+		if err != nil || u == nil {
+			c.JsonFail("user not found")
+			return
+		}
+		u.SetName(input.Name).SetAge(input.Age).SetEmail(input.Email)
+		if _, err := u.Update(); err != nil {
 			c.JsonFail(err.Error())
 			return
 		}
 		c.JsonOK(input.ID)
 	} else {
-		row := db.NewRow("user").Set("name", input.Name).Set("age", input.Age).Set("email", input.Email)
-		result, err := db.Insert(row)
+		// Insert using generated short setters
+		u := user.New().Name_(input.Name).Age_(input.Age).Email_(input.Email)
+		result, err := u.Insert()
 		if err != nil {
 			c.JsonFail(err.Error())
 			return
@@ -122,8 +140,7 @@ func UserDelete(c *aifei.Context) {
 		c.JsonFail("invalid request")
 		return
 	}
-	_, err := db.DeleteByID("user", input.ID)
-	if err != nil {
+	if _, err := user.DeleteById(int(input.ID)); err != nil {
 		c.JsonFail(err.Error())
 		return
 	}
@@ -131,7 +148,7 @@ func UserDelete(c *aifei.Context) {
 }
 
 func UserCount(c *aifei.Context) {
-	count, err := db.Count("user")
+	count, err := user.Count()
 	if err != nil {
 		c.JsonFail(err.Error())
 		return

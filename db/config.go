@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	dbsql "github.com/crazy-airhead/aifei-go/db/sql"
 )
 
 // Config holds database connection configuration.
@@ -16,6 +18,7 @@ type Config struct {
 	MaxIdle    int
 	MaxLife    time.Duration
 	Printer    func(sql string, args ...interface{})
+	SqlKit     *dbsql.SqlKit
 	pool       *sql.DB
 }
 
@@ -45,6 +48,19 @@ func WithMaxLife(d time.Duration) ConfigOption {
 // WithPrinter sets the SQL log printer.
 func WithPrinter(fn func(string, ...interface{})) ConfigOption {
 	return func(c *Config) { c.Printer = fn }
+}
+
+// WithSqlKit sets a custom SqlKit for Enjoy SQL support.
+func WithSqlKit(sk *dbsql.SqlKit) ConfigOption {
+	return func(c *Config) { c.SqlKit = sk }
+}
+
+// GetSqlKit returns the SqlKit, creating a default one if nil.
+func (c *Config) GetSqlKit() *dbsql.SqlKit {
+	if c.SqlKit == nil {
+		c.SqlKit = dbsql.NewSqlKit(c.ID)
+	}
+	return c.SqlKit
 }
 
 var configs = map[string]*Config{}
