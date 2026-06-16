@@ -175,13 +175,13 @@ two
 #default
 other
 #end`)
-	if result := tpl.RenderToString(map[string]interface{}{"x": 1}); result != "\none\n" {
+	if result := tpl.RenderToString(map[string]interface{}{"x": 1}); result != "one\n" {
 		t.Fatalf("expected '\\none\\n', got '%s'", result)
 	}
-	if result := tpl.RenderToString(map[string]interface{}{"x": 2}); result != "\ntwo\n" {
+	if result := tpl.RenderToString(map[string]interface{}{"x": 2}); result != "two\n" {
 		t.Fatalf("expected '\\ntwo\\n', got '%s'", result)
 	}
-	if result := tpl.RenderToString(map[string]interface{}{"x": 99}); result != "\nother\n" {
+	if result := tpl.RenderToString(map[string]interface{}{"x": 99}); result != "other\n" {
 		t.Fatalf("expected '\\nother\\n', got '%s'", result)
 	}
 }
@@ -196,13 +196,13 @@ even
 #default
 other
 #end`)
-	if result := tpl.RenderToString(map[string]interface{}{"x": 3}); result != "\nodd\n" {
+	if result := tpl.RenderToString(map[string]interface{}{"x": 3}); result != "odd\n" {
 		t.Fatalf("expected '\\nodd\\n', got '%s'", result)
 	}
-	if result := tpl.RenderToString(map[string]interface{}{"x": 4}); result != "\neven\n" {
+	if result := tpl.RenderToString(map[string]interface{}{"x": 4}); result != "even\n" {
 		t.Fatalf("expected '\\neven\\n', got '%s'", result)
 	}
-	if result := tpl.RenderToString(map[string]interface{}{"x": 7}); result != "\nother\n" {
+	if result := tpl.RenderToString(map[string]interface{}{"x": 7}); result != "other\n" {
 		t.Fatalf("expected '\\nother\\n', got '%s'", result)
 	}
 }
@@ -217,13 +217,13 @@ beta
 #default
 other
 #end`)
-	if result := tpl.RenderToString(map[string]interface{}{"x": "a"}); result != "\nalpha\n" {
+	if result := tpl.RenderToString(map[string]interface{}{"x": "a"}); result != "alpha\n" {
 		t.Fatalf("expected '\\nalpha\\n', got '%s'", result)
 	}
-	if result := tpl.RenderToString(map[string]interface{}{"x": "b"}); result != "\nbeta\n" {
+	if result := tpl.RenderToString(map[string]interface{}{"x": "b"}); result != "beta\n" {
 		t.Fatalf("expected '\\nbeta\\n', got '%s'", result)
 	}
-	if result := tpl.RenderToString(map[string]interface{}{"x": "z"}); result != "\nother\n" {
+	if result := tpl.RenderToString(map[string]interface{}{"x": "z"}); result != "other\n" {
 		t.Fatalf("expected '\\nother\\n', got '%s'", result)
 	}
 }
@@ -234,7 +234,7 @@ func TestSwitchNoDefault(t *testing.T) {
 #case(1)
 one
 #end`)
-	if result := tpl.RenderToString(map[string]interface{}{"x": 1}); result != "\none\n" {
+	if result := tpl.RenderToString(map[string]interface{}{"x": 1}); result != "one\n" {
 		t.Fatalf("expected '\\none\\n', got '%s'", result)
 	}
 	if result := tpl.RenderToString(map[string]interface{}{"x": 2}); result != "" {

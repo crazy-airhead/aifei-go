@@ -56,8 +56,12 @@ func (l *Lexer) Scan() Token {
 
 	// Single-line comment: ###
 	if l.pos+2 < l.length && l.input[l.pos:l.pos+3] == "###" {
+		commentPos := l.pos
 		l.pos += 3
 		for l.pos < l.length && l.input[l.pos] != '\n' {
+			l.pos++
+		}
+		if l.pos < l.length && l.isAtLineStart(commentPos) {
 			l.pos++
 		}
 		return l.Scan()
@@ -119,6 +123,7 @@ func (l *Lexer) scanOutput() Token {
 }
 
 func (l *Lexer) scanDirective() Token {
+	hashPos := l.pos
 	l.pos++
 
 	if l.pos < l.length && l.input[l.pos] == '@' {
@@ -166,7 +171,33 @@ func (l *Lexer) scanDirective() Token {
 	}
 
 	tokType := l.mapDirective(name)
+
+	// Consume trailing newline if the directive starts at the beginning of its line
+	// (only whitespace between the last \n and #). This prevents blank lines in output.
+	if l.pos < l.length && l.isAtLineStart(hashPos) {
+		if l.input[l.pos] == '\n' {
+			l.pos++
+		} else if l.pos+1 < l.length && l.input[l.pos] == '\r' && l.input[l.pos+1] == '\n' {
+			l.pos += 2
+		}
+	}
+
 	return Token{tokType, para, name}
+}
+
+// isAtLineStart checks if position pos is at the start of a line
+// (only whitespace between the last \n and pos, or pos is at start of input).
+func (l *Lexer) isAtLineStart(pos int) bool {
+	for i := pos - 1; i >= 0; i-- {
+		ch := l.input[i]
+		if ch == '\n' {
+			return true
+		}
+		if ch != ' ' && ch != '\t' {
+			return false
+		}
+	}
+	return true
 }
 
 func (l *Lexer) mapDirective(name string) TokType {
