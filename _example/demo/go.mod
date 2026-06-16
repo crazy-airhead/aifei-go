@@ -6,6 +6,7 @@ require (
 	github.com/crazy-airhead/aifei-go v0.0.0
 	github.com/crazy-airhead/aifei-go/db v0.0.0
 	github.com/crazy-airhead/aifei-go/generator v0.0.0
+	github.com/crazy-airhead/aifei-go/server v0.0.0
 	modernc.org/sqlite v1.50.1
 )
 
@@ -25,6 +26,7 @@ replace (
 	github.com/crazy-airhead/aifei-go => ../../aifei
 	github.com/crazy-airhead/aifei-go/db => ../../db
 	github.com/crazy-airhead/aifei-go/generator => ../../generator
+	github.com/crazy-airhead/aifei-go/server => ../../server
 )
 
 replace github.com/crazy-airhead/aifei-go/enjoy => ../../enjoy

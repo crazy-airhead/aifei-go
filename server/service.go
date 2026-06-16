@@ -1,4 +1,6 @@
-package aifei
+package server
+
+import "github.com/crazy-airhead/aifei-go"
 
 // ServiceRegistration holds a service instance and its route prefix.
 type ServiceRegistration struct {
@@ -19,9 +21,9 @@ func ServiceRegistrations() []ServiceRegistration {
 	return serviceRegistry
 }
 
-// AutoRegisterServices registers all services from the global registry.
-func (a *Aifei) AutoRegisterServices(middlewares ...Middleware) {
+// AutoRegisterServices registers all services from the global registry into the app.
+func AutoRegisterServices(app *aifei.Aifei, middlewares ...aifei.Middleware) {
 	for _, reg := range serviceRegistry {
-		a.Register(reg.Prefix, reg.Service, middlewares...)
+		app.Register(reg.Prefix, reg.Service, middlewares...)
 	}
 }

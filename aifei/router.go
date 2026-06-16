@@ -144,8 +144,13 @@ func (r *Router) Register(prefix string, service interface{}, middlewares ...Mid
 		}
 
 		m := middlewares
-		handler := func(c *Context) {
-			v.MethodByName(method.Name).Call([]reflect.Value{reflect.ValueOf(c)})
+		handler := func(in Input) Output {
+			results := v.MethodByName(method.Name).Call([]reflect.Value{reflect.ValueOf(in)})
+			if len(results) == 0 || !results[0].IsValid() {
+				return nil
+			}
+			out, _ := results[0].Interface().(Output)
+			return out
 		}
 
 		for j := len(m) - 1; j >= 0; j-- {

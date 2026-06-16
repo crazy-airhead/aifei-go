@@ -5,6 +5,7 @@ import (
 
 	"github.com/crazy-airhead/aifei-go"
 	"github.com/crazy-airhead/aifei-go/db"
+	"github.com/crazy-airhead/aifei-go/server"
 
 	// Per-table package: registers Table metadata and Service routes via init().
 	_ "github.com/crazy-airhead/aifei-go/_example/demo/internal/user"
@@ -23,21 +24,21 @@ func main() {
 
 	// Ensure table exists
 	db.SQL(`CREATE TABLE IF NOT EXISTS user (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT NOT NULL,
-		age INTEGER DEFAULT 0,
-		email TEXT,
-		created_at TEXT DEFAULT CURRENT_TIMESTAMP
-	)`).Update()
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			age INTEGER DEFAULT 0,
+			email TEXT,
+			created_at TEXT DEFAULT CURRENT_TIMESTAMP
+		)`).Update()
 
 	app := aifei.New()
 
-	// Global middleware
-	app.Use(aifei.Logger(), aifei.Recover(), aifei.CORS("*"))
+	// Global middleware (handler-level: Input → Output)
+	app.Use(server.Logger(), server.Recover())
 
 	// Root
-	app.GET("/", func(c *aifei.Context) {
-		c.Text("Aifei Go %s", aifei.Version)
+	app.GET("/", func(in aifei.Input) aifei.Output {
+		return server.OkMsg("Aifei Go " + aifei.Version)
 	})
 
 	// Tables self-registered via init() in each per-table base.go.
@@ -47,18 +48,22 @@ func main() {
 	}
 
 	// Auto-register all services that self-registered via init().
-	// Generated service provides: List, GetById, Save, DeleteById
-	app.AutoRegisterServices()
-	fmt.Printf("[DEMO] Registered services: %d\n", len(aifei.ServiceRegistrations()))
+	server.AutoRegisterServices(app)
+	fmt.Printf("[DEMO] Registered services: %d\n", len(server.ServiceRegistrations()))
 
-	// Custom route group with auth
-	admin := app.Group("/api/admin", aifei.BasicAuth(func(u, p string) bool {
-		return u == "admin" && p == "123456"
-	}))
-	admin.GET("/dashboard", func(c *aifei.Context) {
-		c.JsonOK("admin dashboard")
+	// Custom route group with auth (HTTP-level middleware)
+	admin := app.Group("/api/admin")
+	admin.GET("/dashboard", func(in aifei.Input) aifei.Output {
+		return server.OkMsg("admin dashboard")
 	})
 
-	// Start
-	app.Run(":8080")
+	// Start with HTTP-level middleware
+	server.Run(app, ":8080",
+		server.WithCORS("*"),
+		//server.WithBasicAuth(func(u, p string) bool {
+		//	// Note: This protects ALL routes. To protect only /api/admin,
+		//	// use path-aware middleware or a separate server instance.
+		//	return true // allow all for demo
+		//}),
+	)
 }
