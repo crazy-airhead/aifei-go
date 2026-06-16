@@ -109,8 +109,8 @@ func (d *Dao) Paginate(pageNum, pageSize int) (*Page, error) {
 
 	query, args := d.sqlAndArgs()
 
-	// COUNT query - wrap as subquery
-	countSQL := "SELECT COUNT(*) FROM (" + query + ")"
+	// COUNT query - delegate to dialect
+	countSQL := d.config.Dialect.ForCountSubquery(query)
 	d.config.logSQL(countSQL, args...)
 	var totalRows int64
 	err = pool.QueryRow(countSQL, args...).Scan(&totalRows)
@@ -118,9 +118,8 @@ func (d *Dao) Paginate(pageNum, pageSize int) (*Page, error) {
 		return nil, err
 	}
 
-	// Data query with LIMIT/OFFSET
-	offset := (pageNum - 1) * pageSize
-	paginateSQL := fmt.Sprintf("%s LIMIT %d OFFSET %d", query, pageSize, offset)
+	// Data query - delegate to dialect
+	paginateSQL := d.config.Dialect.ForPaginate(query, pageNum, pageSize)
 	d.config.logSQL(paginateSQL, args...)
 	rows, err := pool.Query(paginateSQL, args...)
 	if err != nil {

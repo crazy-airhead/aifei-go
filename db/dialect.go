@@ -11,7 +11,8 @@ type Dialect interface {
 	ForInsert(table string, fields []string) string
 	ForUpdate(table string, fields []string, pks []string) string
 	ForInsertOrUpdate(table string, fields []string, pks []string) string
-	ForPaginate(selectSQL, fromWhereSQL string, pageNum, pageSize int) string
+	ForCountSubquery(query string) string
+	ForPaginate(query string, pageNum, pageSize int) string
 }
 
 // NewDialect creates a Dialect based on driver name.
@@ -74,9 +75,12 @@ func (d *MySQLDialect) ForInsertOrUpdate(table string, fields []string, pks []st
 	}
 	return sql
 }
-func (d *MySQLDialect) ForPaginate(selectSQL, fromWhereSQL string, pageNum, pageSize int) string {
+func (d *MySQLDialect) ForCountSubquery(query string) string {
+	return "SELECT COUNT(*) FROM (" + query + ") AS _cnt"
+}
+func (d *MySQLDialect) ForPaginate(query string, pageNum, pageSize int) string {
 	offset := (pageNum - 1) * pageSize
-	return fmt.Sprintf("%s %s LIMIT %d OFFSET %d", selectSQL, fromWhereSQL, pageSize, offset)
+	return fmt.Sprintf("%s LIMIT %d OFFSET %d", query, pageSize, offset)
 }
 
 // ---- PostgreSQL ----
@@ -126,9 +130,12 @@ func (d *PostgresDialect) ForInsertOrUpdate(table string, fields []string, pks [
 	}
 	return sql
 }
-func (d *PostgresDialect) ForPaginate(selectSQL, fromWhereSQL string, pageNum, pageSize int) string {
+func (d *PostgresDialect) ForCountSubquery(query string) string {
+	return "SELECT COUNT(*) FROM (" + query + ") AS _cnt"
+}
+func (d *PostgresDialect) ForPaginate(query string, pageNum, pageSize int) string {
 	offset := (pageNum - 1) * pageSize
-	return fmt.Sprintf("%s %s LIMIT %d OFFSET %d", selectSQL, fromWhereSQL, pageSize, offset)
+	return fmt.Sprintf("%s LIMIT %d OFFSET %d", query, pageSize, offset)
 }
 
 // ---- SQLite ----
@@ -161,9 +168,12 @@ func (d *SQLiteDialect) ForInsertOrUpdate(table string, fields []string, pks []s
 	placeholders := makePlaceholders(len(fields))
 	return fmt.Sprintf("INSERT OR REPLACE INTO %s (%s) VALUES (%s)", table, stringsJoin(fields, ", "), placeholders)
 }
-func (d *SQLiteDialect) ForPaginate(selectSQL, fromWhereSQL string, pageNum, pageSize int) string {
+func (d *SQLiteDialect) ForCountSubquery(query string) string {
+	return "SELECT COUNT(*) FROM (" + query + ")"
+}
+func (d *SQLiteDialect) ForPaginate(query string, pageNum, pageSize int) string {
 	offset := (pageNum - 1) * pageSize
-	return fmt.Sprintf("%s %s LIMIT %d OFFSET %d", selectSQL, fromWhereSQL, pageSize, offset)
+	return fmt.Sprintf("%s LIMIT %d OFFSET %d", query, pageSize, offset)
 }
 
 // ---- helpers ----

@@ -322,7 +322,8 @@ func (p *Page) HasNextPage() bool
 type Dialect interface {
     Name() string
     DefaultPrimaryKeys() []string
-    ForPaginate(selectSQL, fromWhereSQL string, pageNum, pageSize int) string
+    ForCountSubquery(query string) string
+    ForPaginate(query string, pageNum, pageSize int) string
     ForFindByID(table string, primaryKeys []string) string
     ForDeleteByID(table string, primaryKeys []string) string
     ForInsert(table string, fields []string) string
