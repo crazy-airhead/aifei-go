@@ -96,15 +96,18 @@ func TestTemplateRendering(t *testing.T) {
 	engine := NewEngine()
 
 	// Test base template
-	baseData := baseGen.buildData(info, "github.com/crazy-airhead/aifei-go/generator")
+	baseData := baseGen.buildData(info)
 	content := engine.RenderTemplate(baseTemplateContent, baseData)
 	t.Logf("base.go content:\n%s", content)
 
 	if !strings.Contains(content, "package user") {
 		t.Error("base.go should contain 'package user'")
 	}
-	if !strings.Contains(content, "Table = &aifeigen.Table") {
-		t.Error("base.go should contain aifeigen.Table definition")
+	if !strings.Contains(content, "Table = &db.Table") {
+		t.Error("base.go should contain db.Table definition")
+	}
+	if !strings.Contains(content, "db.RegisterTable(Table)") {
+		t.Error("base.go should contain init() with db.RegisterTable")
 	}
 	if !strings.Contains(content, "type BaseUser struct") {
 		t.Error("base.go should contain BaseUser struct")
@@ -169,6 +172,7 @@ func TestGenerator_Generate(t *testing.T) {
 		"user/base.go",
 		"user/user.go",
 		"user/dao.go",
+		"user/service.go",
 	}
 	for _, f := range expectedFiles {
 		path := filepath.Join(tmpDir, f)
@@ -177,18 +181,21 @@ func TestGenerator_Generate(t *testing.T) {
 		}
 	}
 
-	// Verify tables.go content
+	// Verify tables.go uses blank imports for self-registration
 	tablesContent, _ := os.ReadFile(filepath.Join(tmpDir, "tables.go"))
 	t.Logf("tables.go:\n%s", string(tablesContent))
-	if !strings.Contains(string(tablesContent), "user.Table") {
-		t.Error("tables.go should contain user.Table")
+	if !strings.Contains(string(tablesContent), `_ "example/db/user"`) {
+		t.Error("tables.go should contain blank import for user package")
 	}
 
 	// Verify base.go content
 	baseContent, _ := os.ReadFile(filepath.Join(tmpDir, "user/base.go"))
 	t.Logf("base.go:\n%s", string(baseContent))
-	if !strings.Contains(string(baseContent), "Table = &aifeigen.Table") {
-		t.Error("base.go should contain Table definition")
+	if !strings.Contains(string(baseContent), "Table = &db.Table") {
+		t.Error("base.go should contain db.Table definition")
+	}
+	if !strings.Contains(string(baseContent), "db.RegisterTable(Table)") {
+		t.Error("base.go should contain db.RegisterTable in init()")
 	}
 	if !strings.Contains(string(baseContent), "type BaseUser struct") {
 		t.Error("base.go should contain BaseUser struct")

@@ -440,8 +440,7 @@ func parseIfStat(condStr string, lexer *Lexer, env *Env) (Stat, error) {
 }
 
 func collectUntil(lexer *Lexer, env *Env, stopToks ...TokType) (Stat, []Token, error) {
-	var toks []Token
-	depth := 0
+	var stats []Stat
 
 	for {
 		tok := lexer.Scan()
@@ -449,58 +448,38 @@ func collectUntil(lexer *Lexer, env *Env, stopToks ...TokType) (Stat, []Token, e
 			break
 		}
 
-		shouldStop := false
 		for _, st := range stopToks {
-			if tok.Type == st && depth == 0 {
-				shouldStop = true
-				break
+			if tok.Type == st {
+				return mergeStats(stats), []Token{tok}, nil
 			}
 		}
-		if shouldStop {
-			stat, err := tokensToStat(toks, env)
-			return stat, []Token{tok}, err
-		}
 
-		if tok.Type == TokIf || tok.Type == TokFor || tok.Type == TokDefine || tok.Type == TokSwitch {
-			depth++
-		}
+		// A bare #end not in stopToks acts as an implicit stop.
 		if tok.Type == TokEnd {
-			if depth > 0 {
-				depth--
-			} else {
-				stat, err := tokensToStat(toks, env)
-				return stat, []Token{tok}, err
-			}
+			return mergeStats(stats), []Token{tok}, nil
 		}
 
-		toks = append(toks, tok)
-	}
-
-	stat, err := tokensToStat(toks, env)
-	return stat, nil, err
-}
-
-func tokensToStat(toks []Token, env *Env) (Stat, error) {
-	if len(toks) == 0 {
-		return &NullStat{}, nil
-	}
-	var stats []Stat
-	for _, tok := range toks {
-		stat, err := parseOneStat(tok, nil, env)
+		stat, err := parseOneStat(tok, lexer, env)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if _, ok := stat.(*NullStat); !ok {
 			stats = append(stats, stat)
 		}
 	}
+
+	return mergeStats(stats), nil, nil
+}
+
+// mergeStats collapses a stat slice into a single stat.
+func mergeStats(stats []Stat) Stat {
 	if len(stats) == 0 {
-		return &NullStat{}, nil
+		return &NullStat{}
 	}
 	if len(stats) == 1 {
-		return stats[0], nil
+		return stats[0]
 	}
-	return &StatList{Stats: stats}, nil
+	return &StatList{Stats: stats}
 }
 
 func parseForStat(header string, lexer *Lexer, env *Env) (Stat, error) {

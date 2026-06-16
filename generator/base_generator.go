@@ -39,8 +39,8 @@ type FieldTypeEntry struct {
 }
 
 // Generate generates base.go for a single table.
-func (g *BaseGenerator) Generate(engine *Engine, info *TableInfo, outputDir, generatorPkg string) error {
-	data := g.buildData(info, generatorPkg)
+func (g *BaseGenerator) Generate(engine *Engine, info *TableInfo, outputDir string) error {
+	data := g.buildData(info)
 	content := engine.RenderTemplate(baseTemplateContent, data)
 
 	pkgDir := filepath.Join(outputDir, info.PkgName)
@@ -57,7 +57,7 @@ func (g *BaseGenerator) Generate(engine *Engine, info *TableInfo, outputDir, gen
 }
 
 // buildData builds the template data map for base.go.
-func (g *BaseGenerator) buildData(info *TableInfo, generatorPkg string) map[string]interface{} {
+func (g *BaseGenerator) buildData(info *TableInfo) map[string]interface{} {
 	util := &TemplateUtil{}
 
 	// Collect imports
@@ -122,7 +122,6 @@ func (g *BaseGenerator) buildData(info *TableInfo, generatorPkg string) map[stri
 
 	return map[string]interface{}{
 		"pkgName":           info.PkgName,
-		"generatorPkg":      generatorPkg,
 		"imports":           imports,
 		"tableName":         info.Name,
 		"fieldNamesStr":     fieldNamesStr,

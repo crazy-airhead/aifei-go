@@ -3,7 +3,7 @@ package main_test
 import (
 	"testing"
 
-	"github.com/crazy-airhead/aifei-go/_example/demo/internal/model/user"
+	"github.com/crazy-airhead/aifei-go/_example/demo/internal/user"
 	"github.com/crazy-airhead/aifei-go/db"
 
 	_ "modernc.org/sqlite"

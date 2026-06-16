@@ -1,0 +1,99 @@
+package user
+
+import (
+	"strconv"
+
+	"github.com/crazy-airhead/aifei-go"
+	"github.com/crazy-airhead/aifei-go/db"
+)
+
+const ServicePrefix = "/user"
+
+func init() {
+	aifei.RegisterService(ServicePrefix, &Service{})
+}
+
+type Service struct{}
+
+// List returns a paginated list.
+func (s *Service) List(c *aifei.Context) {
+	pageNum := c.GetIntDefault("page", 1)
+	pageSize := c.GetIntDefault("size", 10)
+	page, err := db.SQL("SELECT * FROM user ORDER BY id DESC").Paginate(pageNum, pageSize)
+	if err != nil {
+		c.JsonFail(err.Error())
+		return
+	}
+	c.JsonOK(page)
+}
+
+// Create inserts a new record.
+func (s *Service) Create(c *aifei.Context) {
+	u := New()
+	if err := c.GetBean(u); err != nil {
+		c.JsonFail("invalid request: " + err.Error())
+		return
+	}
+	result, err := u.Insert()
+	if err != nil {
+		c.JsonFail(err.Error())
+		return
+	}
+	c.JsonOK(result.GetID())
+}
+
+// GetById retrieves a record by primary key.
+func (s *Service) GetById(c *aifei.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JsonFail("invalid id")
+		return
+	}
+	u, err := FindById(id)
+	if err != nil {
+		c.JsonFail(err.Error())
+		return
+	}
+	if u == nil {
+		c.JsonFail("User not found")
+		return
+	}
+	c.JsonOK(u)
+}
+
+// UpdateById updates a record by primary key.
+func (s *Service) UpdateById(c *aifei.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JsonFail("invalid id")
+		return
+	}
+	existing, err := FindById(id)
+	if err != nil || existing == nil {
+		c.JsonFail("User not found")
+		return
+	}
+	if err := c.GetBean(existing); err != nil {
+		c.JsonFail("invalid request: " + err.Error())
+		return
+	}
+	if _, err := existing.Update(); err != nil {
+		c.JsonFail(err.Error())
+		return
+	}
+	c.JsonOK(id)
+}
+
+// DeleteById deletes a record by primary key.
+func (s *Service) DeleteById(c *aifei.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JsonFail("invalid id")
+		return
+	}
+	if _, err := DeleteById(id); err != nil {
+		c.JsonFail(err.Error())
+		return
+	}
+	c.JsonOK(nil)
+}

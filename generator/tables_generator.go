@@ -18,13 +18,12 @@ func NewTablesGenerator() *TablesGenerator {
 	return &TablesGenerator{}
 }
 
-// Generate generates tables.go with all table metadata.
-func (g *TablesGenerator) Generate(engine *Engine, infos []*TableInfo, outputDir, importRoot, outputPkgName, generatorPkg string) error {
+// Generate generates tables.go with blank imports for self-registration.
+func (g *TablesGenerator) Generate(engine *Engine, infos []*TableInfo, outputDir, importRoot, outputPkgName string) error {
 	data := map[string]interface{}{
 		"tableInfoList": infos,
 		"importRoot":    importRoot,
 		"outputPkgName": outputPkgName,
-		"generatorPkg":  generatorPkg,
 	}
 	content := engine.RenderTemplate(tablesTemplateContent, data)
 

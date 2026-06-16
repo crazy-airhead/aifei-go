@@ -148,3 +148,35 @@ func TestDefineAndCall(t *testing.T) {
 		t.Fatalf("expected 'Hello Aifei', got '%s'", result)
 	}
 }
+
+func TestNestedForInIf(t *testing.T) {
+	engine := NewEngine("test-nested")
+	data := map[string]interface{}{
+		"show": true,
+		"items": []map[string]interface{}{
+			{"name": "a"},
+			{"name": "b"},
+		},
+	}
+	tpl := engine.GetTemplateByString("#if (show)#for (it : items)#(it.name)#end#end")
+	result := tpl.RenderToString(data)
+	if result != "ab" {
+		t.Fatalf("expected 'ab', got '%s'", result)
+	}
+}
+
+func TestNestedIfInFor(t *testing.T) {
+	engine := NewEngine("test-nested2")
+	data := map[string]interface{}{
+		"items": []map[string]interface{}{
+			{"val": 1},
+			{"val": 0},
+			{"val": 2},
+		},
+	}
+	tpl := engine.GetTemplateByString("#for (it : items)#if (it.val > 0)#(it.val)#end#end")
+	result := tpl.RenderToString(data)
+	if result != "12" {
+		t.Fatalf("expected '12', got '%s'", result)
+	}
+}

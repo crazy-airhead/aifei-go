@@ -38,9 +38,9 @@ func main() {
 
 	dialect := &generator.SQLiteMetaDialect{}
 
-	// Generate code into ./internal/model/
-	outputDir, _ := filepath.Abs("./internal/model")
-	importRoot := "github.com/crazy-airhead/aifei-go/_example/demo/internal/model"
+	// Generate code into ./internal
+	outputDir, _ := filepath.Abs("./internal")
+	importRoot := "github.com/crazy-airhead/aifei-go/_example/demo/internal"
 
 	gen := generator.New(pool, dialect, outputDir, importRoot)
 	if err := gen.Generate(); err != nil {

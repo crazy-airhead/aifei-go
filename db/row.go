@@ -354,7 +354,14 @@ func (r *Row) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON implements json.Unmarshaler.
 func (r *Row) UnmarshalJSON(data []byte) error {
 	r.ensureData()
-	return json.Unmarshal(data, &r.data)
+	if err := json.Unmarshal(data, &r.data); err != nil {
+		return err
+	}
+	r.ensureChange()
+	for k := range r.data {
+		r.change[k] = struct{}{}
+	}
+	return nil
 }
 
 // ---- Active Record ----

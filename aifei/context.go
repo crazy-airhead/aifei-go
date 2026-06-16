@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 )
@@ -197,12 +198,40 @@ func (c *Context) GetBoolDefault(key string, def bool) bool {
 }
 
 // GetBean parses JSON body into a struct.
+// It initializes nil embedded pointer fields so that promoted
+// json.Unmarshaler methods work correctly.
 func (c *Context) GetBean(obj interface{}) error {
 	body := c.Body()
 	if len(body) == 0 {
 		return fmt.Errorf("empty body")
 	}
+	initEmbeddedPointers(reflect.ValueOf(obj))
 	return json.Unmarshal(body, obj)
+}
+
+// initEmbeddedPointers recursively initializes nil embedded pointer fields
+// so that json.Unmarshal can safely call promoted methods through them.
+func initEmbeddedPointers(v reflect.Value) {
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return
+	}
+	t := v.Type()
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if !f.IsExported() || !f.Anonymous {
+			continue
+		}
+		fv := v.Field(i)
+		if fv.Kind() == reflect.Ptr && fv.IsNil() && fv.CanSet() {
+			fv.Set(reflect.New(fv.Type().Elem()))
+		}
+		if fv.Kind() == reflect.Ptr && !fv.IsNil() {
+			initEmbeddedPointers(fv)
+		}
+	}
 }
 
 // Body returns the raw request body (lazy read).

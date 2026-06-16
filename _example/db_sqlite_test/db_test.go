@@ -227,21 +227,6 @@ func TestRowActiveRecord(t *testing.T) {
 	}
 }
 
-func TestSQLBuilder(t *testing.T) {
-	setupTestDB(t)
-	db.Insert(db.NewRow("user").Set("name", "alice").Set("age", 20))
-	db.Insert(db.NewRow("user").Set("name", "bob").Set("age", 25))
-	db.Insert(db.NewRow("user").Set("name", "charlie").Set("age", 30))
-
-	rows, err := db.NewSQL("SELECT * FROM user").Where("age > ?", 22).OrderBy("id DESC").Find()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(rows) != 2 {
-		t.Fatalf("expected 2 rows, got %d", len(rows))
-	}
-}
-
 func TestBatchInsert(t *testing.T) {
 	setupTestDB(t)
 	rows := []*db.Row{

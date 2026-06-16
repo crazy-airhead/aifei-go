@@ -136,7 +136,7 @@ func (r *Router) Register(prefix string, service interface{}, middlewares ...Mid
 			pathSuffix = camelToPath(name[6:])
 		}
 
-		pathSuffix = strings.Replace(pathSuffix, "-by-id", "/:id", 1)
+		pathSuffix = strings.Replace(pathSuffix, "by-id", ":id", 1)
 
 		path := prefix
 		if pathSuffix != "" {
@@ -169,6 +169,26 @@ func (r *Router) Lookup(method, path string) (handlers []HandlerFunc, params map
 
 func (n *node) add(path string, handlers []HandlerFunc) {
 	if n.path == "" && len(n.children) == 0 {
+		for i := 0; i < len(path); i++ {
+			if path[i] == ':' || path[i] == '*' {
+				if i > 0 {
+					n.path = path[:i]
+					n.children = []*node{{
+						path:     path[i:],
+						handlers: handlers,
+						param:    path[i] == ':',
+						catchAll: path[i] == '*',
+					}}
+					n.wildChild = true
+				} else {
+					n.path = path
+					n.handlers = handlers
+					n.param = (path[0] == ':')
+					n.catchAll = (path[0] == '*')
+				}
+				return
+			}
+		}
 		n.path = path
 		n.handlers = handlers
 		return
@@ -182,9 +202,9 @@ walk:
 				path:      n.path[i:],
 				handlers:  n.handlers,
 				children:  n.children,
-				wildChild: n.wildChild,
-				param:     n.param,
-				catchAll:  n.catchAll,
+				wildChild: n.path[i] == ':' || n.path[i] == '*',
+				param:     n.path[i] == ':',
+				catchAll:  n.path[i] == '*',
 			}
 			n.path = path[:i]
 			n.handlers = nil
@@ -197,15 +217,21 @@ walk:
 		if i < len(path) {
 			path = path[i:]
 
-			if n.wildChild {
-				n = n.children[0]
-				continue
-			}
-
+			// Check literal children first.
 			for _, child := range n.children {
-				if len(child.path) > 0 && child.path[0] == path[0] {
+				if !child.param && !child.catchAll && len(child.path) > 0 && child.path[0] == path[0] {
 					n = child
 					continue walk
+				}
+			}
+
+			// For wild paths, follow existing wild child.
+			if path[0] == ':' || path[0] == '*' {
+				for _, child := range n.children {
+					if (child.param && path[0] == ':') || (child.catchAll && path[0] == '*') {
+						n = child
+						continue walk
+					}
 				}
 			}
 
@@ -240,6 +266,10 @@ func (n *node) find(path string) (handlers []HandlerFunc, params map[string]stri
 		return nil, nil, false
 	}
 
+	var wildChild *node
+	var wildVal string
+	var wildPath string
+
 	for _, child := range n.children {
 		if child.catchAll {
 			if child.handlers != nil {
@@ -251,32 +281,39 @@ func (n *node) find(path string) (handlers []HandlerFunc, params map[string]stri
 
 		if child.param {
 			end := strings.Index(path, "/")
-			var val string
+			var val, remaining string
 			if end == -1 {
 				val = path
-				path = ""
+				remaining = ""
 			} else {
 				val = path[:end]
-				path = path[end:]
+				remaining = path[end:]
 			}
-
-			h, p, ok := child.find(path)
-			if ok {
-				if p == nil {
-					p = make(map[string]string)
-				}
-				p[child.path[1:]] = val
-				return h, p, true
-			}
-			if child.handlers != nil && len(path) == 0 {
-				params := map[string]string{child.path[1:]: val}
-				return child.handlers, params, true
-			}
+			wildChild = child
+			wildVal = val
+			wildPath = remaining
 			continue
 		}
 
 		if len(child.path) > 0 && path[0] == child.path[0] {
 			return child.find(path)
+		}
+	}
+
+	if wildChild != nil {
+		if len(wildPath) == 0 && wildChild.handlers != nil {
+			params := map[string]string{wildChild.path[1:]: wildVal}
+			return wildChild.handlers, params, true
+		}
+		if len(wildPath) > 0 {
+			h, p, ok := wildChild.find(wildPath)
+			if ok {
+				if p == nil {
+					p = make(map[string]string)
+				}
+				p[wildChild.path[1:]] = wildVal
+				return h, p, true
+			}
 		}
 	}
 

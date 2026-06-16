@@ -4,14 +4,8 @@ package #(outputPkgName)
 
 import (
 #for (info : tableInfoList)
-	"#(importRoot)/#(info.PkgName)"
+	_ "#(importRoot)/#(info.PkgName)"
 #end
-
-	aifeigen "#(generatorPkg)"
 )
-
-var Tables = []*aifeigen.Table{
-#for (info : tableInfoList)
-	#(info.PkgName).Table,
-#end
-}
+// Tables are registered via init() functions in each per-table package.
+// Use db.Tables() to retrieve all registered tables.

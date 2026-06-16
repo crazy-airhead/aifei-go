@@ -4,10 +4,9 @@ import (
 	"reflect"
 
 	"github.com/crazy-airhead/aifei-go/db"
-	aifeigen "github.com/crazy-airhead/aifei-go/generator"
 )
 
-var Table = &aifeigen.Table{
+var Table = &db.Table{
 	Name:        "user",
 	Fields:      "id,name,age,email,created_at",
 	PrimaryKeys: []string{"id"},
@@ -29,7 +28,7 @@ type BaseUser struct {
 	*db.Row
 }
 
-func New() *BaseUser {
+func NewBase() *BaseUser {
 	return &BaseUser{Row: db.NewRow(Table.Name)}
 }
 
@@ -117,4 +116,8 @@ func (r *BaseUser) Delete() (bool, error) {
 
 func initRow(row *db.Row) *db.Row {
 	return row.SetTable(Table.Name).SetPrimaryKeys(Table.PrimaryKeys...)
+}
+
+func init() {
+	db.RegisterTable(Table)
 }

@@ -18,7 +18,7 @@
 |------|------|------|
 | `aifei-go` | 核心 Web 框架 | 无 |
 | `aifei-go/enjoy` | Enjoy 模板引擎 | 无 |
-| `aifei-go/db` | 数据库访问（Row/Dao/SQLBuilder） | 无 |
+| `aifei-go/db` | 数据库访问（Row/Dao） | 无 |
 | `aifei-go/json` | JSON 工具 | 无 |
 | `aifei-go/log` | 日志接口 | 无 |
 

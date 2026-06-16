@@ -450,21 +450,3 @@ func buildSelectWhere(table, whereOrField string) string {
 	}
 	return fmt.Sprintf("SELECT * FROM %s WHERE %s = ?", table, whereOrField)
 }
-
-func extractCountSQL(sql string) string {
-	// Try to extract FROM clause and build COUNT
-	s := strings.TrimSpace(sql)
-	upper := strings.ToUpper(s)
-
-	fromIdx := strings.Index(upper, "FROM ")
-	if fromIdx == -1 {
-		return "SELECT COUNT(*) FROM (" + sql + ")"
-	}
-
-	fromClause := s[fromIdx:]
-	// Remove ORDER BY
-	if idx := strings.Index(strings.ToUpper(fromClause), " ORDER BY "); idx != -1 {
-		fromClause = fromClause[:idx]
-	}
-	return "SELECT COUNT(*) " + fromClause
-}

@@ -41,19 +41,16 @@ type Generator struct {
 	dialect   MetaDialect
 	outputDir string
 
-	metaReader      *MetaReader
-	baseGenerator   *BaseGenerator
-	modelGenerator  *ModelGenerator
-	daoGenerator    *DaoGenerator
-	tablesGenerator *TablesGenerator
-	engine          *Engine
+	metaReader       *MetaReader
+	baseGenerator    *BaseGenerator
+	modelGenerator   *ModelGenerator
+	daoGenerator     *DaoGenerator
+	tablesGenerator  *TablesGenerator
+	serviceGenerator *ServiceGenerator
+	engine           *Engine
 
 	// importRoot is the Go import path for the generated output directory.
 	importRoot string
-
-	// generatorPkg is the Go import path of the generator module itself.
-	// Generated code imports this package for the Table type.
-	generatorPkg string
 
 	// Naming functions (customizable)
 	PkgNameFunc    func(string) string // table name → package name
@@ -61,26 +58,24 @@ type Generator struct {
 	BaseNameFunc   func(string) string // struct name → base struct name
 }
 
-const defaultGeneratorPkg = "github.com/crazy-airhead/aifei-go/generator"
-
 // New creates a Generator.
 func New(pool *sql.DB, dialect MetaDialect, outputDir, importRoot string) *Generator {
 	util := &TemplateUtil{}
 	return &Generator{
-		pool:            pool,
-		dialect:         dialect,
-		outputDir:       outputDir,
-		importRoot:      importRoot,
-		generatorPkg:    defaultGeneratorPkg,
-		metaReader:      NewMetaReader(),
-		baseGenerator:   NewBaseGenerator(),
-		modelGenerator:  NewModelGenerator(),
-		daoGenerator:    NewDaoGenerator(),
-		tablesGenerator: NewTablesGenerator(),
-		engine:          NewEngine(),
-		PkgNameFunc:     util.PkgName,
-		StructNameFunc:  util.StructName,
-		BaseNameFunc:    util.BaseName,
+		pool:             pool,
+		dialect:          dialect,
+		outputDir:        outputDir,
+		importRoot:       importRoot,
+		metaReader:       NewMetaReader(),
+		baseGenerator:    NewBaseGenerator(),
+		modelGenerator:   NewModelGenerator(),
+		daoGenerator:     NewDaoGenerator(),
+		tablesGenerator:  NewTablesGenerator(),
+		serviceGenerator: NewServiceGenerator(),
+		engine:           NewEngine(),
+		PkgNameFunc:      util.PkgName,
+		StructNameFunc:   util.StructName,
+		BaseNameFunc:     util.BaseName,
 	}
 }
 
@@ -93,6 +88,12 @@ func (g *Generator) ConfigMetaReader(fn func(*MetaReader)) *Generator {
 // ConfigBaseGenerator configures the BaseGenerator.
 func (g *Generator) ConfigBaseGenerator(fn func(*BaseGenerator)) *Generator {
 	fn(g.baseGenerator)
+	return g
+}
+
+// ConfigServiceGenerator configures the ServiceGenerator.
+func (g *Generator) ConfigServiceGenerator(fn func(*ServiceGenerator)) *Generator {
+	fn(g.serviceGenerator)
 	return g
 }
 
@@ -123,7 +124,7 @@ func (g *Generator) Generate() error {
 
 	// 3. Generate per-table packages
 	for _, info := range tableInfos {
-		if err := g.baseGenerator.Generate(g.engine, info, g.outputDir, g.generatorPkg); err != nil {
+		if err := g.baseGenerator.Generate(g.engine, info, g.outputDir); err != nil {
 			return err
 		}
 		if err := g.modelGenerator.Generate(g.engine, info, g.outputDir); err != nil {
@@ -132,11 +133,14 @@ func (g *Generator) Generate() error {
 		if err := g.daoGenerator.Generate(g.engine, info, g.outputDir); err != nil {
 			return err
 		}
+		if err := g.serviceGenerator.Generate(g.engine, info, g.outputDir); err != nil {
+			return err
+		}
 	}
 
 	// 4. Generate tables.go
 	outputPkgName := filepath.Base(g.outputDir)
-	if err := g.tablesGenerator.Generate(g.engine, tableInfos, g.outputDir, g.importRoot, outputPkgName, g.generatorPkg); err != nil {
+	if err := g.tablesGenerator.Generate(g.engine, tableInfos, g.outputDir, g.importRoot, outputPkgName); err != nil {
 		return err
 	}
 

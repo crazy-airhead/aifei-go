@@ -72,7 +72,6 @@ Aifei-Go is a lightweight Go web framework ported from [Aifei Java](https://gith
 
 - **`Db`** (`db.go`) — Top-level convenience functions: `Use()`, `SQL()`, `Select()`, `Insert()`, `Update()`, `Delete()`, `FindByID()`, `FindBy()`, etc.
 - **`Dao`** (`dao.go`) — Chainable query builder for single-table CRUD operations
-- **`SQLBuilder`** (`sql_builder.go`) — Chainable SQL builder for complex queries: `NewSQL()`.Where().OrderBy().Paginate()
 - **`Row`** (`row.go`) — Active Record pattern with change tracking. `Set()` tracks changes (used for UPDATE), `Put()` does not.
 - **`Config`** (`config.go`) — Connection management with `db.Init(driver, dsn, ...)`. Supports multiple named configs via `InitWithID()`. Lazy connection pool.
 - **`Batch`** / **`Transaction`** — Batch operations and transaction support
