@@ -38,6 +38,7 @@ func NewWithRow(row *db.Row) *#(baseName) {
 func (r *#(baseName)) #(f.AttrName)() #(f.GoType) {
 	return r.#(f.RowGetter)("#(f.Name)")
 }
+
 #end
 
 ### --- Typed Setters ---
@@ -46,6 +47,7 @@ func (r *#(baseName)) Set#(f.AttrName)(v #(f.GoType)) *#(baseName) {
 	r.Set("#(f.Name)", v)
 	return r
 }
+
 #end
 
 ### --- Short Setters ---
@@ -53,6 +55,7 @@ func (r *#(baseName)) Set#(f.AttrName)(v #(f.GoType)) *#(baseName) {
 func (r *#(baseName)) #(f.ShortName)_(v #(f.GoType)) *#(baseName) {
 	return r.Set#(f.AttrName)(v)
 }
+
 #end
 
 ### --- Instance CRUD ---
