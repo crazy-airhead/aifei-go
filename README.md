@@ -126,16 +126,49 @@ u.SetName("new name").Update()
 ```go
 type UserService struct{}
 
-func (s *UserService) List(in aifei.Input) aifei.Output    { /* GET /api/user/list */ }
-func (s *UserService) Create(in aifei.Input) aifei.Output  { /* POST /api/user/create */ }
-func (s *UserService) GetById(in aifei.Input) aifei.Output { /* GET /api/user/:id */ }
+func (s *UserService) List(in aifei.Input) aifei.Output      { /* GET /api/user/list */ }
+func (s *UserService) Paginate(in aifei.Input) aifei.Output   { /* GET /api/user */ }
+func (s *UserService) Create(in aifei.Input) aifei.Output     { /* POST /api/user */ }
+func (s *UserService) GetById(in aifei.Input) aifei.Output    { /* GET /api/user/:id */ }
 func (s *UserService) UpdateById(in aifei.Input) aifei.Output { /* PUT /api/user/:id */ }
 func (s *UserService) DeleteById(in aifei.Input) aifei.Output { /* DELETE /api/user/:id */ }
 
 app.Register("/api/user", &UserService{})
 ```
 
-命名规则：`List*`/`Get*` → GET，`Save*`/`Create*`/`Post*` → POST，`Update*`/`Put*` → PUT，`Delete*`/`Remove*` → DELETE。`ById` 后缀变为 `/:id` 路径参数。
+### 路由映射规则
+
+`Register()` 通过方法名约定自动推断 HTTP 方法和 URL 路径：
+
+**精确匹配**（默认 RESTful 端点，直接映射到 service prefix）：
+
+| 方法名 | HTTP 方法 | URL |
+|--------|----------|-----|
+| `List` | GET | `/prefix/list` |
+| `Paginate` | GET | `/prefix` |
+| `Create` | POST | `/prefix` |
+
+**前缀匹配**（前缀剥离后，剩余部分转为 kebab-case 路径）：
+
+| 方法名前缀 | HTTP 方法 | 示例 |
+|-----------|----------|------|
+| `Get*` | GET | `GetById` → `GET /prefix/:id` |
+| `Post*` | POST | `PostStatus` → `POST /prefix/status` |
+| `Put*` | PUT | `PutConfig` → `PUT /prefix/config` |
+| `Delete*` | DELETE | `DeleteItems` → `DELETE /prefix/items` |
+| `Update*` | PUT | `UpdateById` → `PUT /prefix/:id` |
+
+**特殊转换**：
+- `ById` 后缀自动转为 `/:id` 路径参数
+- 未匹配任何规则的方法不会被注册为路由
+
+### 自定义 ServicePrefix
+
+代码生成器默认使用 struct 名的驼峰形式作为 URL 路径（如 `loginLog` → `/api/v1/loginLog`）。如需复数形式，直接修改生成的 `service.go` 中的 `ServicePrefix` 常量：
+
+```go
+const ServicePrefix = "/api/v1/loginLogs"   // 手动改为复数
+```
 
 ## 代码统计
 
