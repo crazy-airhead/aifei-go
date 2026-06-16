@@ -1,5 +1,7 @@
 package generator
 
+import "strings"
+
 // TemplateUtil provides helper methods available in Enjoy code-generation templates.
 // Registered via engine.AddSharedObject("u", &TemplateUtil{}).
 type TemplateUtil struct{}
@@ -62,9 +64,9 @@ func (tu *TemplateUtil) ImportPath(goType string) string {
 }
 
 // PkgName converts a table name to a Go package name.
-// Uses the raw table name (snake_case), which is idiomatic for Go packages.
+// Removes underscores for direct concatenation: "sys_user" → "sysuser".
 func (tu *TemplateUtil) PkgName(tableName string) string {
-	return tableName
+	return strings.ReplaceAll(tableName, "_", "")
 }
 
 // StructName converts a table name to a PascalCase struct name.

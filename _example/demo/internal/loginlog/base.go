@@ -1,0 +1,110 @@
+package loginlog
+
+import (
+	"time"
+
+	"reflect"
+
+	"github.com/crazy-airhead/aifei-go/db"
+)
+
+var Table = &db.Table{
+	Name:        "sys_login_log",
+	Fields:      "id,user_id,login_time,ip",
+	PrimaryKeys: []string{"id"},
+	FieldTypes: map[string]reflect.Type{
+
+		"id": reflect.TypeOf(int(0)),
+
+		"user_id": reflect.TypeOf(int(0)),
+
+		"login_time": reflect.TypeOf(time.Time{}),
+
+		"ip": reflect.TypeOf(""),
+	},
+}
+
+type BaseLoginLog struct {
+	*db.Row
+}
+
+func NewBase() *BaseLoginLog {
+	return &BaseLoginLog{Row: db.NewRow(Table.Name)}
+}
+
+func NewWithRow(row *db.Row) *BaseLoginLog {
+	return &BaseLoginLog{Row: row}
+}
+
+func (r *BaseLoginLog) Id() int {
+	return r.GetInt("id")
+}
+
+func (r *BaseLoginLog) UserId() int {
+	return r.GetInt("user_id")
+}
+
+func (r *BaseLoginLog) LoginTime() time.Time {
+	return r.GetTime("login_time")
+}
+
+func (r *BaseLoginLog) Ip() string {
+	return r.GetStr("ip")
+}
+
+func (r *BaseLoginLog) SetId(v int) *BaseLoginLog {
+	r.Set("id", v)
+	return r
+}
+
+func (r *BaseLoginLog) SetUserId(v int) *BaseLoginLog {
+	r.Set("user_id", v)
+	return r
+}
+
+func (r *BaseLoginLog) SetLoginTime(v time.Time) *BaseLoginLog {
+	r.Set("login_time", v)
+	return r
+}
+
+func (r *BaseLoginLog) SetIp(v string) *BaseLoginLog {
+	r.Set("ip", v)
+	return r
+}
+
+func (r *BaseLoginLog) Id_(v int) *BaseLoginLog {
+	return r.SetId(v)
+}
+
+func (r *BaseLoginLog) UserId_(v int) *BaseLoginLog {
+	return r.SetUserId(v)
+}
+
+func (r *BaseLoginLog) LoginTime_(v time.Time) *BaseLoginLog {
+	return r.SetLoginTime(v)
+}
+
+func (r *BaseLoginLog) Ip_(v string) *BaseLoginLog {
+	return r.SetIp(v)
+}
+
+func (r *BaseLoginLog) Insert() (*BaseLoginLog, error) {
+	_, err := r.Row.Insert()
+	return r, err
+}
+
+func (r *BaseLoginLog) Update() (bool, error) {
+	return r.Row.Update()
+}
+
+func (r *BaseLoginLog) Delete() (bool, error) {
+	return r.Row.Delete()
+}
+
+func initRow(row *db.Row) *db.Row {
+	return row.SetTable(Table.Name).SetPrimaryKeys(Table.PrimaryKeys...)
+}
+
+func init() {
+	db.RegisterTable(Table)
+}

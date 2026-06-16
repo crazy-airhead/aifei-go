@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	ServicePrefix = "#(apiPrefix)/#(pkgName)"
+	ServicePrefix = "#(apiPrefix)/#(servicePath)"
 
 	// listSql is the Enjoy SQL template for List and Paginate.
 	// Query params are matched via #where/#and directives in queryConditions.

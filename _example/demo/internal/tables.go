@@ -1,6 +1,8 @@
 package internal
 
 import (
+	_ "github.com/crazy-airhead/aifei-go/_example/demo/internal/loginlog"
+
 	_ "github.com/crazy-airhead/aifei-go/_example/demo/internal/user"
 )
 

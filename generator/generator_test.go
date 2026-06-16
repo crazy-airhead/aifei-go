@@ -38,6 +38,18 @@ func TestMetaReader_Read(t *testing.T) {
 	pool := setupTestDB(t)
 	defer pool.Close()
 
+	_, err := pool.Exec(`
+		CREATE TABLE sys_login_log (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			login_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+			ip TEXT
+		)
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	dialect := &SQLiteMetaDialect{}
 	reader := NewMetaReader()
 
@@ -46,32 +58,34 @@ func TestMetaReader_Read(t *testing.T) {
 		t.Fatalf("Read failed: %v", err)
 	}
 
-	if len(infos) != 1 {
-		t.Fatalf("expected 1 table, got %d", len(infos))
+	if len(infos) != 2 {
+		t.Fatalf("expected 2 tables, got %d", len(infos))
 	}
 
 	info := infos[0]
-	if info.Name != "user" {
-		t.Errorf("expected table name 'user', got '%s'", info.Name)
+	if info.Name != "sys_login_log" {
+		t.Errorf("expected table name 'sys_login_log', got '%s'", info.Name)
 	}
 	if len(info.PrimaryKey) != 1 || info.PrimaryKey[0] != "id" {
 		t.Errorf("expected primary key ['id'], got %v", info.PrimaryKey)
 	}
-	if len(info.Fields) != 5 {
-		t.Errorf("expected 5 fields, got %d: %v", len(info.Fields), info.Fields[0])
+	if len(info.Fields) != 4 {
+		t.Errorf("expected 4 fields, got %d: %v", len(info.Fields), info.Fields[0])
 	}
 
 	// SQLite driver reports most types as "TEXT" or "INTEGER" in DatabaseTypeName
 	// Just verify we got field data for each column
-	for _, f := range info.Fields {
-		if f.Name == "" {
-			t.Error("field name should not be empty")
-		}
-		if f.GoType == "" {
-			t.Errorf("field %s should have a Go type", f.Name)
-		}
-		if f.AttrName == "" {
-			t.Errorf("field %s should have an AttrName", f.Name)
+	for _, info := range infos {
+		for _, f := range info.Fields {
+			if f.Name == "" {
+				t.Error("field name should not be empty")
+			}
+			if f.GoType == "" {
+				t.Errorf("field %s should have a Go type", f.Name)
+			}
+			if f.AttrName == "" {
+				t.Errorf("field %s should have an AttrName", f.Name)
+			}
 		}
 	}
 }
@@ -153,6 +167,18 @@ func TestGenerator_Generate(t *testing.T) {
 	pool := setupTestDB(t)
 	defer pool.Close()
 
+	_, err := pool.Exec(`
+		CREATE TABLE sys_login_log (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			login_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+			ip TEXT
+		)
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	tmpDir, err := os.MkdirTemp("", "aifei-gen-test")
 	if err != nil {
 		t.Fatal(err)
@@ -161,18 +187,23 @@ func TestGenerator_Generate(t *testing.T) {
 
 	dialect := &SQLiteMetaDialect{}
 	gen := New(pool, dialect, tmpDir, "example/db")
+	gen.TablePrefix = "sys_"
 
 	if err := gen.Generate(); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
-	// Verify generated files exist
+	// Verify generated files exist (user table - no prefix to strip)
 	expectedFiles := []string{
 		"tables.go",
 		"user/base.go",
 		"user/model.go",
 		"user/dao.go",
 		"user/service.go",
+		"loginlog/base.go",
+		"loginlog/model.go",
+		"loginlog/dao.go",
+		"loginlog/service.go",
 	}
 	for _, f := range expectedFiles {
 		path := filepath.Join(tmpDir, f)
@@ -187,10 +218,13 @@ func TestGenerator_Generate(t *testing.T) {
 	if !strings.Contains(string(tablesContent), `_ "example/db/user"`) {
 		t.Error("tables.go should contain blank import for user package")
 	}
+	if !strings.Contains(string(tablesContent), `_ "example/db/loginlog"`) {
+		t.Error("tables.go should contain blank import for loginlog package")
+	}
 
-	// Verify base.go content
+	// Verify base.go content for user
 	baseContent, _ := os.ReadFile(filepath.Join(tmpDir, "user/base.go"))
-	t.Logf("base.go:\n%s", string(baseContent))
+	t.Logf("user/base.go:\n%s", string(baseContent))
 	if !strings.Contains(string(baseContent), "Table = &db.Table") {
 		t.Error("base.go should contain db.Table definition")
 	}
@@ -202,6 +236,29 @@ func TestGenerator_Generate(t *testing.T) {
 	}
 	if !strings.Contains(string(baseContent), "Insert()") {
 		t.Error("base.go should contain Insert() method")
+	}
+
+	// Verify loginlog package (prefix stripped: sys_login_log → login_log)
+	loginlogBase, _ := os.ReadFile(filepath.Join(tmpDir, "loginlog/base.go"))
+	t.Logf("loginlog/base.go:\n%s", string(loginlogBase))
+	if !strings.Contains(string(loginlogBase), "package loginlog") {
+		t.Error("loginlog/base.go should have package loginlog")
+	}
+	if !strings.Contains(string(loginlogBase), "type BaseLoginLog struct") {
+		t.Error("loginlog/base.go should contain BaseLoginLog struct")
+	}
+	if !strings.Contains(string(loginlogBase), "Name:        \"sys_login_log\"") {
+		t.Error("loginlog/base.go should use original table name sys_login_log")
+	}
+
+	// Verify service.go uses camelCase ServicePrefix
+	loginlogService, _ := os.ReadFile(filepath.Join(tmpDir, "loginlog/service.go"))
+	t.Logf("loginlog/service.go:\n%s", string(loginlogService))
+	if !strings.Contains(string(loginlogService), "package loginlog") {
+		t.Error("loginlog/service.go should have package loginlog")
+	}
+	if !strings.Contains(string(loginlogService), "ServicePrefix = \"/loginLog\"") {
+		t.Error("loginlog/service.go should have camelCase ServicePrefix, got:", string(loginlogService))
 	}
 }
 

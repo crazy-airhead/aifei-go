@@ -1,4 +1,4 @@
-package user
+package loginlog
 
 import (
 	"strconv"
@@ -9,15 +9,14 @@ import (
 )
 
 const (
-	ServicePrefix = "/user"
+	ServicePrefix = "/loginLog"
 
 	// listSql is the Enjoy SQL template for List and Paginate.
 	// Query params are matched via
-	listSql = `SELECT * FROM user
-#where(name, '=', name)
-#and(age, '=', age)
-#and(email, '=', email)
-#and(created_at, '=', created_at)
+	listSql = `SELECT * FROM sys_login_log
+#where(user_id, '=', user_id)
+#and(login_time, '=', login_time)
+#and(ip, '=', ip)
 ORDER BY id DESC`
 )
 
@@ -73,7 +72,7 @@ func (s *Service) GetById(in aifei.Input) aifei.Output {
 		return server.Fail(err.Error())
 	}
 	if u == nil {
-		return server.Fail("User not found")
+		return server.Fail("LoginLog not found")
 	}
 	return server.Of(u)
 }
@@ -86,7 +85,7 @@ func (s *Service) UpdateById(in aifei.Input) aifei.Output {
 	}
 	existing, err := FindById(id)
 	if err != nil || existing == nil {
-		return server.Fail("User not found")
+		return server.Fail("LoginLog not found")
 	}
 	if err := in.GetBean(existing); err != nil {
 		return server.Fail("invalid request: " + err.Error())

@@ -61,10 +61,13 @@ func (g *ServiceGenerator) buildData(info *TableInfo) map[string]interface{} {
 		}
 	}
 
+	servicePath := ToCamelCase(info.StructName)
+
 	return map[string]interface{}{
 		"apiPrefix":       g.APIPrefix,
 		"pkgName":         info.PkgName,
 		"structName":      info.StructName,
+		"servicePath":     servicePath,
 		"tableName":       info.Name,
 		"pkName":          pkName,
 		"hasSinglePK":     hasSinglePK,
@@ -96,24 +99,22 @@ func buildQueryConditions(info *TableInfo, primaryKeys []string) string {
 	return strings.Join(parts, "\n")
 }
 
-// buildPKParamParse generates Go code to parse a PK value from c.Param("id").
+// buildPKParamParse generates Go code to parse a PK value from in.Param("id").
 func buildPKParamParse(goType string) string {
 	switch goType {
 	case "int":
-		return `id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		c.JsonFail("invalid id")
-		return
-	}`
+		return `id, err := strconv.Atoi(in.Param("id"))
+		if err != nil {
+			return server.Fail("invalid id")
+		}`
 	case "int64":
-		return `id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JsonFail("invalid id")
-		return
-	}`
+		return `id, err := strconv.ParseInt(in.Param("id"), 10, 64)
+		if err != nil {
+			return server.Fail("invalid id")
+		}`
 	case "string":
-		return `id := c.Param("id")`
+		return `id := in.Param("id")`
 	default:
-		return `id := c.Param("id")`
+		return `id := in.Param("id")`
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/crazy-airhead/aifei-go/enjoy"
@@ -51,6 +52,9 @@ type Generator struct {
 
 	// importRoot is the Go import path for the generated output directory.
 	importRoot string
+
+	// TablePrefix is stripped from table names before naming, e.g. "t_" strips "t_user" → "user".
+	TablePrefix string
 
 	// Naming functions (customizable)
 	PkgNameFunc    func(string) string // table name → package name
@@ -115,8 +119,12 @@ func (g *Generator) Generate() error {
 
 	// 2. Assign package/struct names
 	for _, info := range tableInfos {
-		info.PkgName = g.PkgNameFunc(info.Name)
-		info.StructName = g.StructNameFunc(info.Name)
+		tableName := info.Name
+		if g.TablePrefix != "" {
+			tableName = strings.TrimPrefix(tableName, g.TablePrefix)
+		}
+		info.PkgName = g.PkgNameFunc(tableName)
+		info.StructName = g.StructNameFunc(tableName)
 		info.BaseName = g.BaseNameFunc(info.StructName)
 		fmt.Printf("[aifei-gen] Processing table: %s → package=%s struct=%s\n",
 			info.Name, info.PkgName, info.StructName)

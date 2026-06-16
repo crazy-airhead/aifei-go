@@ -8,6 +8,7 @@ import (
 	"github.com/crazy-airhead/aifei-go/server"
 
 	// Per-table package: registers Table metadata and Service routes via init().
+	_ "github.com/crazy-airhead/aifei-go/_example/demo/internal/loginlog"
 	_ "github.com/crazy-airhead/aifei-go/_example/demo/internal/user"
 
 	_ "modernc.org/sqlite"
@@ -22,13 +23,20 @@ func main() {
 		panic(err)
 	}
 
-	// Ensure table exists
+	// Ensure tables exist
 	db.SQL(`CREATE TABLE IF NOT EXISTS user (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			name TEXT NOT NULL,
 			age INTEGER DEFAULT 0,
 			email TEXT,
 			created_at TEXT DEFAULT CURRENT_TIMESTAMP
+		)`).Update()
+
+	db.SQL(`CREATE TABLE IF NOT EXISTS sys_login_log (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			login_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+			ip TEXT
 		)`).Update()
 
 	app := aifei.New()

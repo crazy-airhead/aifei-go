@@ -8,6 +8,16 @@ func FieldToAttr(fieldName string) string {
 	return toPascalCase(fieldName)
 }
 
+// ToCamelCase converts a PascalCase string to camelCase by lowercasing the first rune.
+func ToCamelCase(s string) string {
+	if s == "" {
+		return s
+	}
+	r := []rune(s)
+	r[0] = unicode.ToLower(r[0])
+	return string(r)
+}
+
 // toPascalCase converts snake_case to PascalCase (exported Go identifier).
 func toPascalCase(s string) string {
 	result := make([]rune, 0, len(s))
