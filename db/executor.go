@@ -520,6 +520,342 @@ func execCountBy(dao *Dao, table, whereOrField string, args []interface{}) (int6
 	return ToInt64(rows[0].Get("COUNT(*)")), nil
 }
 
+// ---- Advanced query executors ----
+
+// execFindOne returns exactly one row, or an error.
+func execFindOne(dao *Dao, allowNull bool) (*Row, error) {
+	rows, err := execFind(dao, dao.isRawSQL())
+	if err != nil {
+		return nil, err
+	}
+	switch len(rows) {
+	case 1:
+		return rows[0], nil
+	case 0:
+		if allowNull {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("expected exactly one result, but found 0")
+	default:
+		return nil, fmt.Errorf("expected exactly one result, but found %d. Consider using FindFirst instead", len(rows))
+	}
+}
+
+// execFindExists returns true if the query returns at least one row.
+func execFindExists(dao *Dao) (bool, error) {
+	config := dao.config
+	hk := config.GetDbHookKit()
+
+	query, args := dao.sqlAndArgs()
+	if dao.selFields != "" && dao.fromTable != "" {
+		query = config.Dialect.ForSelect(dao.fromTable, dao.selFields)
+	}
+	dao.setSqlPara(&dbsql.SqlPara{Sql: query, Paras: args})
+
+	var toAfterFind, toAfterQuery interface{}
+	if hk != nil && hk.QueryHook != nil && dao.isRawSQL() {
+		toAfterQuery = hk.QueryHook.BeforeQuery(dao)
+	}
+	if hk != nil && hk.FindHook != nil {
+		toAfterFind = hk.FindHook.BeforeFind(dao)
+	}
+	if sp := dao.sqlPara; sp != nil {
+		query = sp.Sql
+		args = sp.Paras
+	}
+
+	pool, err := config.Pool()
+	if err != nil {
+		return false, err
+	}
+	config.logSQL(query, args...)
+	rows, err := pool.Query(query, args...)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	exists := rows.Next()
+
+	if hk != nil && hk.FindHook != nil {
+		hk.FindHook.AfterFind(dao, nil, toAfterFind)
+	}
+	if hk != nil && hk.QueryHook != nil && dao.isRawSQL() {
+		hk.QueryHook.AfterQuery(dao, nil, toAfterQuery)
+	}
+	return exists, nil
+}
+
+// execForEach iterates over query results with a callback.
+// The callback receives each *Row; return false to stop iteration early.
+func execForEach(dao *Dao, fn func(*Row) bool) error {
+	config := dao.config
+	hk := config.GetDbHookKit()
+
+	query, args := dao.sqlAndArgs()
+	if dao.selFields != "" && dao.fromTable != "" {
+		query = config.Dialect.ForSelect(dao.fromTable, dao.selFields)
+	}
+	dao.setSqlPara(&dbsql.SqlPara{Sql: query, Paras: args})
+
+	var toAfterFind, toAfterQuery interface{}
+	if hk != nil && hk.QueryHook != nil && dao.isRawSQL() {
+		toAfterQuery = hk.QueryHook.BeforeQuery(dao)
+	}
+	if hk != nil && hk.FindHook != nil {
+		toAfterFind = hk.FindHook.BeforeFind(dao)
+	}
+	if sp := dao.sqlPara; sp != nil {
+		query = sp.Sql
+		args = sp.Paras
+	}
+
+	pool, err := config.Pool()
+	if err != nil {
+		return err
+	}
+	config.logSQL(query, args...)
+	rows, err := pool.Query(query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+	var rowList []*Row
+	for rows.Next() {
+		values := make([]interface{}, len(cols))
+		for i := range values {
+			values[i] = new(interface{})
+		}
+		if err := rows.Scan(values...); err != nil {
+			return err
+		}
+		data := make(map[string]interface{})
+		for i, col := range cols {
+			val := values[i]
+			if p, ok := val.(*interface{}); ok {
+				data[col] = *p
+			} else {
+				data[col] = val
+			}
+		}
+		row := &Row{data: data}
+		rowList = append(rowList, row)
+		if !fn(row) {
+			break
+		}
+	}
+
+	if hk != nil && hk.FindHook != nil {
+		hk.FindHook.AfterFind(dao, rowList, toAfterFind)
+	}
+	if hk != nil && hk.QueryHook != nil && dao.isRawSQL() {
+		hk.QueryHook.AfterQuery(dao, rowList, toAfterQuery)
+	}
+	return nil
+}
+
+// ---- Pagination extensions ----
+
+// execForEachPage iterates over all pages.
+func execForEachPage(dao *Dao, pageSize int, fn func(*Page) bool) error {
+	for pageNum := 1; ; pageNum++ {
+		page, err := execPaginate(dao, pageNum, pageSize)
+		if err != nil {
+			return err
+		}
+		if len(page.Rows) == 0 || !fn(page) {
+			return nil
+		}
+	}
+}
+
+// execForEachPageRange iterates from startPageNum to endPageNum.
+func execForEachPageRange(dao *Dao, startPageNum, endPageNum, pageSize int, fn func(*Page) bool) error {
+	for pageNum := startPageNum; pageNum <= endPageNum; pageNum++ {
+		page, err := execPaginate(dao, pageNum, pageSize)
+		if err != nil {
+			return err
+		}
+		if len(page.Rows) == 0 || !fn(page) {
+			return nil
+		}
+	}
+	return nil
+}
+
+// ---- Query executors (raw results, not wrapped in Row) ----
+
+// execQuery executes raw SQL and returns results as []interface{}.
+// For single-column results, each element is a scalar.
+// For multi-column results, each element is []interface{}.
+func execQuery(dao *Dao, returnFirst bool) ([]interface{}, error) {
+	config := dao.config
+	hk := config.GetDbHookKit()
+
+	query, args := dao.sqlAndArgs()
+	dao.setSqlPara(&dbsql.SqlPara{Sql: query, Paras: args})
+
+	var toAfter interface{}
+	if hk != nil && hk.QueryHook != nil {
+		toAfter = hk.QueryHook.BeforeQuery(dao)
+		if sp := dao.sqlPara; sp != nil {
+			query = sp.Sql
+			args = sp.Paras
+		}
+	}
+
+	pool, err := config.Pool()
+	if err != nil {
+		return nil, err
+	}
+	config.logSQL(query, args...)
+	rows, err := pool.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	var result []interface{}
+	if len(cols) > 1 {
+		for rows.Next() {
+			columnArray := make([]interface{}, len(cols))
+			scanArgs := make([]interface{}, len(cols))
+			for i := range scanArgs {
+				scanArgs[i] = new(interface{})
+			}
+			if err := rows.Scan(scanArgs...); err != nil {
+				return nil, err
+			}
+			for i := range columnArray {
+				if p, ok := scanArgs[i].(*interface{}); ok {
+					columnArray[i] = *p
+				}
+			}
+			result = append(result, columnArray)
+			if returnFirst {
+				break
+			}
+		}
+	} else {
+		for rows.Next() {
+			var val interface{}
+			if err := rows.Scan(&val); err != nil {
+				return nil, err
+			}
+			result = append(result, val)
+			if returnFirst {
+				break
+			}
+		}
+	}
+
+	if hk != nil && hk.QueryHook != nil {
+		hk.QueryHook.AfterQuery(dao, result, toAfter)
+	}
+	return result, nil
+}
+
+// execQueryField returns the first field of the first row.
+func execQueryField(dao *Dao) (interface{}, error) {
+	result, err := execQuery(dao, true)
+	if err != nil {
+		return nil, err
+	}
+	if len(result) > 0 {
+		if _, ok := result[0].([]interface{}); ok {
+			return nil, fmt.Errorf("the queryField method allows querying only a single field")
+		}
+		return result[0], nil
+	}
+	return nil, nil
+}
+
+// execQueryOne returns exactly one raw result.
+func execQueryOne(dao *Dao, allowNull bool) (interface{}, error) {
+	result, err := execQuery(dao, false)
+	if err != nil {
+		return nil, err
+	}
+	switch len(result) {
+	case 1:
+		return result[0], nil
+	case 0:
+		if allowNull {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("expected one or zero result, but found 0")
+	default:
+		return nil, fmt.Errorf("expected one or zero result, but found %d. Consider using QueryFirst instead", len(result))
+	}
+}
+
+// ---- ByID extensions ----
+
+// execDeleteByCompositeId deletes by composite primary keys.
+func execDeleteByCompositeId(dao *Dao, table string, pks []string, idValues []interface{}) (bool, error) {
+	row := NewRowWithCompositePK(table, pks[0], pks[1])
+	for i, pk := range pks {
+		row.Put(pk, idValues[i])
+	}
+	return execDeleteRow(dao, row)
+}
+
+// execFindByCompositeId finds by composite primary keys.
+func execFindByCompositeId(dao *Dao, table string, pks []string, idValues []interface{}) (*Row, error) {
+	sqlStr := dao.config.Dialect.ForFindByID(table, pks)
+	dao.setSqlPara(&dbsql.SqlPara{Sql: sqlStr, Paras: idValues})
+	rows, err := execFindBy(dao)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return rows[0], nil
+}
+
+// execDeleteInIds deletes by primary key IN values.
+func execDeleteInIds(dao *Dao, table string, ids []interface{}) (int64, error) {
+	pk := dao.config.Dialect.DefaultPrimaryKeys()[0]
+	return execDeleteIn(dao, table, pk, ids)
+}
+
+// execFindInIds finds by primary key IN values.
+func execFindInIds(dao *Dao, table string, ids []interface{}) ([]*Row, error) {
+	pk := dao.config.Dialect.DefaultPrimaryKeys()[0]
+	return execFindIn(dao, table, pk, ids)
+}
+
+// ---- Transaction on Dao ----
+
+// execTransaction executes fn within a transaction for the Dao's config.
+func execTransaction(dao *Dao, fn func(*Dao) error) error {
+	config := dao.config
+	pool, err := config.Pool()
+	if err != nil {
+		return err
+	}
+	tx, err := pool.Begin()
+	if err != nil {
+		return err
+	}
+	if err := fn(dao); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
 // ---- Internal helpers ----
 
 func scanRows(rows *sql.Rows) ([]*Row, error) {

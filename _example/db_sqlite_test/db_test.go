@@ -19,11 +19,11 @@ func setupTestDB(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.Use().SQL("CREATE TABLE IF NOT EXISTS user (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, age INTEGER, email TEXT)").Update()
+	_, err = db.Use().RawSql("CREATE TABLE IF NOT EXISTS user (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, age INTEGER, email TEXT)").Update()
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.Use().SQL("DELETE FROM user").Update()
+	db.Use().RawSql("DELETE FROM user").Update()
 }
 
 func TestInsert(t *testing.T) {
@@ -133,7 +133,7 @@ func TestPaginate(t *testing.T) {
 		db.Insert(db.NewRow("user").Set("name", "user").Set("age", i))
 	}
 
-	page, err := db.SQL("SELECT * FROM user").Paginate(1, 10)
+	page, err := db.RawSql("SELECT * FROM user").Paginate(1, 10)
 	if err != nil {
 		t.Fatal(err)
 	}

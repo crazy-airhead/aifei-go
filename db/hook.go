@@ -44,11 +44,12 @@ type FindHook interface {
 }
 
 // QueryHook fires from Find() only when the user explicitly set raw SQL
-// (via Dao.SQL() or Dao.Sql()). It complements FindHook — both fire from
-// Find(), allowing users to distinguish raw-SQL reads from builder-based reads.
+// (via Dao.RawSql() or Dao.Sql()), and from Query() methods.
+// The result parameter is interface{} because Query returns raw []interface{}
+// while Find returns []*Row.
 type QueryHook interface {
 	BeforeQuery(dao *Dao) interface{}
-	AfterQuery(dao *Dao, rows []*Row, fromBefore interface{})
+	AfterQuery(dao *Dao, result interface{}, fromBefore interface{})
 }
 
 // PaginateHook intercepts paginated queries.

@@ -17,7 +17,7 @@ func setupTest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.SQL(`CREATE TABLE IF NOT EXISTS user (
+	db.RawSql(`CREATE TABLE IF NOT EXISTS user (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT NOT NULL,
 		age INTEGER DEFAULT 0,

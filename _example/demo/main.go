@@ -24,7 +24,7 @@ func main() {
 	}
 
 	// Ensure tables exist
-	db.SQL(`CREATE TABLE IF NOT EXISTS user (
+	db.RawSql(`CREATE TABLE IF NOT EXISTS user (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			name TEXT NOT NULL,
 			age INTEGER DEFAULT 0,
@@ -32,7 +32,7 @@ func main() {
 			created_at TEXT DEFAULT CURRENT_TIMESTAMP
 		)`).Update()
 
-	db.SQL(`CREATE TABLE IF NOT EXISTS sys_login_log (
+	db.RawSql(`CREATE TABLE IF NOT EXISTS sys_login_log (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			user_id INTEGER NOT NULL,
 			login_time DATETIME DEFAULT CURRENT_TIMESTAMP,

@@ -10,9 +10,9 @@ func UseWithID(configID string) *Dao {
 	return GetConfig(configID).CreateDao()
 }
 
-// SQL creates a Dao with the given raw SQL query.
-func SQL(query string, args ...interface{}) *Dao {
-	return Use().SQL(query, args...)
+// RawSql creates a Dao with the given raw SQL query.
+func RawSql(query string, args ...interface{}) *Dao {
+	return Use().RawSql(query, args...)
 }
 
 // Sql creates a Dao with an Enjoy SQL template and named parameters.
