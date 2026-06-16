@@ -5,26 +5,35 @@
 
 ## 1. 模块总览
 
+Enjoy 使用**扁平文件结构**（非子目录结构），共 15 个文件：
+
 ```
 enjoy/
 ├── engine.go              # Engine 入口 + 模板缓存
 ├── engine_config.go       # 引擎配置
 ├── template.go            # Template 编译执行
 ├── env.go                 # 模板执行环境
-├── directive.go           # Directive 基类
+├── directive.go           # Directive 接口
 ├── scope.go               # Scope 变量作用域
 ├── ctrl.go                # 执行控制 (break/continue/return)
-├── stat/                  # 语句层 AST
-├── expr/                  # 表达式层 AST
-├── io/                    # 输出抽象
-└── source/                # 模板源加载
+├── lexer.go               # 模板词法分析器 (DKFF 算法)
+├── stat_parser.go         # 模板语法分析器 (DLRD 递归下降)
+├── tok.go                 # Token 类型定义
+├── stat.go                # 语句 AST 节点
+├── expr.go                # 表达式 AST 接口
+├── expr_eval.go           # 表达式求值
+├── expr_lexer.go          # 表达式词法分析器
+├── expr_parser.go         # 表达式语法分析器 (运算符优先级)
+├── expr_list.go           # 表达式列表
+└── source/
+    └── source.go          # FileSource + StringSource
 ```
 
 ## 2. 编译管线
 
 ```
 Source (文件/字符串) → Lexer (词法分析) → Token 流 → Parser (语法分析) → AST → Template (缓存)
-                                                                          ↓
+                                                                         ↓
 执行: Template.render(data) → 创建 Scope → AST 递归执行 → Writer 输出
 ```
 
@@ -47,11 +56,8 @@ func (e *Engine) GetTemplateByString(content string) *Template
 // 配置
 func (e *Engine) SetDevMode(devMode bool)
 func (e *Engine) SetBaseTemplatePath(path string)
-func (e *Engine) SetEncoding(encoding string)
-func (e *Engine) SetDatePattern(pattern string)
-func (e *Engine) AddSharedFunction(fileName string)
+func (e *Engine) AddSharedFunction(name string, fn interface{})
 func (e *Engine) AddDirective(name string, directive DirectiveFactory)
-func (e *Engine) AddSharedMethod(name string, fn interface{})
 func (e *Engine) AddSharedObject(name string, obj interface{})
 
 // 内部
@@ -59,20 +65,20 @@ func (e *Engine) GetConfig() *EngineConfig
 func (e *Engine) RemoveAllTemplateCache()
 ```
 
+> 注：`SetEncoding` 和 `SetDatePattern` 未在 Go 版中实现（Go 统一使用 UTF-8，日期格式化通过 Go 标准方式处理）。
+
 ## 4. EngineConfig (对应 `cn.aifei.enjoy.EngineConfig`)
 
 ```go
 type EngineConfig struct {
-    directiveMap     map[string]DirectiveFactory
+    directiveMap      map[string]DirectiveFactory
     sharedFunctionMap map[string]*Define  // 共享函数
-    sharedObjectMap  map[string]interface{}
-    writerBuffer     *WriterBuffer
-    sourceFactory    SourceFactory
-    baseTemplatePath string
-    encoding         string
-    datePattern      string
-    devMode          bool
+    sharedObjectMap   map[string]interface{}
+    baseTemplatePath  string
+    devMode           bool
 }
+
+func NewEngineConfig() *EngineConfig
 ```
 
 ## 5. Template (对应 `cn.aifei.enjoy.Template`)
@@ -98,6 +104,7 @@ type Env struct {
     sourceList   []Source
 }
 
+func NewEnv(config *EngineConfig) *Env
 func (e *Env) GetEngineConfig() *EngineConfig
 func (e *Env) GetFunction(name string) *Define
 func (e *Env) AddFunction(name string, def *Define)
@@ -112,6 +119,8 @@ type Directive interface {
     Exec(env *Env, scope *Scope, writer io.Writer)
     HasEnd() bool
 }
+
+type DirectiveFactory func() Directive
 ```
 
 ## 8. Scope (对应 `cn.aifei.enjoy.stat.Scope`)
@@ -123,12 +132,13 @@ type Scope struct {
 }
 
 func NewScope(data map[string]interface{}) *Scope
-func (s *Scope) Get(key string) interface{}
+func (s *Scope) Get(key string) (interface{}, bool)
 func (s *Scope) Set(key string, value interface{})
 func (s *Scope) SetLocal(key string, value interface{})
 func (s *Scope) SetGlobal(key string, value interface{})
 func (s *Scope) Exists(key string) bool
 func (s *Scope) NewChild() *Scope  // 创建子作用域
+func (s *Scope) Data() map[string]interface{}
 ```
 
 ## 9. Ctrl (对应 `cn.aifei.enjoy.stat.Ctrl`)
@@ -142,6 +152,9 @@ type Ctrl struct {
     NullSafe bool  // 空安全模式
     Attachment interface{} // 附带数据
 }
+
+func NewCtrl() *Ctrl
+func (c *Ctrl) Reset()
 ```
 
 ## 10. Lexer — 模板词法分析 (对应 `cn.aifei.enjoy.stat.Lexer`)
@@ -182,16 +195,16 @@ PARA         — 指令参数
 DLRD (Double Layer Recursive Descent) 递归下降解析器。
 
 ```go
-func Parse(lexer *Lexer, config *EngineConfig) (Stat, error)
+func ParseTemplate(lexer *Lexer, env *Env) (Stat, error)
 ```
 
 解析过程：
 1. `statList()` → 解析语句列表
-2. `stat()` → 解析单条语句
-3. 遇到 `#if` → 创建 If AST 节点，递归解析 elseif/else/end
-4. 遇到 `#for` → 创建 For AST 节点，递归解析循环体
-5. 遇到 `#set` → 解析赋值表达式
-6. 遇到 `#define` → 创建 Define 节点
+2. `parseOneStat()` → 解析单条语句
+3. 遇到 `#if` → 创建 IfStat AST 节点，递归解析 elseif/else/end
+4. 遇到 `#for` → 创建 ForStat AST 节点，递归解析循环体
+5. 遇到 `#set` → 解析赋值表达式，创建设置语句
+6. 遇到 `#define` → 创建 DefineStat 节点
 7. 遇到自定义指令 → 查找 directiveMap，调用 factory 创建
 
 ## 12. ExprLexer — 表达式词法分析 (对应 `cn.aifei.enjoy.expr.ExprLexer`)
@@ -200,7 +213,7 @@ func Parse(lexer *Lexer, config *EngineConfig) (Stat, error)
 type ExprLexer struct { ... }
 
 func NewExprLexer(input string) *ExprLexer
-func (l *ExprLexer) Scan() (Tok, string)
+func (l *ExprLexer) Scan() (ETok, string)
 ```
 
 **扫描能力：**
@@ -228,52 +241,60 @@ func (l *ExprLexer) Scan() (Tok, string)
 11. 原子:     id const (expr) [array] {map}
 ```
 
+```go
+func ParseExpr(input string) (Expr, error)
+```
+
 ## 14. 表达式 AST 节点
 
-| Go 类型 | 对应 Java | 功能 |
-|---------|-----------|------|
-| `Id` | Id | 变量标识符 |
-| `Const` | Const | 常量 (string/int/float/bool/null) |
-| `Arith` | Arith | 算术: + - * / % |
-| `Compare` | Compare | 比较: == != < <= > >= |
-| `Logic` | Logic | 逻辑: && \|\| ! |
-| `Ternary` | Ternary | 三元: cond ? a : b |
-| `NullSafe` | NullSafe | 空安全: ?? ?. |
-| `Field` | Field | 字段访问: obj.field |
-| `Method` | Method | 方法调用: obj.method(args) |
-| `Index` | Index | 索引: arr[i] |
-| `Assign` | Assign | 赋值: x = expr |
-| `IncDec` | IncDec | 自增自减: ++ -- |
-| `Array` | Array | 数组: [1, 2, 3] |
-| `MapExpr` | Map | Map: {"k": "v"} |
-| `Range` | RangeArray | 范围: [0..10] |
-| `SharedMethod` | SharedMethod | 共享方法 |
-| `StaticMethod` | StaticMethod | 静态方法: Class::method() |
-| `StaticField` | StaticField | 静态字段: Class::field |
-| `NullExpr` | NullExpr | null 表达式 |
+| Go 类型 | 功能 |
+|---------|------|
+| `IDExpr` | 变量标识符 |
+| `ConstExpr` | 常量 (string/int/float/bool/null) |
+| `ArithExpr` | 算术: + - * / % |
+| `CompareExpr` | 比较: == != < <= > >= |
+| `LogicExpr` | 逻辑: && \|\| ! |
+| `TernaryExpr` | 三元: cond ? a : b |
+| `NullCoalesceExpr` | 空合并: ?? |
+| `NullSafeExpr` | 空安全: ?. |
+| `FieldExpr` | 字段访问: obj.field |
+| `MethodExpr` | 方法调用: obj.method(args) |
+| `IndexExpr` | 索引: arr[i] |
+| `AssignExpr` | 赋值: x = expr |
+| `IncDecExpr` | 自增自减: ++ -- |
+| `ArrayExpr` | 数组: [1, 2, 3] |
+| `MapExpr` | Map: {"k": "v"} |
+| `RangeExpr` | 范围: [0..10] |
+
+所有节点类型在 `expr.go` 中定义，求值逻辑集中在 `expr_eval.go`。
 
 ## 15. 语句 AST 节点
 
-| Go 类型 | 对应 Java | 功能 |
-|---------|-----------|------|
-| `StatList` | StatList | 语句列表 (AST 根) |
-| `Text` | Text | 纯文本输出 |
-| `Output` | Output | 表达式输出 #() |
-| `If` | If | 条件 #if / #elseif / #else |
-| `For` | For | 循环 #for (item : list) / #for (i=0; i<n; i++) |
-| `Set` | Set | 赋值 #set / #setLocal / #setGlobal |
-| `Define` | Define | 函数定义 #define |
-| `Include` | Include | 包含 #include |
-| `Call` | Call | 函数调用 #call / #@name |
-| `Switch` | Switch | 开关 #switch / #case / #default |
-| `Break` | Break | 跳出 #break |
-| `Continue` | Continue | 继续 #continue |
-| `Return` | Return | 返回 #return |
-| `NullStat` | NullStat | 空语句 |
+| Go 类型 | 功能 | 状态 |
+|---------|------|------|
+| `StatList` | 语句列表 (AST 根) | 已实现 |
+| `Text` | 纯文本输出 | 已实现 |
+| `Output` | 表达式输出 #() | 已实现 |
+| `IfStat` | 条件 #if / #elseif / #else | 已实现 |
+| `ForStat` | 循环 #for | 已实现 |
+| `SetStat` | 赋值 #set / #setLocal / #setGlobal | 已实现 |
+| `DefineStat` | 函数定义 #define | 已实现 |
+| `CallStat` | 函数调用 #call / #@name | 已实现 |
+| `BreakStat` | 跳出 #break | 已实现 |
+| `ContinueStat` | 继续 #continue | 已实现 |
+| `ReturnStat` | 返回 #return | 已实现 |
+| `NullStat` | 空语句 | 已实现 |
+| `DirectiveStat` | 自定义指令 | 已实现 |
+| `SetAsStat` | #set 带 as 别名 | 已实现 |
+| `IncludeStat` | #include 模板包含 | 已实现 |
+| `SwitchStat` | #switch / #case / #default | 已实现 |
+
+所有节点类型在 `stat.go` 中定义，解析逻辑在 `stat_parser.go`。
 
 ## 16. 源加载系统
 
 ```go
+// source/source.go
 type Source interface {
     IsModified() bool
     GetCacheKey() string
@@ -282,109 +303,11 @@ type Source interface {
 
 type FileSource struct { ... }    // 文件系统
 type StringSource struct { ... }  // 字符串
+
+func NewFileSource(filePath string) *FileSource
+func NewStringSource(content string) *StringSource
 ```
 
-## 17. Enjoy SQL — DB 模块中的 enjoy 应用
+## 17. Enjoy SQL
 
-这是 enjoy 引擎最重要的应用场景，在 `db/sql/` 子包中实现：
-
-### SqlKit (对应 `cn.aifei.db.sql.SqlKit`)
-
-```go
-type SqlKit struct {
-    configName string
-    engine     *enjoy.Engine
-    cache      sync.Map  // sqlId → *enjoy.Template
-}
-
-func NewSqlKit(configName string) *SqlKit
-
-// 配置
-func (k *SqlKit) SetBaseSqlFilePath(path string)
-func (k *SqlKit) AddSqlFile(sqlFile string)
-func (k *SqlKit) AddSql(sqlID, sql string)
-
-// 获取 SQL + 参数
-func (k *SqlKit) GetSqlPara(sqlID string, data map[string]interface{}) *SqlPara
-func (k *SqlKit) GetSqlParaByArgs(sqlID string, args ...interface{}) *SqlPara
-func (k *SqlKit) GetSqlParaFromString(sql string, data map[string]interface{}) *SqlPara
-func (k *SqlKit) GetSqlParaFromStringByArgs(sql string, args ...interface{}) *SqlPara
-```
-
-### SQL 指令
-
-| 指令 | 文件 | 功能 |
-|------|------|------|
-| `#sql("id") ... #end` | sql_directive.go | 定义 SQL 片段 (用于外部文件) |
-| `#para(n)` | para_directive.go | 位置参数 → `?` |
-| `#para(name)` | para_directive.go | 命名参数 → `?` (从 Map 取值) |
-| `#para(name, "like")` | para_directive.go | LIKE 参数 → `%value%` |
-| `#para(name, "in")` | para_directive.go | IN 参数 → `(?, ?, ?)` |
-| `#where(field, op, para)` | where_directive.go | 动态 WHERE (值为 null 时不生成) |
-| `#and(field, op, para)` | and_directive.go | 动态 AND (值为 null 时不生成) |
-| `#orderBy(f1, f2, ...)` | orderby_directive.go | 动态 ORDER BY (白名单防注入) |
-
-### Enjoy SQL 使用示例
-
-```go
-// 1. 基本参数查询
-// Java: Db.sql("select * from user where id = #para(0)", 123).find();
-// Go:
-rows, err := db.SQL("select * from user where id = #para(0)", 123).Find()
-
-// 2. 命名参数查询
-// Java: Db.sql("select * from user where name = #para(name) and age > #para(age)", kv).find();
-// Go:
-data := map[string]interface{}{"name": "james", "age": 18}
-rows, err := db.SQLWithData("select * from user where name = #para(name) and age > #para(age)", data).Find()
-
-// 3. #where / #and 动态条件 (核心特色)
-// Java: Db.sql("select * from user #where(age, '>', age) #and(name, 'contains', name)", filter).find();
-// Go:
-filter := map[string]interface{}{"age": 18, "name": "james"}
-rows, err := db.SQLWithData(
-    "select * from user #where(age, '>', age) #and(name, 'contains', name)",
-    filter,
-).Find()
-// 生成: select * from user WHERE age > ? AND name LIKE ?
-// 参数: [18, "%james%"]
-
-// 4. #orderBy 动态排序 (防 SQL 注入)
-// Java: Db.sql("select * from user #orderBy(id, name)", data).find();
-// Go:
-data := map[string]interface{}{
-    "orderBy": map[string]interface{}{"field": "id", "order": "desc"},
-}
-rows, err := db.SQLWithData("select * from user #orderBy(id, name)", data).Find()
-// 生成: select * from user ORDER BY id DESC
-
-// 5. 外部 SQL 文件
-// 文件: sql/user.sql
-// #sql("findById")
-//   select * from user where id = #para(0)
-// #end
-rows, err := db.SQLByID("findById", 123).Find()
-```
-
-### Operator 支持的完整列表
-
-| 操作符 | SQL 生成 | 说明 |
-|--------|---------|------|
-| `=` | `field = ?` | 等于 |
-| `!=` | `field != ?` | 不等于 |
-| `>` | `field > ?` | 大于 |
-| `>=` | `field >= ?` | 大于等于 |
-| `<` | `field < ?` | 小于 |
-| `<=` | `field <= ?` | 小于等于 |
-| `like` | `field LIKE ?` | 模糊匹配 |
-| `not like` | `field NOT LIKE ?` | 反模糊 |
-| `contains` | `field LIKE ?` (值: %v%) | 包含 |
-| `notContains` | `field NOT LIKE ?` (值: %v%) | 不包含 |
-| `startsWith` | `field LIKE ?` (值: v%) | 开头匹配 |
-| `endsWith` | `field LIKE ?` (值: %v) | 结尾匹配 |
-| `in` | `field IN (?, ?, ?)` | IN 查询 |
-| `not in` | `field NOT IN (?, ?, ?)` | NOT IN |
-| `between` | `field BETWEEN ? AND ?` | 范围 |
-| `not between` | `field NOT BETWEEN ? AND ?` | 反范围 |
-| `is null` | `field IS NULL` | 空判断 (无参数) |
-| `is not null` | `field IS NOT NULL` | 非空判断 (无参数) |
+Enjoy SQL 是 enjoy 引擎在数据库模块中的重要应用，详见 [`03-phase3-db.md` 第 2 节](03-phase3-db.md#2-enjoy-sql-模板引擎dbsql已实现)。

@@ -1,13 +1,13 @@
 # Phase 1: 核心框架
 
-> 目标：实现 Aifei Go 的核心 HTTP 框架，包含 Context、Router、Handler、Server、Middleware
+> 目标：实现 Aifei Go 的核心 HTTP 框架，包含 Input/Output 接口、Router、Handler、Interceptor
 
 ## 1. 项目初始化
 
 ### 文件: `go.mod`
 
 ```
-module github.com/aifei/aifei
+module github.com/crazy-airhead/aifei-go
 
 go 1.26
 ```
@@ -30,28 +30,45 @@ package aifei
 const Version = "1.0.0"
 
 type Aifei struct {
-    config   *Config
-    server   *http.Server
-    router   *Router
-    plugins  []Plugin
+    config      *Config
+    router      *Router
+    handlers []Handler
+    plugins     []Plugin
 }
 
 // New 创建 Aifei 实例
-func New() *Aifei
+func New(opts ...Option) *Aifei
 
-// Start 启动 HTTP 服务
-func (a *Aifei) Start(addr string) error
+// Use 注册全局 Handler wrapper
+func (a *Aifei) Use(m ...Handler)
 
-// Stop 优雅关闭
-func (a *Aifei) Stop() error
+// 路由注册
+func (a *Aifei) GET(path string, handlers ...HandlerFunc)
+func (a *Aifei) POST(path string, handlers ...HandlerFunc)
+func (a *Aifei) PUT(path string, handlers ...HandlerFunc)
+func (a *Aifei) DELETE(path string, handlers ...HandlerFunc)
+func (a *Aifei) PATCH(path string, handlers ...HandlerFunc)
+func (a *Aifei) Any(path string, handlers ...HandlerFunc)
+func (a *Aifei) Handle(method, path string, handlers ...HandlerFunc)
+func (a *Aifei) Group(prefix string, handlers ...Handler) *RouterGroup
+func (a *Aifei) Register(prefix string, service interface{}, handlers ...Handler)
 
-// Run 启动并监听信号 (阻塞)
-func (a *Aifei) Run(addr string)
+// ServeHTTP 实现 http.Handler 接口
+func (a *Aifei) ServeHTTP(w http.ResponseWriter, r *http.Request)
+
+// 访问器
+func (a *Aifei) Router() *Router
+func (a *Aifei) Handlers() []Handler
+func (a *Aifei) Plugins() []Plugin
+func (a *Aifei) OnStartFunc() func()
+func (a *Aifei) OnStopFunc() func()
 ```
+
+> 注：`Run()` 方法不在 `Aifei` 上，而是 `server.Run(app, addr, opts...)` 包级函数。这样核心包保持零依赖，HTTP 服务器细节由 `server` 和 `go-http` 包处理。
 
 ---
 
-## 2. Context (合并 Input + Output)
+## 2. Input + Output 接口（保持 Java 分离设计）
 
 对应 Java 的 `cn.aifei.core.Input` + `cn.aifei.core.Output`。
 
@@ -67,93 +84,98 @@ getDate(name) getLocalDate(name) getLocalTime(name) getLocalDateTime(name)
 getStr(name, default) getInt(name, default) getLong(name, default) ...
 ```
 
+**Go 版设计 — Input 接口（`input.go`）：**
+
+```go
+package aifei
+
+type Input interface {
+    // 请求参数
+    Has(name string) bool
+    GetStr(name string) string
+    GetStrDefault(name, def string) string
+    GetInt(name string) int
+    GetIntDefault(name string, def int) int
+    GetInt64(name string) int64
+    GetInt64Default(name string, def int64) int64
+    GetFloat64(name string) float64
+    GetFloat64Default(name string, def float64) float64
+    GetBool(name string) bool
+    GetBoolDefault(name string, def bool) bool
+    GetBean(ptr interface{}) error        // JSON body → struct
+
+    // 路径参数
+    PathPara(index int) string
+    Param(name string) string             // 命名路径参数
+
+    // 请求元数据
+    Method() string
+    Path() string
+    RemoteIP() string
+    Body() []byte                         // 原始请求体
+    Query() url.Values                    // 查询参数
+}
+```
+
+**Go 版设计 — Output 接口（`output.go`）：**
+
+```go
+package aifei
+
+type Output interface {
+    Code() int
+    Msg() string
+    Data() interface{}
+}
+
+// NewResult 创建简单 Output
+func NewResult(code int, msg string, data interface{}) Output
+```
+
+> Output 接口极简，仅定义响应结构。实际的 JSON 渲染和流式构建器在 `server.Out` 中实现。
+
+### 实现类
+
+- **`go-http.HttpContext`** — 实现 `aifei.Input`，包装 `*http.Request`
+- **`server.In`** — 完整 `aifei.Input` 实现（用于 server 包）
+- **`server.Out`** — 流式 `aifei.Output` 构建器
+
+```go
+// server.Out — 流式响应构建器
+out := server.Ok()           // {code:0, msg:"ok"}
+out := server.OkMsg("done")  // {code:0, msg:"done"}
+out := server.Fail("error")  // {code:90000, msg:"error"}
+out := server.Of(data)       // {code:0, msg:"ok", data: data}
+out := server.OfField("user", user)  // {code:0, msg:"ok", data: {user: ...}}
+
+// 链式修改
+out.SetMsg("updated").SetData(newData)
+out.IsOk()        // true if code == CodeOK (0)
+out.ShouldRollback() // true if code != CodeOK (用于事务回滚判断)
+```
+
+---
+
+## 3. Handler（替代 Java AOP + 责任链）
+
+对应 Java 的 `cn.aifei.core.Handler` + `cn.aifei.aop.Interceptor`。
+
 **Go 版设计：**
 
 ```go
 package aifei
 
-type Context struct {
-    Request  *http.Request
-    Writer   http.ResponseWriter
-    pathPara []string       // 路径参数
-    params   url.Values     // 查询参数
-    form     url.Values     // 表单参数
-    body     []byte         // 请求体 (懒加载)
-    bodyRead bool
-    status   int
-    handlers []HandlerFunc  // 当前 handler 链
-    index    int            // 当前执行到的 handler 索引
-}
+// HandlerFunc 处理函数 — 接收 Input，返回 Output
+type HandlerFunc func(in Input) Output
 
-// ---- 请求参数 (对应 Input) ----
-
-func (c *Context) Has(name string) bool
-func (c *Context) GetStr(key string) string
-func (c *Context) GetStrDefault(key, def string) string
-func (c *Context) GetInt(key string) int
-func (c *Context) GetIntDefault(key string, def int) int
-func (c *Context) GetInt64(key string) int64
-func (c *Context) GetInt64Default(key string, def int64) int64
-func (c *Context) GetFloat64(key string) float64
-func (c *Context) GetFloat64Default(key string, def float64) float64
-func (c *Context) GetBool(key string) bool
-func (c *Context) GetBoolDefault(key string, def bool) bool
-func (c *Context) GetBean(obj interface{}) error            // JSON body → struct
-func (c *Context) GetMap(key string) map[string]interface{}
-func (c *Context) PathPara(index int) string                // 路径参数
-func (c *Context) HasPara(index int) bool
-func (c *Context) Method() string
-func (c *Context) Path() string
-func (c *Context) RemoteIP() string
-func (c *Context) Body() []byte                             // 原始请求体
-
-// ---- 响应输出 (对应 Output) ----
-
-func (c *Context) Status(code int)
-func (c *Context) Header(key, value string)
-func (c *Context) Json(data interface{})
-func (c *Context) JsonOK(data interface{})
-func (c *Context) JsonFail(msg string)
-func (c *Context) Text(format string, args ...interface{})
-func (c *Context) Html(html string)
-func (c *Context) Redirect(url string)
-
-// ---- 链式控制 ----
-
-func (c *Context) Next()     // 调用下一个 handler
-func (c *Context) Abort()    // 终止链
+// ChainHandlers 组装 Handler 包装链
+// wrapper 按添加顺序执行，最后一个为最终 handler
+func ChainHandlers(handlers []Handler, final HandlerFunc) HandlerFunc
 ```
 
----
+> 没有 `Middleware` 类型。包装器就是普通的 `Handler`，无需引入额外概念。
 
-## 3. Handler + Middleware (替代 Java AOP + 责任链)
-
-对应 Java 的 `cn.aifei.core.Handler` + `cn.aifei.aop.Interceptor`。
-
-**Java 版关键设计：**
-- `Handler<I,O>` 抽象类，有 `next` 字段支持链式调用
-- `Interceptor.intercept(Invocation inv)` 拦截器接口
-- `@Before` 注解配置拦截器
-- `@Clear` 注解清除拦截器
-- `Invocation` 封装调用上下文
-
-**Go 版设计 — 统一为 Middleware 模式：**
-
-```go
-package aifei
-
-// HandlerFunc 处理函数
-type HandlerFunc func(c *Context)
-
-// Middleware 中间件 (完全替代 Java Interceptor + AOP)
-type Middleware func(next HandlerFunc) HandlerFunc
-
-// ChainMiddleware 组装中间件链
-// 中间件按添加顺序执行，最后一个为最终 handler
-func ChainMiddleware(middlewares []Middleware, final HandlerFunc) HandlerFunc
-```
-
-**Java 拦截器映射到 Go Middleware：**
+**Java 拦截器映射到 Go Handler wrapper：**
 
 Java:
 ```java
@@ -164,41 +186,65 @@ public class AuthInterceptor implements Interceptor {
             inv.getOutput().json("未登录");
             return;
         }
-        inv.invoke();  // 继续执行
+        inv.invoke();
     }
 }
 ```
 
 Go:
 ```go
-func AuthMiddleware(next aifei.HandlerFunc) aifei.HandlerFunc {
-    return func(c *aifei.Context) {
-        token := c.GetStr("token")
+func AuthHandler(next aifei.HandlerFunc) aifei.HandlerFunc {
+    return func(in aifei.Input) aifei.Output {
+        token := in.GetStr("token")
         if token == "" {
-            c.JsonFail("未登录")
-            c.Abort()
-            return
+            return server.Fail("未登录")
         }
-        next(c)  // 继续执行
+        return next(in)
     }
 }
 ```
 
 ---
 
-## 4. Router (路由系统)
+## 4. Interceptor（方法级 AOP）
+
+除 Handler wrapper 链外，Aifei-Go 还保留了 Java 的 Interceptor 概念用于方法级拦截：
+
+```go
+package aifei
+
+// Interceptor 拦截器接口 — 方法级 AOP
+type Interceptor interface {
+    Intercept(method string, in Input, invoke func() Output) Output
+}
+
+// InterceptorFunc 函数适配器
+type InterceptorFunc func(method string, in Input, invoke func() Output) Output
+
+// MethodInterceptors 可选的 service 接口
+type MethodInterceptors interface {
+    MethodInterceptors() map[string][]Interceptor
+}
+```
+
+**使用示例：**
+
+```go
+type UserService struct{}
+
+func (s *UserService) MethodInterceptors() map[string][]aifei.Interceptor {
+    return map[string][]aifei.Interceptor{
+        "Create": {server.TxInterceptor()},
+        "Delete": {logInterceptor},
+    }
+}
+```
+
+---
+
+## 5. Router（路由系统）
 
 对应 Java 的 `cn.aifei.router.Router` + `cn.aifei.router.Action` + `cn.aifei.router.ActionGroup`。
-
-**Java 版关键设计：**
-- `Router.mapping` — HashMap<String, Object> 存储路由
-- `Router.scan(basePackage)` — 自动包扫描注册路由
-- `Router.add(path, target)` — 手动添加路由
-- `Router.getAction(path, input)` — 路由匹配
-- `Action` — 封装路由元数据 (actionPath, targetClass, method, interceptors, arguments)
-- `ActionGroup` — 同一路径下多个 Action (方法重载)
-- `@Path` 注解 — 配置类级别和方法级别路径
-- `RouterKit` — 单例工具
 
 **Go 版设计 — Radix Tree 路由：**
 
@@ -215,15 +261,15 @@ func (r *Router) POST(path string, handlers ...HandlerFunc)
 func (r *Router) PUT(path string, handlers ...HandlerFunc)
 func (r *Router) DELETE(path string, handlers ...HandlerFunc)
 func (r *Router) PATCH(path string, handlers ...HandlerFunc)
+func (r *Router) HEAD(path string, handlers ...HandlerFunc)
 func (r *Router) Any(path string, handlers ...HandlerFunc)
 func (r *Router) Handle(method, path string, handlers ...HandlerFunc)
 
-// 路由组 (支持前缀和中间件)
-func (r *Router) Group(prefix string, middlewares ...Middleware) *RouterGroup
+// 路由组 (支持前缀和包装器)
+func (r *Router) Group(prefix string, handlers ...Handler) *RouterGroup
 
 // struct 注册 (保留 Java @Path 风格的简洁性)
-// 将 struct 的公开方法自动注册为路由
-func (r *Router) Register(prefix string, service interface{}, middlewares ...Middleware)
+func (r *Router) Register(prefix string, service interface{}, handlers ...Handler)
 
 // 路由匹配
 func (r *Router) Lookup(method, path string) (handlers []HandlerFunc, params map[string]string, found bool)
@@ -234,8 +280,8 @@ type node struct {
     children  []*node
     handlers  []HandlerFunc
     wildChild bool
-    param     bool       // 是否为 :param 路径参数
-    catchAll  bool       // 是否为 *catchAll
+    param     bool
+    catchAll  bool
 }
 ```
 
@@ -244,47 +290,43 @@ type node struct {
 ```go
 type RouterGroup struct {
     prefix      string
-    middlewares []Middleware
+    handlers    []Handler
     router      *Router
 }
 
 func (g *RouterGroup) GET(path string, handlers ...HandlerFunc)
 func (g *RouterGroup) POST(path string, handlers ...HandlerFunc)
-func (g *RouterGroup) Group(prefix string, middlewares ...Middleware) *RouterGroup
+func (g *RouterGroup) PUT(path string, handlers ...HandlerFunc)
+func (g *RouterGroup) DELETE(path string, handlers ...HandlerFunc)
+func (g *RouterGroup) Handle(method, path string, handlers ...HandlerFunc)
+func (g *RouterGroup) Group(prefix string, handlers ...Handler) *RouterGroup
 ```
 
-**Register 示例 (替代 Java @Path 注解)：**
+**Register 方法签名约定：**
+
+- 方法签名必须为 `func(in aifei.Input) aifei.Output`
+- 方法名映射 HTTP 方法：`List*`/`Get*` → GET，`Post*`/`Save*`/`Create*` → POST，`Put*`/`Update*` → PUT，`Delete*`/`Remove*` → DELETE
+- `ById` 后缀 → `/:id` 路径参数
 
 ```go
 type UserService struct{}
 
-func (s *UserService) List(c *Context)   { ... }
-func (s *UserService) Save(c *Context)   { ... }
-func (s *UserService) Delete(c *Context) { ... }
+func (s *UserService) List(in aifei.Input) aifei.Output    { ... }
+func (s *UserService) Create(in aifei.Input) aifei.Output   { ... }
+func (s *UserService) GetById(in aifei.Input) aifei.Output  { ... }
 
 // 自动注册:
-//   GET  /api/user/list   → UserService.List
-//   POST /api/user/save   → UserService.Save
-//   POST /api/user/delete → UserService.Delete
-router.Register("/api/user", &UserService{})
+//   GET    /api/user/list      → UserService.List
+//   POST   /api/user/create    → UserService.Create
+//   GET    /api/user/:id       → UserService.GetById
+app.Register("/api/user", &UserService{})
 ```
 
 ---
 
-## 5. Config (配置系统)
+## 6. Config（配置系统）
 
 对应 Java 的 `cn.aifei.config.AifeiConfig` + `Settings` + `Plugins`。
-
-**Java 版关键设计：**
-```java
-public interface AifeiConfig<I extends Input, O extends Output> {
-    void config(Settings<I, O> settings);    // 配置服务器、中间件
-    void config(Routes routes);               // 配置路由
-    void config(Plugins plugins);             // 配置插件
-    default void onStart() {}                 // 启动回调
-    default void onStop() {}                  // 停止回调
-}
-```
 
 **Go 版设计 — Functional Options 模式：**
 
@@ -292,7 +334,7 @@ public interface AifeiConfig<I extends Input, O extends Output> {
 package aifei
 
 type Config struct {
-    Middlewares []Middleware
+    Handlers []Handler
     Plugins     []Plugin
     OnStart     func()
     OnStop      func()
@@ -300,7 +342,7 @@ type Config struct {
 
 type Option func(*Aifei)
 
-func WithMiddleware(m ...Middleware) Option
+func WithHandlers(m ...Handler) Option
 func WithPlugin(p ...Plugin) Option
 func WithOnStart(fn func()) Option
 func WithOnStop(fn func()) Option
@@ -308,7 +350,7 @@ func WithOnStop(fn func()) Option
 
 ---
 
-## 6. Plugin (插件系统)
+## 7. Plugin（插件系统）
 
 对应 Java 的 `cn.aifei.plugin.Plugin`。
 
@@ -323,108 +365,118 @@ type Plugin interface {
 
 ---
 
-## 7. Server + Dispatcher
+## 8. HTTP 适配层
 
-对应 Java 的 `cn.aifei.server.Server` + `Dispatcher`。
+### go-http（`go-http/`）
 
-**Java 版：**
-```java
-interface Server<P1, P2> {
-    void init(Dispatcher<P1, P2, ?, ?> dispatcher);
-    void start();
-    void stop();
-}
-interface Dispatcher<P1, P2, I extends Input, O extends Output> {
-    void init(Handler<I, O> handler);
-    void dispatch(P1 p1, P2 p2);
+桥接 `net/http` 和 aifei 框架：
+
+```go
+package gohttp
+
+// HttpContext 实现 aifei.Input，包装 *http.Request
+type HttpContext struct { ... }
+func NewInput(r *http.Request) *HttpContext
+
+// HttpHandler 实现 http.Handler，桥接到 aifei.Aifei
+type HttpHandler struct { ... }
+func NewHttpHandler(app *aifei.Aifei) *HttpHandler
+
+// Server 接口
+type Server interface {
+    Start(handler http.Handler) error
+    Stop() error
 }
 ```
 
-**Go 版 — 简化为直接使用 net/http：**
+### server（`server/`）
+
+生产级启动层，提供包装器函数、响应构建器、优雅关闭：
 
 ```go
-package aifei
+// HandlerFunc 包装器（返回 func(aifei.HandlerFunc) aifei.HandlerFunc）
+server.Logger()     // 请求日志
+server.Recover()    // panic 恢复
+server.Timeout(d)   // 超时控制
 
-func (a *Aifei) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-    // 1. 创建 Context
-    c := &Context{
-        Request: r,
-        Writer:  w,
-    }
+// HTTP 级包装器（返回 func(http.Handler) http.Handler）
+server.CORS(origin)            // 跨域
+server.BasicAuth(check)        // 基础认证
+server.RequestID()             // 请求 ID
+server.StaticFile(prefix, dir) // 静态文件
 
-    // 2. 路由匹配
-    handlers, params, found := a.router.Lookup(r.Method, r.URL.Path)
-    if !found {
-        c.Status(404).Text("Not Found")
-        return
-    }
-
-    // 3. 解析路径参数
-    c.pathPara = extractPathParams(params)
-
-    // 4. 执行 handler 链
-    c.handlers = handlers
-    c.index = -1
-    c.Next()
-}
+// 启动
+server.Run(app, addr string, opts ...Option)
+// opts: WithCORS, WithBasicAuth, WithRequestID, WithHTTPHandler
 ```
 
 ---
 
-## 8. 文件依赖关系
+## 9. 文件依赖关系
 
 ```
 aifei.go
-  ├── config.go      (Config, Option)
-  ├── context.go     (Context)
-  ├── handler.go     (HandlerFunc, Middleware)
-  ├── router.go      (Router, RouterGroup, node)
-  ├── action.go      (不需要独立文件，路由元数据在 router 中)
-  ├── plugin.go      (Plugin)
-  ├── server.go      (ServeHTTP 实现)
-  └── util.go        (StrUtil, Prop)
+  ├── config.go       (Config, Option)
+  ├── input.go        (Input 接口)
+  ├── output.go       (Output 接口)
+  ├── handler.go      (HandlerFunc, ChainHandlers)
+  ├── router.go       (Router, RouterGroup, node)
+  ├── interceptor.go  (Interceptor, InterceptorFunc, MethodInterceptors)
+  └── plugin.go       (Plugin)
+
+go-http/
+  ├── context.go      (HttpContext implements Input)
+  ├── handler.go      (HttpHandler implements http.Handler)
+  └── server.go       (Server interface, DefaultServer)
+
+server/
+  ├── in.go           (In implements Input)
+  ├── out.go          (Out implements Output, fluent builder)
+  ├── middleware.go   (Logger, Recover, Timeout, CORS, BasicAuth, RequestID, StaticFile)
+  ├── run.go          (Run with graceful shutdown)
+  ├── service.go      (RegisterService, AutoRegisterServices)
+  └── tx_interceptor.go (TxInterceptor)
 ```
 
 ---
 
-## 9. 完整使用示例
+## 10. 完整使用示例
 
 ```go
 package main
 
 import (
-    "github.com/aifei/aifei"
-    "github.com/aifei/aifei/db"
+    "github.com/crazy-airhead/aifei-go"
+    "github.com/crazy-airhead/aifei-go/server"
 )
 
 func main() {
     app := aifei.New()
 
-    // 全局中间件
-    app.Use(Logger(), Recover())
+    // 全局 Handler wrapper 链
+    app.Use(server.Logger(), server.Recover())
 
-    // 路由注册
-    app.GET("/api/user/list", UserList)
-    app.POST("/api/user/save", UserSave)
-    app.POST("/api/user/delete", UserDelete)
+    // 路由注册 — HandlerFunc 签名: func(in aifei.Input) aifei.Output
+    app.GET("/api/health", func(in aifei.Input) aifei.Output {
+        return server.OkMsg("healthy")
+    })
+
+    app.GET("/api/user/:id", func(in aifei.Input) aifei.Output {
+        id := in.Param("id")
+        // 查询用户...
+        return server.Of(user)
+    })
 
     // 路由组
-    api := app.Group("/api/v2", AuthMiddleware())
-    api.GET("/user/list", UserList)
+    admin := app.Group("/api/admin")
+    admin.GET("/dashboard", func(in aifei.Input) aifei.Output {
+        return server.OkMsg("admin dashboard")
+    })
 
     // struct 注册 (Java @Path 风格)
-    app.Register("/api/order", &OrderService{})
+    app.Register("/api/user", &UserService{})
 
-    // 启动
-    app.Run(":8080")
-}
-
-func UserList(c *aifei.Context) {
-    page, err := db.Use().SQL("select * from user where 1=1").Paginate(1, 10)
-    if err != nil {
-        c.JsonFail(err.Error())
-        return
-    }
-    c.Json(page)
+    // 启动（server.Run 处理信号、优雅关闭、插件生命周期）
+    server.Run(app, ":8080", server.WithCORS("*"))
 }
 ```

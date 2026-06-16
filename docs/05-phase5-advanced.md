@@ -1,389 +1,187 @@
-# Phase 4: 高级特性
+# Phase 5: 高级特性
 
-> 目标：实现参数注入、批量操作完善、SQL 条件构建器、内置中间件
+> 目标：内置 Handler 包装器、服务注册、优雅关闭、静态文件服务
 
-## 1. 参数注入 (对应 `cn.aifei.argument` 包)
+## 1. 内置 Handler Wrapper（`server/` 包）
 
-**Java 版 Argument 体系：**
-```java
-// ArgumentFactory 注册的类型处理器:
-InputArgument    — 注入 Input 对象
-OutputArgument   — 注入 Output 对象
-StringArgument   — String 类型参数
-IntArgument      — Integer 类型参数
-LongArgument     — Long 类型参数
-DoubleArgument   — Double 类型参数
-BigDecimalArgument — BigDecimal 类型参数
-BooleanArgument  — Boolean 类型参数
-DateArgument     — Date 类型参数
-LocalDateArgument — LocalDate 类型参数
-LocalDateTimeArgument — LocalDateTime 类型参数
-ArrayArgument    — 数组类型参数
-ListArgument     — List 类型参数
-MapArgument      — Map 类型参数
-BeanArgument     — Bean 类型参数 (JSON 反序列化)
-EnumArgument     — 枚举类型参数
-PathParaArgument — 路径参数
-```
+所有内置包装器在 `server/middleware.go` 中实现，分为两类：
 
-**Go 版设计：**
-
-Go 的参数注入比 Java 简单得多，因为不需要反射扫描方法参数。通过 Context 直接获取：
+### HandlerFunc 级包装器（返回 `aifei.Handler`）
 
 ```go
-// argument.go
-package aifei
+package server
 
-import "reflect"
+import "github.com/crazy-airhead/aifei-go"
 
-// ArgumentInjector 参数注入器接口
-type ArgumentInjector func(c *Context, targetType reflect.Type) (interface{}, error)
+// Logger — 请求日志
+func Logger() aifei.Handler
 
-// 默认注入器注册表
-var injectors = map[reflect.Type]ArgumentInjector{}
+// Recover — panic 恢复
+func Recover() aifei.Handler
 
-// RegisterInjector 注册自定义注入器
-func RegisterInjector(targetType reflect.Type, injector ArgumentInjector)
+// Timeout — 超时控制
+func Timeout(d time.Duration) aifei.Handler
+```
 
-// 内置注入器
+**使用：**
+```go
+app.Use(server.Logger(), server.Recover())
+```
+
+### HTTP 级包装器（返回 `func(http.Handler) http.Handler`）
+
+```go
+// CORS — 跨域
+func CORS(origin string) func(http.Handler) http.Handler
+
+// BasicAuth — 基础认证
+func BasicAuth(check func(user, pass string) bool) func(http.Handler) http.Handler
+
+// RequestID — 请求 ID
+func RequestID() func(http.Handler) http.Handler
+
+// StaticFile — 静态文件服务
+func StaticFile(prefix, root string) http.Handler
+```
+
+**使用（通过 server.Run 选项传入）：**
+```go
+server.Run(app, ":8080",
+    server.WithCORS("*"),
+    server.WithBasicAuth(func(u, p string) bool { return u == "admin" && p == "123" }),
+    server.WithRequestID(),
+)
+```
+
+---
+
+## 2. 服务注册（`server/service.go`）
+
+支持集中式服务注册和自动注册：
+
+```go
+package server
+
+type ServiceRegistration struct {
+    Prefix  string
+    Service interface{}
+}
+
+// RegisterService 注册服务（通常在 init() 中调用）
+func RegisterService(prefix string, svc interface{})
+
+// ServiceRegistrations 返回所有已注册服务
+func ServiceRegistrations() []ServiceRegistration
+
+// AutoRegisterServices 将所有已注册服务批量注册到 Aifei 实例
+func AutoRegisterServices(app *aifei.Aifei, handlers ...aifei.Handler)
+```
+
+**典型用法（在生成的 service.go 中）：**
+
+```go
+// internal/user/service.go
+package user
+
 func init() {
-    // string
-    injectors[reflect.TypeOf("")] = func(c *Context, t reflect.Type) (interface{}, error) {
-        return c.GetStr(""), nil
-    }
-    // int
-    injectors[reflect.TypeOf(0)] = func(c *Context, t reflect.Type) (interface{}, error) {
-        return c.GetInt(""), nil
-    }
-    // ... 其他类型
+    server.RegisterService("/user", &Service{})
 }
-```
 
-**实际使用中，Go 通过 Context 方法直接获取参数，不需要复杂的注入框架：**
-
-```go
-func UserList(c *Context) {
-    name := c.GetStr("name")
-    age := c.GetIntDefault("age", 0)
-    page := c.GetIntDefault("page", 1)
-    // ...
+// 在 main.go 中：
+func main() {
+    app := aifei.New()
+    server.AutoRegisterServices(app) // 批量注册所有 init() 注册的服务
+    server.Run(app, ":8080")
 }
 ```
 
 ---
 
-## 2. 内置 Middleware
-
-对应 Java 版通过 Interceptor 实现的常用功能。
-
-### Logger 中间件
-
-```go
-// middleware.go
-package aifei
-
-import (
-    "time"
-)
-
-func Logger() Middleware {
-    return func(next HandlerFunc) HandlerFunc {
-        return func(c *Context) {
-            start := time.Now()
-            path := c.Path()
-            method := c.Method()
-
-            next(c)
-
-            log.Info("%s %s %d %v",
-                method, path, c.status, time.Since(start))
-        }
-    }
-}
-```
-
-### Recover 中间件
-
-```go
-func Recover() Middleware {
-    return func(next HandlerFunc) HandlerFunc {
-        return func(c *Context) {
-            defer func() {
-                if err := recover(); err != nil {
-                    log.Error("panic recovered: %v", err)
-                    c.Status(500).Json(map[string]interface{}{
-                        "code": 500,
-                        "msg":  "Internal Server Error",
-                    })
-                }
-            }()
-            next(c)
-        }
-    }
-}
-```
-
-### CORS 中间件
-
-```go
-func CORS(allowOrigin string) Middleware {
-    return func(next HandlerFunc) HandlerFunc {
-        return func(c *Context) {
-            c.Header("Access-Control-Allow-Origin", allowOrigin)
-            c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,OPTIONS")
-            c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization")
-            if c.Method() == "OPTIONS" {
-                c.Status(204)
-                return
-            }
-            next(c)
-        }
-    }
-}
-```
-
-### BasicAuth 中间件
-
-```go
-func BasicAuth(check func(user, pass string) bool) Middleware {
-    return func(next HandlerFunc) HandlerFunc {
-        return func(c *Context) {
-            user, pass, ok := c.Request.BasicAuth()
-            if !ok || !check(user, pass) {
-                c.Header("WWW-Authenticate", `Basic realm="Restricted"`)
-                c.Status(401).Text("Unauthorized")
-                return
-            }
-            next(c)
-        }
-    }
-}
-```
-
----
-
-## 3. SQL 条件构建器完善
-
-对应 Java 版的 `#where()`, `#and()`, `#orderBy()`, `#para()` 指令。
-
-```go
-// db/sql_builder.go
-package db
-
-import (
-    "strings"
-    "fmt"
-)
-
-type SQLBuilder struct {
-    selectPart  string
-    fromPart    string
-    whereParts  []string
-    whereArgs   []interface{}
-    orderByPart string
-    limit       int
-    offset      int
-}
-
-// SELECT
-func Select(fields string) *SQLBuilder
-
-// FROM
-func (b *SQLBuilder) From(table string) *SQLBuilder
-
-// WHERE (可多次调用，自动 AND 连接)
-func (b *SQLBuilder) Where(condition string, args ...interface{}) *SQLBuilder
-
-// 条件 WHERE (值为空时自动跳过)
-func (b *SQLBuilder) WhereIf(condition string, arg interface{}, apply bool) *SQLBuilder
-
-// AND 等价于 Where
-func (b *SQLBuilder) And(condition string, args ...interface{}) *SQLBuilder
-
-// 条件 AND
-func (b *SQLBuilder) AndIf(condition string, arg interface{}, apply bool) *SQLBuilder
-
-// ORDER BY
-func (b *SQLBuilder) OrderBy(order string) *SQLBuilder
-
-// LIMIT / OFFSET
-func (b *SQLBuilder) Limit(limit int) *SQLBuilder
-func (b *SQLBuilder) Offset(offset int) *SQLBuilder
-
-// 构建完整 SQL
-func (b *SQLBuilder) Build() (string, []interface{})
-
-// 直接查询
-func (b *SQLBuilder) Find() ([]*Row, error)
-func (b *SQLBuilder) FindFirst() (*Row, error)
-func (b *SQLBuilder) Paginate(pageNum, pageSize int) (*Page, error)
-func (b *SQLBuilder) Count() (int64, error)
-```
-
-**使用示例：**
-
-```go
-// 基本查询
-rows, err := db.Select("*").From("user").Where("age > ?", 18).Find()
-
-// 条件查询 (name 非空时才添加条件)
-rows, err := db.Select("*").
-    From("user").
-    Where("age > ?", 18).
-    AndIf("name like ?", "%"+name+"%", name != "").
-    OrderBy("id desc").
-    Paginate(1, 10)
-
-// 直接 SQL + 条件追加
-rows, err := db.SQL("select * from user").Where("age > ?", 18).Find()
-```
-
----
-
-## 4. Struct 注册路由详解
+## 3. Struct 注册路由详解
 
 对应 Java 版 `@Path` 注解 + 包扫描注册。
 
+`Register()` 通过反射扫描 struct 方法，按命名约定自动生成路由：
+
 ```go
-// router.go 中 Register 方法实现细节
-
-import "reflect"
-
-func (r *Router) Register(prefix string, service interface{}, middlewares ...Middleware) {
-    t := reflect.TypeOf(service)
-    v := reflect.ValueOf(service)
-    prefix = strings.TrimRight(prefix, "/")
-
-    for i := 0; i < t.NumMethod(); i++ {
-        method := t.Method(i)
-        // 方法名转为路径: List → /list, Save → /save
-        path := prefix + "/" + camelToPath(method.Name)
-
-        // 创建 handler
-        handler := func(c *Context) {
-            v.MethodByName(method.Name).Call([]reflect.Value{reflect.ValueOf(c)})
-        }
-
-        // 应用中间件
-        finalHandler := handler
-        for i := len(middlewares) - 1; i >= 0; i-- {
-            finalHandler = middlewares[i](finalHandler)
-        }
-
-        // 注册为 POST (默认)
-        r.POST(path, finalHandler)
-    }
-}
-
-// camelToPath 将方法名转为路径
-// "List" → "list", "FindById" → "find-by-id", "Save" → "save"
-func camelToPath(name string) string {
-    var buf strings.Builder
-    for i, r := range name {
-        if unicode.IsUpper(r) && i > 0 {
-            buf.WriteByte('-')
-        }
-        buf.WriteRune(unicode.ToLower(r))
-    }
-    return buf.String()
-}
+// router.go
+func (r *Router) Register(prefix string, service interface{}, handlers ...Handler)
 ```
 
-**自定义 HTTP 方法映射：**
+**方法签名要求：** `func(in aifei.Input) aifei.Output`
+
+**HTTP 方法映射：**
+
+| 方法名前缀 | HTTP 方法 |
+|-----------|----------|
+| `List*` / `Get*` | GET |
+| `Post*` / `Save*` / `Create*` | POST |
+| `Put*` / `Update*` | PUT |
+| `Delete*` / `Remove*` | DELETE |
+| 其他 | POST（默认） |
+
+**路径转换规则：**
+- 方法名转为小写路径：`List` → `/list`，`Create` → `/create`
+- `ById` 后缀 → `/:id` 路径参数：`GetById` → `GET /:id`
+- 复合路径：`GetByNameAndAge` → `GET /:name/:age`
+
+---
+
+## 4. 优雅关闭（`server/run.go`）
 
 ```go
-// 通过接口约定方法名前缀
-// Get* → GET, Post*/Save*/Delete*/Update* → POST
-func (r *Router) Register(prefix string, service interface{}, middlewares ...Middleware) {
-    // ...
-    httpMethod := "POST"
-    switch {
-    case strings.HasPrefix(method.Name, "Get"):
-        httpMethod = "GET"
-    case strings.HasPrefix(method.Name, "Delete"):
-        httpMethod = "DELETE"
-    case strings.HasPrefix(method.Name, "Put", "Update"):
-        httpMethod = "PUT"
-    }
-    r.Handle(httpMethod, path, finalHandler)
-}
+// server.Run 启动 HTTP 服务并处理优雅关闭
+func Run(app *aifei.Aifei, addr string, opts ...Option)
+```
+
+**Run() 内部流程：**
+1. 创建 `http.Server`
+2. 注册信号监听 (`SIGINT` / `SIGTERM`)
+3. 启动所有 Plugin (`plugin.Start()`)
+4. 调用 `OnStart` 回调
+5. 启动 HTTP 服务 (`ListenAndServe`)
+6. 收到信号后：
+   - 调用 `OnStop` 回调
+   - 停止所有 Plugin (`plugin.Stop()`)
+   - 5 秒超时优雅关闭 HTTP 服务
+
+**Run 选项：**
+
+```go
+func WithCORS(origin string) Option
+func WithBasicAuth(check func(user, pass string) bool) Option
+func WithRequestID() Option
+func WithHTTPHandler(m func(http.Handler) http.Handler) Option
 ```
 
 ---
 
-## 5. 优雅关闭
+## 5. 事务拦截器（`server/tx_interceptor.go`）
+
+方法级事务自动管理：
 
 ```go
-// aifei.go 中 Run 方法
+// TxInterceptor 返回一个 Interceptor，自动开启/提交/回滚事务
+func TxInterceptor() aifei.Interceptor
+```
 
-func (a *Aifei) Run(addr string) {
-    a.server = &http.Server{
-        Addr:    addr,
-        Handler: a,
-    }
-
-    // 启动信号监听
-    go func() {
-        quit := make(chan os.Signal, 1)
-        signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-        <-quit
-
-        log.Info("Shutting down server...")
-
-        // 调用 OnStop
-        if a.config.OnStop != nil {
-            a.config.OnStop()
-        }
-
-        // 停止插件
-        for _, p := range a.plugins {
-            p.Stop()
-        }
-
-        // 优雅关闭 HTTP 服务
-        ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-        defer cancel()
-        a.server.Shutdown(ctx)
-
-        log.Info("Server stopped")
-    }()
-
-    log.Info("Aifei %s starting on %s", Version, addr)
-
-    // 启动插件
-    for _, p := range a.plugins {
-        if err := p.Start(); err != nil {
-            log.Error("Plugin start failed: %v", err)
-        }
-    }
-
-    // 调用 OnStart
-    if a.config.OnStart != nil {
-        a.config.OnStart()
-    }
-
-    if err := a.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-        log.Error("Server error: %v", err)
+**使用：**
+```go
+func (s *Service) MethodInterceptors() map[string][]aifei.Interceptor {
+    return map[string][]aifei.Interceptor{
+        "Create": {server.TxInterceptor()},
     }
 }
 ```
+
+`TxInterceptor` 在方法返回 `ShouldRollback() == true` 时自动回滚。
 
 ---
 
-## 6. 静态文件服务
+## 6. 待实现特性
 
-对应 Java 版 Undertow 的 ResourceHandler。
+以下 Java Aifei 特性在 Go 版中尚未实现：
 
-```go
-// server.go
-
-type StaticConfig struct {
-    Prefix     string   // URL 前缀, 如 "/static"
-    Dir        string   // 文件目录, 如 "./webapp"
-    IndexFiles []string // 默认首页文件, 如 ["index.html"]
-}
-
-func (a *Aifei) Static(prefix, dir string)
-func (a *Aifei) StaticFile(prefix, file string)
-func (a *Aifei) StaticFS(prefix string, fs http.FileSystem)
-```
+- **SQLBuilder 编程式链式 API** — 可通过 Dao 链式调用替代
+- **Aifei.Static/StaticFile/StaticFS 方法** — 当前通过 `server.StaticFile()` 或 `http.FileServer` 实现
+- **参数注入框架** — Go 通过 `Input` 接口方法直接获取参数，简化了注入逻辑

@@ -8,19 +8,23 @@
 - **模块化设计** — enjoy/db/json/log 可独立引入
 - **Enjoy 模板引擎** — 自研模板语言，支持表达式、条件、循环、宏定义
 - **Active Record ORM** — Row + Dao 链式操作，变更追踪
+- **代码生成器** — 从数据库 Schema 自动生成类型安全的 CRUD 代码
+- **Enjoy SQL** — 模板 SQL 引擎，支持动态 WHERE/ORDER BY/参数占位（18种操作符）
 - **基数树路由** — 高性能路由匹配，支持参数和通配符
-- **中间件链** — Logger/Recover/CORS/Auth 等内置中间件
-- **SQL Builder** — 链式 SQL 构建器，分页支持
+- **Handler 包装链 + 拦截器** — Logger/Recover/CORS/Auth 等内置 Handler，方法级 AOP 拦截器
 
 ## 模块结构
 
 | 模块 | 说明 | 依赖 |
 |------|------|------|
-| `aifei-go` | 核心 Web 框架 | 无 |
+| `aifei-go` | 核心框架（Input/Output 接口、Router、Handler wrapper、Interceptor） | 无 |
 | `aifei-go/enjoy` | Enjoy 模板引擎 | 无 |
-| `aifei-go/db` | 数据库访问（Row/Dao） | 无 |
+| `aifei-go/db` | 数据库访问（Row/Dao/Dialect/Enjoy SQL） | 无 |
 | `aifei-go/json` | JSON 工具 | 无 |
 | `aifei-go/log` | 日志接口 | 无 |
+| `aifei-go/generator` | 代码生成器（Schema → 类型安全代码） | db, enjoy |
+| `aifei-go/go-http` | net/http 适配器 | aifei |
+| `aifei-go/server` | 服务启动、内置 Handler 包装器、响应构建器 | aifei, go-http |
 
 ## 快速开始
 
@@ -31,18 +35,28 @@ go get github.com/crazy-airhead/aifei-go
 ```go
 package main
 
-import "github.com/crazy-airhead/aifei-go"
+import (
+    "github.com/crazy-airhead/aifei-go"
+    "github.com/crazy-airhead/aifei-go/server"
+)
 
 func main() {
     app := aifei.New()
 
-    app.Use(aifei.Logger(), aifei.Recover(), aifei.CORS("*"))
+    // 全局 Handler 包装链
+    app.Use(server.Logger(), server.Recover())
 
-    app.GET("/", func(c *aifei.Context) {
-        c.Text("Hello, Aifei!")
+    // 路由 — HandlerFunc: func(in aifei.Input) aifei.Output
+    app.GET("/", func(in aifei.Input) aifei.Output {
+        return server.OkMsg("Hello, Aifei!")
     })
 
-    app.Run(":8080")
+    app.GET("/hello/:name", func(in aifei.Input) aifei.Output {
+        return server.OkMsg("Hello, " + in.Param("name"))
+    })
+
+    // 启动（支持 CORS、BasicAuth 等 HTTP 级包装器）
+    server.Run(app, ":8080", server.WithCORS("*"))
 }
 ```
 
@@ -59,15 +73,22 @@ import (
 func main() {
     db.Init("sqlite", "./app.db")
 
-    // Active Record
+    // Active Record — 插入
     row := db.NewRow("user").Set("name", "james").Set("age", 18)
     result, _ := db.Insert(row)
 
-    // 查询
+    // 主键查询
     found, _ := db.FindByID("user", result.GetID())
 
-    // SQL Builder
-    page, _ := db.NewSQL("SELECT * FROM user").Where("age > ?", 20).OrderBy("id DESC").Paginate(1, 10)
+    // 分页查询
+    page, _ := db.SQL("SELECT * FROM user ORDER BY id DESC").Paginate(1, 10)
+
+    // Enjoy SQL 模板 — 动态条件
+    data := map[string]interface{}{"minAge": 18, "status": 1}
+    list, _ := db.Sql(
+        "SELECT * FROM user #where() #and(age > #para(minAge)) #and(status = #para(status))",
+        data,
+    ).Find()
 }
 ```
 
@@ -78,36 +99,58 @@ import "github.com/crazy-airhead/aifei-go/enjoy"
 
 engine := enjoy.NewEngine("myEngine")
 tpl := engine.GetTemplateByString("Hello, #(name)! Age: #(age)")
-output := tpl.Render(map[string]interface{}{"name": "james", "age": 18})
+output := tpl.RenderToString(map[string]interface{}{"name": "james", "age": 18})
+```
+
+### 代码生成器
+
+从数据库 Schema 自动生成类型安全的代码（每表一个包）：
+
+```go
+import (
+    "github.com/crazy-airhead/aifei-go/generator"
+)
+
+gen := generator.New(pool, dialect, "./myapp/db", "myapp/db")
+gen.Generate() // 生成 user/、order/ 等包，每个包含 base.go + dao.go + service.go
+
+// 使用生成的类型安全 API
+u, _ := user.FindById(123)
+u.SetName("new name").Update()
 ```
 
 ## Just Service
 
-通过 `Register()` 自动映射 struct 方法为路由：
+通过 `Register()` 自动映射 struct 方法为路由，方法签名遵循 `func(in aifei.Input) aifei.Output`：
 
 ```go
 type UserService struct{}
 
-func (s *UserService) List(c *aifei.Context)   { /* GET /api/user/list */ }
-func (s *UserService) Save(c *aifei.Context)   { /* POST /api/user/save */ }
-func (s *UserService) GetById(c *aifei.Context) { /* GET /api/user/:id */ }
+func (s *UserService) List(in aifei.Input) aifei.Output    { /* GET /api/user/list */ }
+func (s *UserService) Create(in aifei.Input) aifei.Output  { /* POST /api/user/create */ }
+func (s *UserService) GetById(in aifei.Input) aifei.Output { /* GET /api/user/:id */ }
+func (s *UserService) UpdateById(in aifei.Input) aifei.Output { /* PUT /api/user/:id */ }
+func (s *UserService) DeleteById(in aifei.Input) aifei.Output { /* DELETE /api/user/:id */ }
 
 app.Register("/api/user", &UserService{})
 ```
 
-命名规则：`List*`/`Get*` → GET，`Save*`/`Create*` → POST，`Update*` → PUT，`Delete*` → DELETE。`ById` 后缀变为 `/:id` 路径参数。
+命名规则：`List*`/`Get*` → GET，`Save*`/`Create*`/`Post*` → POST，`Update*`/`Put*` → PUT，`Delete*`/`Remove*` → DELETE。`ById` 后缀变为 `/:id` 路径参数。
 
 ## 代码统计
 
 | 包 | 代码行数 | 测试行数 | 文件数 |
 |---|---|---|---|
-| enjoy | 2,455 | 150 | 17 |
-| db | 1,830 | 53 | 12 |
-| aifei | 1,146 | — | 8 |
-| log | 111 | 114 | 2 |
-| json | 37 | 45 | 2 |
-| _example | 145 | 295 | 2 |
-| **总计** | **5,579** | **657** | **43** |
+| enjoy | ~2,500 | 182 | 16 |
+| db + db/sql | ~2,670 | 53 + 228 | 20 |
+| generator | ~1,250 | 314 | 13 |
+| aifei | ~780 | — | 8 |
+| server | ~740 | — | 6 |
+| go-http | ~330 | — | 3 |
+| log | ~110 | 114 | 1 |
+| json | ~40 | 45 | 1 |
+| _example | ~220 | 1,120 | 6 |
+| **总计** | **~8,350** | **~2,060** | **74** |
 
 ## 协议
 

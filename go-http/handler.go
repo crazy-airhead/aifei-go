@@ -38,10 +38,10 @@ func (h *HttpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return out
 	}
 
-	// Apply global middlewares (outermost applied first)
+	// Apply global handlers (outermost applied first)
 	wrapped := final
-	for i := len(h.App.Middlewares()) - 1; i >= 0; i-- {
-		wrapped = h.App.Middlewares()[i](wrapped)
+	for i := len(h.App.Handlers()) - 1; i >= 0; i-- {
+		wrapped = h.App.Handlers()[i](wrapped)
 	}
 
 	out := wrapped(in)

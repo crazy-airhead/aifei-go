@@ -81,12 +81,12 @@ func (r *Router) Handle(method, path string, handlers ...HandlerFunc) {
 	root.add(path, handlers)
 }
 
-// Group creates a RouterGroup with the given prefix and optional middlewares.
-func (r *Router) Group(prefix string, middlewares ...Middleware) *RouterGroup {
+// Group creates a RouterGroup with the given prefix and optional handlers.
+func (r *Router) Group(prefix string, handlers ...Handler) *RouterGroup {
 	return &RouterGroup{
-		prefix:      prefix,
-		middlewares: middlewares,
-		router:      r,
+		prefix:   prefix,
+		handlers: handlers,
+		router:   r,
 	}
 }
 
@@ -98,7 +98,7 @@ func (r *Router) Group(prefix string, middlewares ...Middleware) *RouterGroup {
 //   - Delete*/Remove* → DELETE
 //
 // "ById" suffix maps to "/:id" path parameter.
-func (r *Router) Register(prefix string, service interface{}, middlewares ...Middleware) {
+func (r *Router) Register(prefix string, service interface{}, handlers ...Handler) {
 	t := reflect.TypeOf(service)
 	v := reflect.ValueOf(service)
 	prefix = strings.TrimRight(prefix, "/")
@@ -149,7 +149,7 @@ func (r *Router) Register(prefix string, service interface{}, middlewares ...Mid
 			path = prefix + "/" + pathSuffix
 		}
 
-		m := middlewares
+		m := handlers
 		handler := func(in Input) Output {
 			// Build the method invocation chain with interceptors
 			invoke := func() Output {
@@ -376,11 +376,11 @@ func camelToPath(s string) string {
 
 // ---- RouterGroup ----
 
-// RouterGroup supports grouped routes with shared prefix and middlewares.
+// RouterGroup supports grouped routes with shared prefix and handlers.
 type RouterGroup struct {
-	prefix      string
-	middlewares []Middleware
-	router      *Router
+	prefix   string
+	handlers []Handler
+	router   *Router
 }
 
 // GET registers a GET route in the group.
@@ -408,17 +408,17 @@ func (g *RouterGroup) Handle(method, path string, handlers ...HandlerFunc) {
 	fullPath := g.prefix + path
 	final := handlers[len(handlers)-1]
 	wrapped := final
-	for i := len(g.middlewares) - 1; i >= 0; i-- {
-		wrapped = g.middlewares[i](wrapped)
+	for i := len(g.handlers) - 1; i >= 0; i-- {
+		wrapped = g.handlers[i](wrapped)
 	}
 	g.router.Handle(method, fullPath, wrapped)
 }
 
 // Group creates a sub-group with extended prefix.
-func (g *RouterGroup) Group(prefix string, middlewares ...Middleware) *RouterGroup {
+func (g *RouterGroup) Group(prefix string, handlers ...Handler) *RouterGroup {
 	return &RouterGroup{
-		prefix:      g.prefix + prefix,
-		middlewares: append(g.middlewares, middlewares...),
-		router:      g.router,
+		prefix:   g.prefix + prefix,
+		handlers: append(g.handlers, handlers...),
+		router:   g.router,
 	}
 }

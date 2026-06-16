@@ -3,6 +3,7 @@ package enjoy
 // Env holds the template execution environment.
 type Env struct {
 	engineConfig *EngineConfig
+	engine       *Engine
 	functionMap  map[string]*DefineStat
 	sourceList   []interface{}
 }
@@ -18,6 +19,11 @@ func NewEnv(config *EngineConfig) *Env {
 // GetEngineConfig returns the engine config.
 func (e *Env) GetEngineConfig() *EngineConfig {
 	return e.engineConfig
+}
+
+// GetEngine returns the engine.
+func (e *Env) GetEngine() *Engine {
+	return e.engine
 }
 
 // GetFunction returns a defined template function.

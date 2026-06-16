@@ -1,8 +1,8 @@
 package aifei
 
 // Interceptor wraps a single service method invocation.
-// Unlike Middleware (which wraps the entire request pipeline), Interceptors
-// are method-level and are declared by the service itself.
+// Unlike a Handler (which wraps the entire request pipeline), Interceptors
+// are method-level and declared by the service itself.
 //
 // Pattern from Java Aifei's Interceptor:
 //

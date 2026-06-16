@@ -89,6 +89,7 @@ func (e *Engine) compileSource(key string, src source.Source) *Template {
 	content := src.GetContent()
 	lexer := NewLexer(content)
 	env := NewEnv(e.config)
+	env.engine = e
 
 	ast, err := ParseTemplate(lexer, env)
 	if err != nil {

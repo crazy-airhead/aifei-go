@@ -16,34 +16,34 @@ import (
 type Option func(*options)
 
 type options struct {
-	httpMiddlewares []func(http.Handler) http.Handler
+	httpHandlers []func(http.Handler) http.Handler
 }
 
-// WithCORS adds CORS middleware to the HTTP handler chain.
+// WithCORS adds CORS handler to the HTTP handler chain.
 func WithCORS(origin string) Option {
 	return func(o *options) {
-		o.httpMiddlewares = append(o.httpMiddlewares, CORS(origin))
+		o.httpHandlers = append(o.httpHandlers, CORS(origin))
 	}
 }
 
-// WithBasicAuth adds Basic Auth middleware to the HTTP handler chain.
+// WithBasicAuth adds Basic Auth handler to the HTTP handler chain.
 func WithBasicAuth(check func(user, pass string) bool) Option {
 	return func(o *options) {
-		o.httpMiddlewares = append(o.httpMiddlewares, BasicAuth(check))
+		o.httpHandlers = append(o.httpHandlers, BasicAuth(check))
 	}
 }
 
-// WithRequestID adds Request ID middleware to the HTTP handler chain.
+// WithRequestID adds Request ID handler to the HTTP handler chain.
 func WithRequestID() Option {
 	return func(o *options) {
-		o.httpMiddlewares = append(o.httpMiddlewares, RequestID())
+		o.httpHandlers = append(o.httpHandlers, RequestID())
 	}
 }
 
-// WithHTTPMiddleware adds a custom HTTP middleware to the handler chain.
-func WithHTTPMiddleware(m func(http.Handler) http.Handler) Option {
+// WithHTTPHandler adds a custom HTTP handler wrapper to the chain.
+func WithHTTPHandler(m func(http.Handler) http.Handler) Option {
 	return func(o *options) {
-		o.httpMiddlewares = append(o.httpMiddlewares, m)
+		o.httpHandlers = append(o.httpHandlers, m)
 	}
 }
 
@@ -56,8 +56,8 @@ func Run(app *aifei.Aifei, addr string, opts ...Option) {
 
 	// Build the HTTP handler chain
 	var h http.Handler = gohttp.NewHttpHandler(app)
-	for i := len(o.httpMiddlewares) - 1; i >= 0; i-- {
-		h = o.httpMiddlewares[i](h)
+	for i := len(o.httpHandlers) - 1; i >= 0; i-- {
+		h = o.httpHandlers[i](h)
 	}
 
 	srv := gohttp.NewDefaultServer(addr)

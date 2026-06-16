@@ -165,6 +165,101 @@ func TestNestedForInIf(t *testing.T) {
 	}
 }
 
+func TestSwitchBasic(t *testing.T) {
+	engine := NewEngine("test-switch")
+	tpl := engine.GetTemplateByString(`#switch(x)
+#case(1)
+one
+#case(2)
+two
+#default
+other
+#end`)
+	if result := tpl.RenderToString(map[string]interface{}{"x": 1}); result != "\none\n" {
+		t.Fatalf("expected '\\none\\n', got '%s'", result)
+	}
+	if result := tpl.RenderToString(map[string]interface{}{"x": 2}); result != "\ntwo\n" {
+		t.Fatalf("expected '\\ntwo\\n', got '%s'", result)
+	}
+	if result := tpl.RenderToString(map[string]interface{}{"x": 99}); result != "\nother\n" {
+		t.Fatalf("expected '\\nother\\n', got '%s'", result)
+	}
+}
+
+func TestSwitchMultiValue(t *testing.T) {
+	engine := NewEngine("test-switch-multi")
+	tpl := engine.GetTemplateByString(`#switch(x)
+#case(1, 3, 5)
+odd
+#case(2, 4, 6)
+even
+#default
+other
+#end`)
+	if result := tpl.RenderToString(map[string]interface{}{"x": 3}); result != "\nodd\n" {
+		t.Fatalf("expected '\\nodd\\n', got '%s'", result)
+	}
+	if result := tpl.RenderToString(map[string]interface{}{"x": 4}); result != "\neven\n" {
+		t.Fatalf("expected '\\neven\\n', got '%s'", result)
+	}
+	if result := tpl.RenderToString(map[string]interface{}{"x": 7}); result != "\nother\n" {
+		t.Fatalf("expected '\\nother\\n', got '%s'", result)
+	}
+}
+
+func TestSwitchString(t *testing.T) {
+	engine := NewEngine("test-switch-str")
+	tpl := engine.GetTemplateByString(`#switch(x)
+#case('a')
+alpha
+#case('b')
+beta
+#default
+other
+#end`)
+	if result := tpl.RenderToString(map[string]interface{}{"x": "a"}); result != "\nalpha\n" {
+		t.Fatalf("expected '\\nalpha\\n', got '%s'", result)
+	}
+	if result := tpl.RenderToString(map[string]interface{}{"x": "b"}); result != "\nbeta\n" {
+		t.Fatalf("expected '\\nbeta\\n', got '%s'", result)
+	}
+	if result := tpl.RenderToString(map[string]interface{}{"x": "z"}); result != "\nother\n" {
+		t.Fatalf("expected '\\nother\\n', got '%s'", result)
+	}
+}
+
+func TestSwitchNoDefault(t *testing.T) {
+	engine := NewEngine("test-switch-nodef")
+	tpl := engine.GetTemplateByString(`#switch(x)
+#case(1)
+one
+#end`)
+	if result := tpl.RenderToString(map[string]interface{}{"x": 1}); result != "\none\n" {
+		t.Fatalf("expected '\\none\\n', got '%s'", result)
+	}
+	if result := tpl.RenderToString(map[string]interface{}{"x": 2}); result != "" {
+		t.Fatalf("expected '', got '%s'", result)
+	}
+}
+
+func TestInclude(t *testing.T) {
+	engine := NewEngine("test-include")
+	engine.SetBaseTemplatePath("testdata")
+	engine.SetDevMode(true)
+
+	// Pre-compile the sub-template
+	subTpl := engine.GetTemplate("testdata/_sub.html")
+	if strings.Contains(subTpl.RenderToString(nil), "error") {
+		t.Skip("testdata/_sub.html not found, skipping include test")
+	}
+
+	tpl := engine.GetTemplate("testdata/_parent.html")
+	result := tpl.RenderToString(map[string]interface{}{"name": "World"})
+	if !strings.Contains(result, "Hello") || !strings.Contains(result, "World") {
+		t.Fatalf("expected 'Hello World' from include, got '%s'", result)
+	}
+}
+
 func TestNestedIfInFor(t *testing.T) {
 	engine := NewEngine("test-nested2")
 	data := map[string]interface{}{

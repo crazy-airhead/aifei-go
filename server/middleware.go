@@ -15,7 +15,7 @@ import (
 // ---- Handler-level middleware (Input → Output) ----
 
 // Logger returns a middleware that logs request method, path, code, and duration.
-func Logger() aifei.Middleware {
+func Logger() aifei.Handler {
 	return func(next aifei.HandlerFunc) aifei.HandlerFunc {
 		return func(in aifei.Input) aifei.Output {
 			start := time.Now()
@@ -27,7 +27,7 @@ func Logger() aifei.Middleware {
 }
 
 // Recover returns a middleware that recovers from panics and returns an error Output.
-func Recover() aifei.Middleware {
+func Recover() aifei.Handler {
 	return func(next aifei.HandlerFunc) aifei.HandlerFunc {
 		return func(in aifei.Input) (out aifei.Output) {
 			defer func() {
@@ -44,7 +44,7 @@ func Recover() aifei.Middleware {
 }
 
 // Timeout returns a middleware that cancels the handler after the given duration.
-func Timeout(d time.Duration) aifei.Middleware {
+func Timeout(d time.Duration) aifei.Handler {
 	return func(next aifei.HandlerFunc) aifei.HandlerFunc {
 		return func(in aifei.Input) aifei.Output {
 			type result struct {

@@ -226,6 +226,83 @@ func (s *SetAsStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) 
 	}
 }
 
+// IncludeStat represents #include(path, arg1=val1, ...).
+type IncludeStat struct {
+	SubStat Stat
+	assigns []AssignExpr
+}
+
+func (s *IncludeStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	child := NewScope(make(map[string]interface{}))
+	child.parent = scope
+	child.global = scope.global
+	for _, a := range s.assigns {
+		child.Set(a.Name, a.Value.Eval(scope, ctrl))
+	}
+	s.SubStat.Exec(env, child, writer, ctrl)
+}
+
+// SwitchStat represents #switch(expr).
+type SwitchStat struct {
+	Expr      Expr
+	FirstCase *CaseStat
+	Default   *DefaultStat
+}
+
+func (s *SwitchStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	switchValue := s.Expr.Eval(scope, ctrl)
+	for c := s.FirstCase; c != nil; c = c.NextCase {
+		if c.execIfMatch(switchValue, env, scope, writer, ctrl) {
+			return
+		}
+	}
+	if s.Default != nil {
+		s.Default.Exec(env, scope, writer, ctrl)
+	}
+}
+
+// CaseStat represents #case(v1, v2, ...).
+type CaseStat struct {
+	Exprs    []Expr
+	Body     Stat
+	NextCase *CaseStat
+}
+
+func (s *CaseStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {}
+
+func (s *CaseStat) execIfMatch(switchValue interface{}, env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) bool {
+	for _, ex := range s.Exprs {
+		v := ex.Eval(scope, ctrl)
+		if valuesEqual(switchValue, v) {
+			s.Body.Exec(env, scope, writer, ctrl)
+			return true
+		}
+	}
+	if s.NextCase != nil {
+		return s.NextCase.execIfMatch(switchValue, env, scope, writer, ctrl)
+	}
+	return false
+}
+
+// DefaultStat represents #default.
+type DefaultStat struct {
+	Body Stat
+}
+
+func (s *DefaultStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	s.Body.Exec(env, scope, writer, ctrl)
+}
+
+func valuesEqual(a, b interface{}) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b)
+}
+
 // ---- Template Parser ----
 
 // ParseTemplate parses template tokens into a Stat AST.
@@ -285,6 +362,12 @@ func parseOneStat(tok Token, lexer *Lexer, env *Env) (Stat, error) {
 		return &BreakStat{}, nil
 	case TokContinue:
 		return &ContinueStat{}, nil
+	case TokInclude:
+		return parseIncludeStat(tok.Val, env)
+	case TokSwitch:
+		return parseSwitchStat(tok.Val, lexer, env)
+	case TokCase, TokDefault:
+		return nil, nil
 	case TokReturn, TokReturnIf:
 		return parseReturnStat(tok.Val)
 	case TokID:
@@ -604,4 +687,117 @@ func parseReturnStat(val string) (Stat, error) {
 		return nil, err
 	}
 	return &ReturnStat{Expr: ex}, nil
+}
+
+func parseIncludeStat(para string, env *Env) (Stat, error) {
+	exprs, err := parseExprList(para)
+	if err != nil {
+		return nil, fmt.Errorf("#include parameter error: %w", err)
+	}
+	if exprs == nil || exprs.Length() == 0 {
+		return nil, fmt.Errorf("#include requires a path argument")
+	}
+
+	first := exprs.GetExpr(0)
+	constExpr, ok := first.(*ConstExpr)
+	if !ok || constExpr.Type != "string" {
+		return nil, fmt.Errorf("#include path must be a string literal")
+	}
+
+	subPath, _ := constExpr.Value.(string)
+	engine := env.GetEngine()
+	if engine == nil {
+		return &NullStat{}, nil
+	}
+
+	if !strings.HasPrefix(subPath, "/") {
+		basePath := ""
+		if engine.config != nil {
+			basePath = engine.config.baseTemplatePath
+		}
+		if basePath != "" {
+			subPath = basePath + "/" + subPath
+		}
+	}
+
+	subTpl := engine.GetTemplate(subPath)
+	subStat := subTpl.ast
+	if subStat == nil {
+		return &NullStat{}, nil
+	}
+
+	var assigns []AssignExpr
+	for i := 1; i < exprs.Length(); i++ {
+		e := exprs.GetExpr(i)
+		if ae, ok := e.(*AssignExpr); ok {
+			assigns = append(assigns, *ae)
+		}
+	}
+
+	return &IncludeStat{SubStat: subStat, assigns: assigns}, nil
+}
+
+func parseSwitchStat(para string, lexer *Lexer, env *Env) (Stat, error) {
+	exprs, err := parseExprList(para)
+	if err != nil {
+		return nil, fmt.Errorf("#switch parameter error: %w", err)
+	}
+	if exprs == nil || exprs.Length() == 0 {
+		return nil, fmt.Errorf("#switch requires a condition expression")
+	}
+
+	sw := &SwitchStat{Expr: exprs.GetExpr(0)}
+	var lastCase *CaseStat
+
+	// Read first token inside the switch block.
+	tok := lexer.Scan()
+	for {
+		if tok.Type == TokEOF || tok.Type == TokEnd {
+			break
+		}
+
+		if tok.Type == TokCase {
+			caseExprs, err := parseExprList(tok.Val)
+			if err != nil {
+				return nil, fmt.Errorf("#case parameter error: %w", err)
+			}
+			body, stopToks, err := collectUntil(lexer, env, TokCase, TokDefault, TokEnd)
+			if err != nil {
+				return nil, err
+			}
+
+			exprSlice := make([]Expr, 0, caseExprs.Length())
+			for i := 0; i < caseExprs.Length(); i++ {
+				exprSlice = append(exprSlice, caseExprs.GetExpr(i))
+			}
+			c := &CaseStat{Exprs: exprSlice, Body: body}
+			if lastCase == nil {
+				sw.FirstCase = c
+			} else {
+				lastCase.NextCase = c
+			}
+			lastCase = c
+
+			// Use the stop token returned by collectUntil as the next token.
+			if len(stopToks) > 0 {
+				tok = stopToks[0]
+			} else {
+				tok = lexer.Scan()
+			}
+			continue
+		}
+
+		if tok.Type == TokDefault {
+			body, _, err := collectUntil(lexer, env, TokEnd)
+			if err != nil {
+				return nil, err
+			}
+			sw.Default = &DefaultStat{Body: body}
+			break
+		}
+
+		tok = lexer.Scan()
+	}
+
+	return sw, nil
 }

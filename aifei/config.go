@@ -2,19 +2,19 @@ package aifei
 
 // Config holds framework configuration.
 type Config struct {
-	Middlewares []Middleware
-	Plugins     []Plugin
-	OnStart     func()
-	OnStop      func()
+	Handlers []Handler
+	Plugins  []Plugin
+	OnStart  func()
+	OnStop   func()
 }
 
 // Option is a functional option for configuring Aifei.
 type Option func(*Aifei)
 
-// WithMiddleware adds global middlewares.
-func WithMiddleware(m ...Middleware) Option {
+// WithHandlers adds global handlers.
+func WithHandlers(h ...Handler) Option {
 	return func(a *Aifei) {
-		a.middlewares = append(a.middlewares, m...)
+		a.handlers = append(a.handlers, h...)
 	}
 }
 

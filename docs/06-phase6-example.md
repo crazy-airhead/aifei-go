@@ -1,4 +1,4 @@
-# Phase 5: 示例应用与集成
+# Phase 6: 示例应用与集成
 
 > 目标：创建完整的示例应用，验证框架各模块的集成
 
@@ -7,203 +7,206 @@
 ```
 _example/
 └── demo/
-    ├── go.mod
-    ├── go.sum
-    └── main.go
+    ├── main.go                    # 应用入口
+    ├── generated_test.go          # 生成代码集成测试
+    └── internal/
+        └── user/                  # Generator 生成的 user 表代码
+            ├── base.go            # BaseUser + Table + getter/setter (覆盖写入)
+            ├── user.go            # User struct (存在则跳过)
+            ├── dao.go             # Dao + FindById/FindBy 等 (存在则跳过)
+            └── service.go         # Service + HTTP 路由 (存在则跳过)
 ```
 
-## 2. 完整示例应用
+## 2. 完整示例应用（基于实际 demo）
 
 ```go
 package main
 
 import (
     "fmt"
-    "log"
 
-    "github.com/aifei/aifei"
-    "github.com/aifei/aifei/db"
+    "github.com/crazy-airhead/aifei-go"
+    "github.com/crazy-airhead/aifei-go/db"
+    "github.com/crazy-airhead/aifei-go/server"
+
+    // 生成的 per-table 包：通过 init() 注册 Table 元数据和 Service 路由
+    _ "github.com/crazy-airhead/aifei-go/_example/demo/internal/user"
+
+    _ "modernc.org/sqlite"
 )
 
 func main() {
-    app := aifei.New()
-
     // 初始化数据库
-    err := db.Init("sqlite", "./demo.db",
-        db.WithPrinter(func(sql string, args ...interface{}) {
-            log.Printf("[SQL] %s %v", sql, args)
-        }),
-    )
+    err := db.Init("sqlite", "./demo.db", db.WithPrinter(func(sql string, args ...interface{}) {
+        fmt.Printf("[SQL] %s %v\n", sql, args)
+    }))
     if err != nil {
-        log.Fatal(err)
+        panic(err)
     }
 
-    // 创建表
+    // 确保表存在
     db.SQL(`CREATE TABLE IF NOT EXISTS user (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         age INTEGER DEFAULT 0,
-        email TEXT
+        email TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`).Update()
 
-    // 全局中间件
-    app.Use(aifei.Logger(), aifei.Recover())
+    app := aifei.New()
 
-    // API 路由
-    app.GET("/api/user/list", UserList)
-    app.GET("/api/user/:id", UserGet)
-    app.POST("/api/user/save", UserSave)
-    app.POST("/api/user/delete", UserDelete)
+    // 全局 Handler 包装链
+    app.Use(server.Logger(), server.Recover())
 
-    // struct 注册 (Java @Path 风格)
-    app.Register("/api/v2/user", &UserService{})
+    // 路由 — HandlerFunc: func(in aifei.Input) aifei.Output
+    app.GET("/", func(in aifei.Input) aifei.Output {
+        return server.OkMsg("Aifei Go " + aifei.Version)
+    })
+
+    // 自动注册所有 init() 注册的服务
+    server.AutoRegisterServices(app)
+
+    // 自定义路由组
+    admin := app.Group("/api/admin")
+    admin.GET("/dashboard", func(in aifei.Input) aifei.Output {
+        return server.OkMsg("admin dashboard")
+    })
 
     // 启动
-    app.Run(":8080")
-}
-
-// ---- Handler 函数 ----
-
-func UserList(c *aifei.Context) {
-    name := c.GetStr("name")
-    page := c.GetIntDefault("page", 1)
-    size := c.GetIntDefault("size", 10)
-
-    builder := db.SQL("select * from user where 1=1")
-    if name != "" {
-        builder.And("and name like ?", "%"+name+"%")
-    }
-
-    result, err := builder.Paginate(page, size)
-    if err != nil {
-        c.JsonFail(err.Error())
-        return
-    }
-    c.JsonOK(result)
-}
-
-func UserGet(c *aifei.Context) {
-    id := c.PathPara(0)
-    row, err := db.FindByID("user", id)
-    if err != nil {
-        c.JsonFail(err.Error())
-        return
-    }
-    if row == nil {
-        c.JsonFail("用户不存在")
-        return
-    }
-    c.JsonOK(row)
-}
-
-func UserSave(c *aifei.Context) {
-    row := db.NewRow("user")
-    row.Set("name", c.GetStr("name"))
-    row.Set("age", c.GetIntDefault("age", 0))
-    row.Set("email", c.GetStr("email"))
-
-    id := c.GetIntDefault("id", 0)
-    if id > 0 {
-        row.ID(id)
-        _, err := db.Update(row)
-        if err != nil {
-            c.JsonFail(err.Error())
-            return
-        }
-    } else {
-        _, err := db.Insert(row)
-        if err != nil {
-            c.JsonFail(err.Error())
-            return
-        }
-    }
-    c.JsonOK(nil)
-}
-
-func UserDelete(c *aifei.Context) {
-    id := c.GetIntDefault("id", 0)
-    if id <= 0 {
-        c.JsonFail("id 不能为空")
-        return
-    }
-    _, err := db.DeleteByID("user", id)
-    if err != nil {
-        c.JsonFail(err.Error())
-        return
-    }
-    c.JsonOK(nil)
-}
-
-// ---- Struct 服务 (Java @Path 风格) ----
-
-type UserService struct{}
-
-func (s *UserService) List(c *aifei.Context) {
-    rows, err := db.SQL("select * from user").Find()
-    if err != nil {
-        c.JsonFail(err.Error())
-        return
-    }
-    c.JsonOK(rows)
-}
-
-func (s *UserService) Save(c *aifei.Context) {
-    row := db.NewRow("user")
-    row.Set("name", c.GetStr("name"))
-    row.Set("age", c.GetIntDefault("age", 0))
-    _, err := db.Insert(row)
-    if err != nil {
-        c.JsonFail(err.Error())
-        return
-    }
-    c.JsonOK(nil)
-}
-
-func (s *UserService) Delete(c *aifei.Context) {
-    _, err := db.DeleteByID("user", c.GetInt("id"))
-    if err != nil {
-        c.JsonFail(err.Error())
-        return
-    }
-    c.JsonOK(nil)
+    server.Run(app, ":8080", server.WithCORS("*"))
 }
 ```
 
----
-
-## 3. 事务示例
+## 3. Service 示例（使用生成代码 + 拦截器）
 
 ```go
-func Transfer(c *aifei.Context) {
-    from := c.GetInt64("from")
-    to := c.GetInt64("to")
-    money := c.GetIntDefault("money", 0)
+// internal/user/service.go
+package user
+
+import (
+    "strconv"
+
+    "github.com/crazy-airhead/aifei-go"
+    "github.com/crazy-airhead/aifei-go/db"
+    "github.com/crazy-airhead/aifei-go/server"
+)
+
+const ServicePrefix = "/user"
+
+func init() {
+    server.RegisterService(ServicePrefix, &Service{})
+}
+
+// MethodInterceptors 声明方法级拦截器
+func (s *Service) MethodInterceptors() map[string][]aifei.Interceptor {
+    return map[string][]aifei.Interceptor{
+        "Create": {server.TxInterceptor()},
+    }
+}
+
+type Service struct{}
+
+// List 分页列表 — GET /user/list
+func (s *Service) List(in aifei.Input) aifei.Output {
+    pageNum := in.GetIntDefault("page", 1)
+    pageSize := in.GetIntDefault("size", 10)
+    page, err := db.SQL("SELECT * FROM user ORDER BY id DESC").Paginate(pageNum, pageSize)
+    if err != nil {
+        return server.Fail(err.Error())
+    }
+    return server.Of(page)
+}
+
+// Create 创建 — POST /user/create
+func (s *Service) Create(in aifei.Input) aifei.Output {
+    u := New()
+    if err := in.GetBean(u); err != nil {
+        return server.Fail("invalid request: " + err.Error())
+    }
+    result, err := u.Insert()
+    if err != nil {
+        return server.Fail(err.Error())
+    }
+    return server.Of(result.GetID())
+}
+
+// GetById 主键查询 — GET /user/:id
+func (s *Service) GetById(in aifei.Input) aifei.Output {
+    id, err := strconv.Atoi(in.Param("id"))
+    if err != nil {
+        return server.Fail("invalid id")
+    }
+    u, err := FindById(id)
+    if err != nil {
+        return server.Fail(err.Error())
+    }
+    if u == nil {
+        return server.Fail("User not found")
+    }
+    return server.Of(u)
+}
+
+// UpdateById 更新 — PUT /user/:id
+func (s *Service) UpdateById(in aifei.Input) aifei.Output {
+    id, _ := strconv.Atoi(in.Param("id"))
+    existing, _ := FindById(id)
+    if existing == nil {
+        return server.Fail("User not found")
+    }
+    if err := in.GetBean(existing); err != nil {
+        return server.Fail("invalid request")
+    }
+    if _, err := existing.Update(); err != nil {
+        return server.Fail(err.Error())
+    }
+    return server.Of(id)
+}
+
+// DeleteById 删除 — DELETE /user/:id
+func (s *Service) DeleteById(in aifei.Input) aifei.Output {
+    id, _ := strconv.Atoi(in.Param("id"))
+    if _, err := DeleteById(id); err != nil {
+        return server.Fail(err.Error())
+    }
+    return server.Of(nil)
+}
+```
+
+## 4. 事务示例
+
+```go
+func Transfer(in aifei.Input) aifei.Output {
+    from := in.GetInt64("from")
+    to := in.GetInt64("to")
+    money := in.GetInt("money")
 
     err := db.Transaction(func() error {
-        n1, err := db.SQL("update account set balance = balance - ? where id = ?", money, from).Update()
-        if err != nil { return err }
-        n2, err := db.SQL("update account set balance = balance + ? where id = ?", money, to).Update()
-        if err != nil { return err }
+        n1, err := db.SQL("UPDATE account SET balance = balance - ? WHERE id = ?", money, from).Update()
+        if err != nil {
+            return err
+        }
+        n2, err := db.SQL("UPDATE account SET balance = balance + ? WHERE id = ?", money, to).Update()
+        if err != nil {
+            return err
+        }
         if n1 != 1 || n2 != 1 {
-            return fmt.Errorf("转账失败")
+            return fmt.Errorf("transfer failed")
         }
         return nil
     })
 
     if err != nil {
-        c.JsonFail(err.Error())
-        return
+        return server.Fail(err.Error())
     }
-    c.JsonOK("转账成功")
+    return server.OkMsg("success")
 }
 ```
 
----
-
-## 4. 批量操作示例
+## 5. 批量操作示例
 
 ```go
-func BatchInsert(c *aifei.Context) {
+func BatchInsert(in aifei.Input) aifei.Output {
+    batch := db.NewBatch()
     rows := make([]*db.Row, 0, 100)
     for i := 0; i < 100; i++ {
         row := db.NewRow("user").
@@ -212,74 +215,38 @@ func BatchInsert(c *aifei.Context) {
         rows = append(rows, row)
     }
 
-    result, err := db.Batch().Insert(rows)
+    result, err := batch.Insert(rows)
     if err != nil {
-        c.JsonFail(err.Error())
-        return
+        return server.Fail(err.Error())
     }
-    c.JsonOK(fmt.Sprintf("插入 %d 行", result.RowsAffected))
+    return server.OkMsg(fmt.Sprintf("inserted %d rows", result.RowsAffected))
 }
 ```
-
----
-
-## 5. 中间件示例
-
-```go
-// 认证中间件 (替代 Java Interceptor)
-func AuthMiddleware() aifei.Middleware {
-    return func(next aifei.HandlerFunc) aifei.HandlerFunc {
-        return func(c *aifei.Context) {
-            token := c.GetHeader("Authorization")
-            if token == "" {
-                c.Status(401).Json(map[string]interface{}{
-                    "code": 401,
-                    "msg":  "未登录",
-                })
-                c.Abort()
-                return
-            }
-            // 验证 token...
-            c.Next()
-        }
-    }
-}
-
-// 使用
-api := app.Group("/api", AuthMiddleware())
-api.GET("/user/list", UserList)
-```
-
----
 
 ## 6. 响应格式约定
 
+使用 `server.Out` 流畅构建器生成统一响应格式：
+
 ```go
-// context.go 中统一响应方法
+// 成功响应
+server.Ok()              // {"code": 0, "msg": "ok"}
+server.OkMsg("success")  // {"code": 0, "msg": "success"}
+server.Of(data)          // {"code": 0, "msg": "ok", "data": data}
+server.OfField("user", u) // {"code": 0, "msg": "ok", "data": {"user": {...}}}
 
-func (c *Context) JsonOK(data interface{}) {
-    c.Json(map[string]interface{}{
-        "code": 0,
-        "msg":  "ok",
-        "data": data,
-    })
-}
+// 失败响应
+server.Fail("error")       // {"code": 90000, "msg": "error"}
+server.FailWithCode(40001, "invalid") // {"code": 40001, "msg": "invalid"}
 
-func (c *Context) JsonFail(msg string) {
-    c.Json(map[string]interface{}{
-        "code": -1,
-        "msg":  msg,
-        "data": nil,
-    })
-}
+// Out 常量
+server.CodeOK   = 0
+server.CodeFail = 90000
 ```
-
----
 
 ## 7. go.mod 依赖
 
 ```
-module github.com/aifei/aifei
+module github.com/crazy-airhead/aifei-go
 
 go 1.26
 
@@ -291,20 +258,24 @@ go 1.26
 //   _ "modernc.org/sqlite"
 ```
 
----
-
 ## 8. 测试策略
 
+已有测试覆盖：
+
+| 测试文件 | 行数 | 覆盖范围 |
+|---------|------|---------|
+| `db/db_test.go` | 53 | 基础 DB 操作 |
+| `db/sql/sql_test.go` | 228 | SqlKit、SqlPara、SQL 指令 |
+| `enjoy/enjoy_test.go` | 182 | 模板引擎渲染 |
+| `json/json_test.go` | 45 | Marshal/Unmarshal |
+| `log/log_test.go` | 114 | 日志级别和输出 |
+| `generator/generator_test.go` | 314 | 代码生成器和模板 |
+| `_example/demo/generated_test.go` | 152 | 生成代码集成测试 |
+| `_example/db_sqlite_test/db_test.go` | 971 | CRUD、分页、事务、批量、Enjoy SQL 全指令 |
+
+### 集成测试示例（SQLite 内存数据库）
+
 ```go
-// db/db_test.go
-package db_test
-
-import (
-    "testing"
-    "github.com/aifei/aifei/db"
-    _ "modernc.org/sqlite"
-)
-
 func setupTestDB(t *testing.T) {
     err := db.Init("sqlite", ":memory:")
     if err != nil {
@@ -315,7 +286,6 @@ func setupTestDB(t *testing.T) {
 
 func TestInsert(t *testing.T) {
     setupTestDB(t)
-
     row := db.NewRow("user").Set("name", "james").Set("age", 18)
     result, err := db.Insert(row)
     if err != nil {
@@ -326,54 +296,18 @@ func TestInsert(t *testing.T) {
     }
 }
 
-func TestFindById(t *testing.T) {
+func TestEnjoySQL(t *testing.T) {
     setupTestDB(t)
+    db.Insert(db.NewRow("user").Set("name", "alice").Set("age", 25))
 
-    db.Insert(db.NewRow("user").Set("name", "james").Set("age", 18))
+    // 测试 #where + #and + #para 动态条件
+    rows, err := db.Sql(
+        "select * from user #where() #and(age > #para(minAge))",
+        map[string]interface{}{"minAge": 20},
+    ).Find()
 
-    row, err := db.FindByID("user", 1)
-    if err != nil {
-        t.Fatal(err)
-    }
-    if row.GetStr("name") != "james" {
-        t.Error("expected name=james")
-    }
-}
-
-func TestPaginate(t *testing.T) {
-    setupTestDB(t)
-
-    for i := 0; i < 25; i++ {
-        db.Insert(db.NewRow("user").Set("name", fmt.Sprintf("user_%d", i)).Set("age", 18+i))
-    }
-
-    page, err := db.SQL("select * from user").Paginate(1, 10)
-    if err != nil {
-        t.Fatal(err)
-    }
-    if page.TotalRows != 25 {
-        t.Errorf("expected totalRows=25, got %d", page.TotalRows)
-    }
-    if len(page.Rows) != 10 {
-        t.Errorf("expected 10 rows, got %d", len(page.Rows))
-    }
-}
-
-func TestTransaction(t *testing.T) {
-    setupTestDB(t)
-
-    err := db.Transaction(func() error {
-        db.Insert(db.NewRow("user").Set("name", "user1"))
-        db.Insert(db.NewRow("user").Set("name", "user2"))
-        return nil
-    })
-    if err != nil {
-        t.Fatal(err)
-    }
-
-    count, _ := db.Count("user")
-    if count != 2 {
-        t.Errorf("expected count=2, got %d", count)
+    if err != nil || len(rows) != 1 {
+        t.Fatal("expected 1 row")
     }
 }
 ```
