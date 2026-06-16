@@ -157,17 +157,39 @@ walk:
 			}
 
 			// For wild paths, follow existing wild child.
-			if path[0] == ':' || path[0] == '*' {
+			firstCh := path[0]
+			if firstCh == '/' && len(path) > 1 {
+				firstCh = path[1]
+			}
+			if firstCh == ':' || firstCh == '*' {
 				for _, child := range n.children {
-					if (child.param && path[0] == ':') || (child.catchAll && path[0] == '*') {
+					if (child.param && firstCh == ':') || (child.catchAll && firstCh == '*') {
 						n = child
 						continue walk
 					}
 				}
 			}
 
+			// Scan for wild char in the remaining path.
+			wildIdx := -1
+			for j := 0; j < len(path); j++ {
+				if path[j] == ':' || path[j] == '*' {
+					wildIdx = j
+					break
+				}
+			}
+			if wildIdx > 0 {
+				prefix := path[:wildIdx]
+				wild := path[wildIdx:]
+				n.children = append(n.children, &node{
+					path:      prefix,
+					children:  []*node{{path: wild, handlers: handlers, param: wild[0] == ':', catchAll: wild[0] == '*'}},
+					wildChild: true,
+				})
+				return
+			}
 			child := &node{path: path, handlers: handlers}
-			if path[0] == ':' || path[0] == '*' {
+			if wildIdx == 0 {
 				n.wildChild = true
 				if path[0] == '*' {
 					child.catchAll = true
@@ -204,21 +226,26 @@ func (n *node) find(path string) (handlers []HandlerFunc, params map[string]stri
 	for _, child := range n.children {
 		if child.catchAll {
 			if child.handlers != nil {
-				params := map[string]string{child.path[1:]: path}
+				params := map[string]string{paramName(child.path): path}
 				return child.handlers, params, true
 			}
 			return nil, nil, false
 		}
 
 		if child.param {
-			end := strings.Index(path, "/")
+			// Skip optional leading "/" in remaining path.
+			search := path
+			if len(search) > 0 && search[0] == '/' {
+				search = search[1:]
+			}
+			end := strings.Index(search, "/")
 			var val, remaining string
 			if end == -1 {
-				val = path
+				val = search
 				remaining = ""
 			} else {
-				val = path[:end]
-				remaining = path[end:]
+				val = search[:end]
+				remaining = search[end:]
 			}
 			wildChild = child
 			wildVal = val
@@ -233,7 +260,7 @@ func (n *node) find(path string) (handlers []HandlerFunc, params map[string]stri
 
 	if wildChild != nil {
 		if len(wildPath) == 0 && wildChild.handlers != nil {
-			params := map[string]string{wildChild.path[1:]: wildVal}
+			params := map[string]string{paramName(wildChild.path): wildVal}
 			return wildChild.handlers, params, true
 		}
 		if len(wildPath) > 0 {
@@ -242,13 +269,24 @@ func (n *node) find(path string) (handlers []HandlerFunc, params map[string]stri
 				if p == nil {
 					p = make(map[string]string)
 				}
-				p[wildChild.path[1:]] = wildVal
+				p[paramName(wildChild.path)] = wildVal
 				return h, p, true
 			}
 		}
 	}
 
 	return nil, nil, false
+}
+
+// paramName extracts the parameter name from a wild child path.
+// Handles both ":id" and "/:id" formats.
+func paramName(p string) string {
+	for i, c := range p {
+		if c == ':' {
+			return p[i+1:]
+		}
+	}
+	return p
 }
 
 func commonPrefix(a, b string) int {
