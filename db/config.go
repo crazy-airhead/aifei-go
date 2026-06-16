@@ -20,6 +20,7 @@ type Config struct {
 	MaxLife    time.Duration
 	Printer    func(sql string, args ...interface{})
 	SqlKit     *dbsql.SqlKit
+	HookKit    *DbHookKit
 	pool       *sql.DB
 }
 
@@ -54,6 +55,16 @@ func WithPrinter(fn func(string, ...interface{})) ConfigOption {
 // WithSqlKit sets a custom SqlKit for Enjoy SQL support.
 func WithSqlKit(sk *dbsql.SqlKit) ConfigOption {
 	return func(c *Config) { c.SqlKit = sk }
+}
+
+// WithHookKit sets the database hook kit.
+func WithHookKit(hk *DbHookKit) ConfigOption {
+	return func(c *Config) { c.HookKit = hk }
+}
+
+// GetDbHookKit returns the hook kit, may be nil.
+func (c *Config) GetDbHookKit() *DbHookKit {
+	return c.HookKit
 }
 
 // GetSqlKit returns the SqlKit, creating a default one if nil.

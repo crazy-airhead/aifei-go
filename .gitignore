@@ -2,3 +2,4 @@
 /.claude/
 /_example/demo/demo.db
 /demo
+*.db

@@ -1,10 +1,6 @@
 package db
 
 import (
-	"database/sql"
-	"fmt"
-	"strings"
-
 	dbsql "github.com/crazy-airhead/aifei-go/db/sql"
 )
 
@@ -18,50 +14,50 @@ type Dao struct {
 	sqlPara   *dbsql.SqlPara
 }
 
-// SQL sets the SQL query and args.
+// ---- Builder methods (set SQL on Dao, no execution) ----
+
 func (d *Dao) SQL(query string, args ...interface{}) *Dao {
 	d.sqlStr = query
 	d.sqlArgs = args
 	return d
 }
 
-// Select sets the fields to select.
 func (d *Dao) Select(fields string) *Dao {
 	d.selFields = fields
 	return d
 }
 
-// Sql sets an Enjoy SQL template with named parameters.
 func (d *Dao) Sql(sqlStr string, data map[string]interface{}) *Dao {
 	d.sqlPara = d.config.GetSqlKit().GetSqlPara(sqlStr, data)
 	return d
 }
 
-// SqlWithArgs sets an Enjoy SQL template with positional arguments.
 func (d *Dao) SqlWithArgs(sqlStr string, args ...interface{}) *Dao {
 	d.sqlPara = d.config.GetSqlKit().GetSqlParaWithArgs(sqlStr, args...)
 	return d
 }
 
-// SqlById sets a cached SQL template by ID with named parameters.
 func (d *Dao) SqlById(sqlID string, data map[string]interface{}) *Dao {
 	d.sqlPara = d.config.GetSqlKit().GetSqlParaByID(sqlID, data)
 	return d
 }
 
-// SqlByIdWithArgs sets a cached SQL template by ID with positional arguments.
 func (d *Dao) SqlByIdWithArgs(sqlID string, args ...interface{}) *Dao {
 	d.sqlPara = d.config.GetSqlKit().GetSqlParaByIDWithArgs(sqlID, args...)
 	return d
 }
 
-// SqlPara sets a pre-built SqlPara directly.
 func (d *Dao) SqlPara(sp *dbsql.SqlPara) *Dao {
 	d.sqlPara = sp
 	return d
 }
 
-// sqlAndArgs returns the SQL string and arguments, preferring sqlPara.
+// ---- Internal helpers ----
+
+func (d *Dao) setSqlPara(sp *dbsql.SqlPara) {
+	d.sqlPara = sp
+}
+
 func (d *Dao) sqlAndArgs() (string, []interface{}) {
 	if d.sqlPara != nil {
 		return d.sqlPara.Sql, d.sqlPara.Paras
@@ -69,225 +65,36 @@ func (d *Dao) sqlAndArgs() (string, []interface{}) {
 	return d.sqlStr, d.sqlArgs
 }
 
-// Find executes the query and returns multiple rows.
-func (d *Dao) Find() ([]*Row, error) {
-	pool, err := d.config.Pool()
-	if err != nil {
-		return nil, err
-	}
-	query, args := d.sqlAndArgs()
-	if d.selFields != "" && d.fromTable != "" {
-		query = "SELECT " + d.selFields + " FROM " + d.fromTable
-	}
-	d.config.logSQL(query, args...)
-	rows, err := pool.Query(query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	return scanRows(rows)
+func (d *Dao) isRawSQL() bool {
+	return d.sqlStr != "" || d.sqlPara != nil
 }
 
-// FindFirst executes the query and returns the first row.
+// ---- Query methods (delegate to executors) ----
+
+func (d *Dao) Find() ([]*Row, error) {
+	return execFind(d, d.isRawSQL())
+}
+
 func (d *Dao) FindFirst() (*Row, error) {
 	results, err := d.Find()
-	if err != nil {
+	if err != nil || len(results) == 0 {
 		return nil, err
-	}
-	if len(results) == 0 {
-		return nil, nil
 	}
 	return results[0], nil
 }
 
-// Paginate executes a paginated query.
-func (d *Dao) Paginate(pageNum, pageSize int) (*Page, error) {
-	pool, err := d.config.Pool()
-	if err != nil {
-		return nil, err
-	}
-
-	query, args := d.sqlAndArgs()
-
-	// COUNT query - delegate to dialect
-	countSQL := d.config.Dialect.ForCountSubquery(query)
-	d.config.logSQL(countSQL, args...)
-	var totalRows int64
-	err = pool.QueryRow(countSQL, args...).Scan(&totalRows)
-	if err != nil {
-		return nil, err
-	}
-
-	// Data query - delegate to dialect
-	paginateSQL := d.config.Dialect.ForPaginate(query, pageNum, pageSize)
-	d.config.logSQL(paginateSQL, args...)
-	rows, err := pool.Query(paginateSQL, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	result, err := scanRows(rows)
-	if err != nil {
-		return nil, err
-	}
-
-	return NewPage(pageNum, pageSize, totalRows, result), nil
-}
-
-// Update executes an update/delete/insert and returns affected rows.
-func (d *Dao) Update() (int64, error) {
-	pool, err := d.config.Pool()
-	if err != nil {
-		return 0, err
-	}
-	query, args := d.sqlAndArgs()
-	d.config.logSQL(query, args...)
-	result, err := pool.Exec(query, args...)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-// InsertRow inserts a row.
-func (d *Dao) InsertRow(row *Row) (*Row, error) {
-	pool, err := d.config.Pool()
-	if err != nil {
-		return nil, err
-	}
-
-	fields := row.FieldNames()
-	values := row.FieldValues()
-	sqlStr := d.config.Dialect.ForInsert(row.table, fields)
-	args := values
-
-	d.config.logSQL(sqlStr, args...)
-	result, err := pool.Exec(sqlStr, args...)
-	if err != nil {
-		return nil, err
-	}
-
-	id, _ := result.LastInsertId()
-	if id > 0 && len(row.primaryKeys) > 0 {
-		row.Set(row.primaryKeys[0], id)
-	}
-	return row, nil
-}
-
-// InsertOrUpdateRow inserts or updates a row.
-func (d *Dao) InsertOrUpdateRow(row *Row) (*Row, error) {
-	pool, err := d.config.Pool()
-	if err != nil {
-		return nil, err
-	}
-
-	fields := row.FieldNames()
-	values := row.FieldValues()
-	sqlStr := d.config.Dialect.ForInsertOrUpdate(row.table, fields, row.primaryKeys)
-
-	d.config.logSQL(sqlStr, values...)
-	_, err = pool.Exec(sqlStr, values...)
-	if err != nil {
-		return nil, err
-	}
-	return row, nil
-}
-
-// UpdateRow updates a row using the change set.
-func (d *Dao) UpdateRow(row *Row) (bool, error) {
-	pool, err := d.config.Pool()
-	if err != nil {
-		return false, err
-	}
-
-	changedFields := row.ChangedFields()
-	if len(changedFields) == 0 {
-		return false, nil
-	}
-
-	args := make([]interface{}, 0, len(changedFields)+len(row.primaryKeys))
-	for _, f := range changedFields {
-		args = append(args, row.data[f])
-	}
-	for _, pk := range row.primaryKeys {
-		args = append(args, row.data[pk])
-	}
-
-	sqlStr := d.config.Dialect.ForUpdate(row.table, changedFields, row.primaryKeys)
-	d.config.logSQL(sqlStr, args...)
-	result, err := pool.Exec(sqlStr, args...)
-	if err != nil {
-		return false, err
-	}
-	n, _ := result.RowsAffected()
-	return n > 0, nil
-}
-
-// DeleteRow deletes a row by primary key.
-func (d *Dao) DeleteRow(row *Row) (bool, error) {
-	pool, err := d.config.Pool()
-	if err != nil {
-		return false, err
-	}
-
-	sqlStr := d.config.Dialect.ForDeleteByID(row.table, row.primaryKeys)
-	args := make([]interface{}, len(row.primaryKeys))
-	for i, pk := range row.primaryKeys {
-		args[i] = row.data[pk]
-	}
-
-	d.config.logSQL(sqlStr, args...)
-	result, err := pool.Exec(sqlStr, args...)
-	if err != nil {
-		return false, err
-	}
-	n, _ := result.RowsAffected()
-	return n > 0, nil
-}
-
-// FindByID finds a row by table and ID.
 func (d *Dao) FindByID(table string, id interface{}) (*Row, error) {
-	return d.FindByIDWithPK(table, "id", id)
+	return execFindById(d, table, "id", id)
 }
 
-// FindByIDWithPK finds a row by table, PK name, and ID.
 func (d *Dao) FindByIDWithPK(table, pk string, id interface{}) (*Row, error) {
-	pool, err := d.config.Pool()
-	if err != nil {
-		return nil, err
-	}
-	sqlStr := d.config.Dialect.ForFindByID(table, []string{pk})
-	d.config.logSQL(sqlStr, id)
-	rows, err := pool.Query(sqlStr, id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	result, err := scanRows(rows)
-	if err != nil || len(result) == 0 {
-		return nil, err
-	}
-	return result[0], nil
+	return execFindById(d, table, pk, id)
 }
 
-// FindBy finds rows by table and condition.
 func (d *Dao) FindBy(table, whereOrField string, args ...interface{}) ([]*Row, error) {
-	query := buildSelectWhere(table, whereOrField)
-	pool, err := d.config.Pool()
-	if err != nil {
-		return nil, err
-	}
-	d.config.logSQL(query, args...)
-	rows, err := pool.Query(query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	return scanRows(rows)
+	return execFindByCondition(d, table, whereOrField, args)
 }
 
-// FindFirstBy finds the first row by condition.
 func (d *Dao) FindFirstBy(table, whereOrField string, args ...interface{}) (*Row, error) {
 	results, err := d.FindBy(table, whereOrField, args...)
 	if err != nil || len(results) == 0 {
@@ -296,156 +103,62 @@ func (d *Dao) FindFirstBy(table, whereOrField string, args ...interface{}) (*Row
 	return results[0], nil
 }
 
-// FindAll finds all rows in a table.
 func (d *Dao) FindAll(table string) ([]*Row, error) {
-	return d.FindBy(table, "1=1")
+	return execFindAll(d, table)
 }
 
-// DeleteByID deletes a row by table and ID.
-func (d *Dao) DeleteByID(table string, id interface{}) (bool, error) {
-	return d.DeleteByIDWithPK(table, "id", id)
-}
-
-// DeleteByIDWithPK deletes by table, PK name, and ID.
-func (d *Dao) DeleteByIDWithPK(table, pk string, id interface{}) (bool, error) {
-	pool, err := d.config.Pool()
-	if err != nil {
-		return false, err
-	}
-	sqlStr := d.config.Dialect.ForDeleteByID(table, []string{pk})
-	d.config.logSQL(sqlStr, id)
-	result, err := pool.Exec(sqlStr, id)
-	if err != nil {
-		return false, err
-	}
-	n, _ := result.RowsAffected()
-	return n > 0, nil
-}
-
-// DeleteBy deletes rows by condition.
-func (d *Dao) DeleteBy(table, whereOrField string, args ...interface{}) (int64, error) {
-	var query string
-	var execArgs []interface{}
-	if strings.Contains(whereOrField, " ") {
-		query = fmt.Sprintf("DELETE FROM %s WHERE %s", table, whereOrField)
-		execArgs = args
-	} else {
-		query = fmt.Sprintf("DELETE FROM %s WHERE %s = ?", table, whereOrField)
-		execArgs = args
-	}
-	pool, err := d.config.Pool()
-	if err != nil {
-		return 0, err
-	}
-	d.config.logSQL(query, execArgs...)
-	result, err := pool.Exec(query, execArgs...)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-// Count counts all rows in a table.
-func (d *Dao) Count(table string) (int64, error) {
-	pool, err := d.config.Pool()
-	if err != nil {
-		return 0, err
-	}
-	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", table)
-	d.config.logSQL(query)
-	var count int64
-	err = pool.QueryRow(query).Scan(&count)
-	return count, err
-}
-
-// CountBy counts rows by condition.
-func (d *Dao) CountBy(table, whereOrField string, args ...interface{}) (int64, error) {
-	var query string
-	var queryArgs []interface{}
-	if strings.Contains(whereOrField, " ") {
-		query = fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s", table, whereOrField)
-		queryArgs = args
-	} else {
-		query = fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s = ?", table, whereOrField)
-		queryArgs = args
-	}
-	pool, err := d.config.Pool()
-	if err != nil {
-		return 0, err
-	}
-	d.config.logSQL(query, queryArgs...)
-	var count int64
-	err = pool.QueryRow(query, queryArgs...).Scan(&count)
-	return count, err
-}
-
-// FindIn finds rows where field IN values.
 func (d *Dao) FindIn(table, field string, values ...interface{}) ([]*Row, error) {
-	placeholders := strings.Repeat("?, ", len(values)-1) + "?"
-	query := fmt.Sprintf("SELECT * FROM %s WHERE %s IN (%s)", table, field, placeholders)
-	pool, err := d.config.Pool()
-	if err != nil {
-		return nil, err
-	}
-	d.config.logSQL(query, values...)
-	rows, err := pool.Query(query, values...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	return scanRows(rows)
+	return execFindIn(d, table, field, values)
 }
 
-// DeleteIn deletes rows where field IN values.
+func (d *Dao) Paginate(pageNum, pageSize int) (*Page, error) {
+	return execPaginate(d, pageNum, pageSize)
+}
+
+// ---- DML methods ----
+
+func (d *Dao) Update() (int64, error) {
+	return execSqlUpdate(d)
+}
+
+func (d *Dao) InsertRow(row *Row) (*Row, error) {
+	return execInsertRow(d, row)
+}
+
+func (d *Dao) InsertOrUpdateRow(row *Row) (*Row, error) {
+	return execInsertOrUpdateRow(d, row)
+}
+
+func (d *Dao) UpdateRow(row *Row) (bool, error) {
+	return execUpdateRow(d, row)
+}
+
+func (d *Dao) DeleteRow(row *Row) (bool, error) {
+	return execDeleteRow(d, row)
+}
+
+func (d *Dao) DeleteByID(table string, id interface{}) (bool, error) {
+	return execDeleteById(d, table, "id", id)
+}
+
+func (d *Dao) DeleteByIDWithPK(table, pk string, id interface{}) (bool, error) {
+	return execDeleteById(d, table, pk, id)
+}
+
+func (d *Dao) DeleteBy(table, whereOrField string, args ...interface{}) (int64, error) {
+	return execDeleteBy(d, table, whereOrField, args)
+}
+
 func (d *Dao) DeleteIn(table, field string, values ...interface{}) (int64, error) {
-	placeholders := strings.Repeat("?, ", len(values)-1) + "?"
-	query := fmt.Sprintf("DELETE FROM %s WHERE %s IN (%s)", table, field, placeholders)
-	pool, err := d.config.Pool()
-	if err != nil {
-		return 0, err
-	}
-	d.config.logSQL(query, values...)
-	result, err := pool.Exec(query, values...)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
+	return execDeleteIn(d, table, field, values)
 }
 
-// ---- helpers ----
+// ---- Aggregation methods ----
 
-func scanRows(rows *sql.Rows) ([]*Row, error) {
-	cols, err := rows.Columns()
-	if err != nil {
-		return nil, err
-	}
-	var results []*Row
-	for rows.Next() {
-		values := make([]interface{}, len(cols))
-		for i := range values {
-			values[i] = new(interface{})
-		}
-		if err := rows.Scan(values...); err != nil {
-			return nil, err
-		}
-		data := make(map[string]interface{})
-		for i, col := range cols {
-			val := values[i]
-			if p, ok := val.(*interface{}); ok {
-				data[col] = *p
-			} else {
-				data[col] = val
-			}
-		}
-		row := &Row{data: data}
-		results = append(results, row)
-	}
-	return results, nil
+func (d *Dao) Count(table string) (int64, error) {
+	return execCount(d, table)
 }
 
-func buildSelectWhere(table, whereOrField string) string {
-	if strings.Contains(whereOrField, " ") {
-		return fmt.Sprintf("SELECT * FROM %s WHERE %s", table, whereOrField)
-	}
-	return fmt.Sprintf("SELECT * FROM %s WHERE %s = ?", table, whereOrField)
+func (d *Dao) CountBy(table, whereOrField string, args ...interface{}) (int64, error) {
+	return execCountBy(d, table, whereOrField, args)
 }
