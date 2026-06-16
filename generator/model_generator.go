@@ -33,7 +33,7 @@ func (g *ModelGenerator) Generate(engine *Engine, info *TableInfo, outputDir str
 		return fmt.Errorf("create dir %s: %w", pkgDir, err)
 	}
 
-	fileName := info.PkgName + ".go"
+	fileName := "model.go"
 	target := filepath.Join(pkgDir, fileName)
 
 	// Skip if file exists — user may have added custom logic

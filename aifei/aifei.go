@@ -49,46 +49,41 @@ func (a *Aifei) Use(h ...Handler) {
 // ---- Route Registration ----
 
 // GET registers a GET route.
-func (a *Aifei) GET(path string, handlerFuncs ...HandlerFunc) {
-	a.router.GET(path, handlerFuncs...)
+func (a *Aifei) GET(path string, handlers ...HandlerFunc) {
+	a.router.GET(path, handlers...)
 }
 
 // POST registers a POST route.
-func (a *Aifei) POST(path string, handlerFuncs ...HandlerFunc) {
-	a.router.POST(path, handlerFuncs...)
+func (a *Aifei) POST(path string, handlers ...HandlerFunc) {
+	a.router.POST(path, handlers...)
 }
 
 // PUT registers a PUT route.
-func (a *Aifei) PUT(path string, handlerFuncs ...HandlerFunc) {
-	a.router.PUT(path, handlerFuncs...)
+func (a *Aifei) PUT(path string, handlers ...HandlerFunc) {
+	a.router.PUT(path, handlers...)
 }
 
 // DELETE registers a DELETE route.
-func (a *Aifei) DELETE(path string, handlerFuncs ...HandlerFunc) {
-	a.router.DELETE(path, handlerFuncs...)
+func (a *Aifei) DELETE(path string, handlers ...HandlerFunc) {
+	a.router.DELETE(path, handlers...)
 }
 
 // PATCH registers a PATCH route.
-func (a *Aifei) PATCH(path string, handlerFuncs ...HandlerFunc) {
-	a.router.PATCH(path, handlerFuncs...)
+func (a *Aifei) PATCH(path string, handlers ...HandlerFunc) {
+	a.router.PATCH(path, handlers...)
 }
 
 // Any registers a route for all HTTP methods.
-func (a *Aifei) Any(path string, handlerFuncs ...HandlerFunc) {
-	a.router.Any(path, handlerFuncs...)
+func (a *Aifei) Any(path string, handlers ...HandlerFunc) {
+	a.router.Any(path, handlers...)
 }
 
 // Handle registers a route for the given method and path.
-func (a *Aifei) Handle(method, path string, handlerFuncs ...HandlerFunc) {
-	a.router.Handle(method, path, handlerFuncs...)
+func (a *Aifei) Handle(method, path string, handlers ...HandlerFunc) {
+	a.router.Handle(method, path, handlers...)
 }
 
 // Group creates a RouterGroup with shared prefix and handlers.
 func (a *Aifei) Group(prefix string, handlers ...Handler) *RouterGroup {
 	return a.router.Group(prefix, handlers...)
-}
-
-// Register registers all public methods of a service struct as routes.
-func (a *Aifei) Register(prefix string, service interface{}, handlers ...Handler) {
-	a.router.Register(prefix, service, handlers...)
 }

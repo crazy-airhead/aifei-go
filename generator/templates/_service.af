@@ -10,7 +10,15 @@ import (
 	"github.com/crazy-airhead/aifei-go/server"
 )
 
-const ServicePrefix = "#(apiPrefix)/#(pkgName)"
+const (
+	ServicePrefix = "#(apiPrefix)/#(pkgName)"
+
+	// listSql is the Enjoy SQL template for List and Paginate.
+	// Query params are matched via #where/#and directives in queryConditions.
+	listSql = `SELECT * FROM #(tableName)
+#(queryConditions)
+ORDER BY #(pkName) DESC`
+)
 
 func init() {
 	server.RegisterService(ServicePrefix, &Service{})
@@ -18,11 +26,22 @@ func init() {
 
 type Service struct{}
 
-// List returns a paginated list.
+// List returns records matching query params (no pagination).
 func (s *Service) List(in aifei.Input) aifei.Output {
+	filter := in.GetMap()
+	rows, err := db.Sql(listSql, filter).Find()
+	if err != nil {
+		return server.Fail(err.Error())
+	}
+	return server.Of(rows)
+}
+
+// Paginate returns paginated records matching query params.
+func (s *Service) Paginate(in aifei.Input) aifei.Output {
 	pageNum := in.GetIntDefault("page", 1)
 	pageSize := in.GetIntDefault("size", 10)
-	page, err := db.SQL("SELECT * FROM #(tableName) ORDER BY #(pkName) DESC").Paginate(pageNum, pageSize)
+	filter := in.GetMap()
+	page, err := db.Sql(listSql, filter).Paginate(pageNum, pageSize)
 	if err != nil {
 		return server.Fail(err.Error())
 	}

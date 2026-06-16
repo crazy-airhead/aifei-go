@@ -24,6 +24,6 @@ func ServiceRegistrations() []ServiceRegistration {
 // AutoRegisterServices registers all services from the global registry into the app.
 func AutoRegisterServices(app *aifei.Aifei, handlers ...aifei.Handler) {
 	for _, reg := range serviceRegistry {
-		app.Register(reg.Prefix, reg.Service, handlers...)
+		Register(app.Router(), reg.Prefix, reg.Service, handlers...)
 	}
 }

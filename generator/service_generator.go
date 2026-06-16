@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 //go:embed templates/_service.af
@@ -61,15 +62,38 @@ func (g *ServiceGenerator) buildData(info *TableInfo) map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"apiPrefix":    g.APIPrefix,
-		"pkgName":      info.PkgName,
-		"structName":   info.StructName,
-		"tableName":    info.Name,
-		"pkName":       pkName,
-		"hasSinglePK":  hasSinglePK,
-		"pkParamParse": buildPKParamParse(pkGoType),
-		"needStrconv":  pkGoType == "int" || pkGoType == "int64" || pkGoType == "int32" || pkGoType == "int16" || pkGoType == "int8",
+		"apiPrefix":       g.APIPrefix,
+		"pkgName":         info.PkgName,
+		"structName":      info.StructName,
+		"tableName":       info.Name,
+		"pkName":          pkName,
+		"hasSinglePK":     hasSinglePK,
+		"pkParamParse":    buildPKParamParse(pkGoType),
+		"needStrconv":     pkGoType == "int" || pkGoType == "int64" || pkGoType == "int32" || pkGoType == "int16" || pkGoType == "int8",
+		"queryConditions": buildQueryConditions(info, info.PrimaryKey),
 	}
+}
+
+func buildQueryConditions(info *TableInfo, primaryKeys []string) string {
+	pkSet := make(map[string]bool)
+	for _, pk := range primaryKeys {
+		pkSet[pk] = true
+	}
+
+	var parts []string
+	first := true
+	for _, f := range info.Fields {
+		if pkSet[f.Name] {
+			continue
+		}
+		if first {
+			parts = append(parts, fmt.Sprintf("#where(%s, '=', %s)", f.Name, f.Name))
+			first = false
+		} else {
+			parts = append(parts, fmt.Sprintf("#and(%s, '=', %s)", f.Name, f.Name))
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 // buildPKParamParse generates Go code to parse a PK value from c.Param("id").

@@ -171,6 +171,17 @@ func (c *HttpContext) Body() []byte {
 
 func (c *HttpContext) Query() url.Values { return c.Request.URL.Query() }
 
+func (c *HttpContext) GetMap() map[string]interface{} {
+	q := c.Query()
+	m := make(map[string]interface{}, len(q))
+	for k, v := range q {
+		if len(v) > 0 {
+			m[k] = v[0]
+		}
+	}
+	return m
+}
+
 func (c *HttpContext) getVal(key string) string {
 	if v := c.Request.URL.Query().Get(key); v != "" {
 		return v

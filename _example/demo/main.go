@@ -16,7 +16,7 @@ import (
 func main() {
 	// Init database
 	err := db.Init("sqlite", "./demo.db", db.WithPrinter(func(sql string, args ...interface{}) {
-		fmt.Printf("[SQL] %s %v\n", sql, args)
+		fmt.Println(sql)
 	}))
 	if err != nil {
 		panic(err)
@@ -58,7 +58,7 @@ func main() {
 	})
 
 	// Start with HTTP-level middleware
-	server.Run(app, ":8080",
+	server.Run(app, ":8081",
 		server.WithCORS("*"),
 		//server.WithBasicAuth(func(u, p string) bool {
 		//	// Note: This protects ALL routes. To protect only /api/admin,

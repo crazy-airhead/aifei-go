@@ -1,5 +1,10 @@
 package sql
 
+import "regexp"
+
+// blankLineRe matches lines that are empty or contain only whitespace.
+var blankLineRe = regexp.MustCompile(`\n\s*\n`)
+
 // SqlPara holds a SQL statement and its parameters.
 type SqlPara struct {
 	ID    string
@@ -19,9 +24,9 @@ func (s *SqlPara) SetID(id string) *SqlPara {
 	return s
 }
 
-// SetSql sets the SQL string.
+// SetSql sets the SQL string, collapsing consecutive blank lines.
 func (s *SqlPara) SetSql(sql string) *SqlPara {
-	s.Sql = sql
+	s.Sql = blankLineRe.ReplaceAllString(sql, "\n")
 	return s
 }
 

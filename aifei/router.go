@@ -1,9 +1,6 @@
 package aifei
 
-import (
-	"reflect"
-	"strings"
-)
+import "strings"
 
 // Router manages route registration and matching using a radix tree per HTTP method.
 type Router struct {
@@ -87,98 +84,6 @@ func (r *Router) Group(prefix string, handlers ...Handler) *RouterGroup {
 		prefix:   prefix,
 		handlers: handlers,
 		router:   r,
-	}
-}
-
-// Register registers all public methods of a service struct as routes.
-// Method name prefix determines HTTP method:
-//   - Get*/List* → GET
-//   - Post*/Save*/Create* → POST
-//   - Put*/Update* → PUT
-//   - Delete*/Remove* → DELETE
-//
-// "ById" suffix maps to "/:id" path parameter.
-func (r *Router) Register(prefix string, service interface{}, handlers ...Handler) {
-	t := reflect.TypeOf(service)
-	v := reflect.ValueOf(service)
-	prefix = strings.TrimRight(prefix, "/")
-
-	// Extract method-level interceptors
-	var methodInterceptors map[string][]Interceptor
-	if provider, ok := service.(MethodInterceptors); ok {
-		methodInterceptors = provider.MethodInterceptors()
-	}
-
-	for i := 0; i < t.NumMethod(); i++ {
-		method := t.Method(i)
-		name := method.Name
-
-		httpMethod := "POST"
-		pathSuffix := camelToPath(name)
-
-		switch {
-		case strings.HasPrefix(name, "List"):
-			httpMethod = "GET"
-		case strings.HasPrefix(name, "Get"):
-			httpMethod = "GET"
-			pathSuffix = camelToPath(name[3:])
-		case strings.HasPrefix(name, "Delete"):
-			httpMethod = "DELETE"
-			pathSuffix = camelToPath(name[6:])
-		case strings.HasPrefix(name, "Remove"):
-			httpMethod = "DELETE"
-			pathSuffix = camelToPath(name[6:])
-		case strings.HasPrefix(name, "Update"):
-			httpMethod = "PUT"
-			pathSuffix = camelToPath(name[6:])
-		case strings.HasPrefix(name, "Put"):
-			httpMethod = "PUT"
-			pathSuffix = camelToPath(name[3:])
-		case strings.HasPrefix(name, "Post"):
-			pathSuffix = camelToPath(name[4:])
-		case strings.HasPrefix(name, "Save"):
-			pathSuffix = camelToPath(name[4:])
-		case strings.HasPrefix(name, "Create"):
-			pathSuffix = camelToPath(name[6:])
-		}
-
-		pathSuffix = strings.Replace(pathSuffix, "by-id", ":id", 1)
-
-		path := prefix
-		if pathSuffix != "" {
-			path = prefix + "/" + pathSuffix
-		}
-
-		m := handlers
-		handler := func(in Input) Output {
-			// Build the method invocation chain with interceptors
-			invoke := func() Output {
-				results := v.MethodByName(method.Name).Call([]reflect.Value{reflect.ValueOf(in)})
-				if len(results) == 0 || !results[0].IsValid() {
-					return nil
-				}
-				out, _ := results[0].Interface().(Output)
-				return out
-			}
-
-			if inters, ok := methodInterceptors[name]; ok {
-				for i := len(inters) - 1; i >= 0; i-- {
-					ic := inters[i]
-					next := invoke
-					invoke = func() Output {
-						return ic.Intercept(name, in, next)
-					}
-				}
-			}
-
-			return invoke()
-		}
-
-		for j := len(m) - 1; j >= 0; j-- {
-			handler = m[j](handler)
-		}
-
-		r.Handle(httpMethod, path, handler)
 	}
 }
 
@@ -356,22 +261,6 @@ func commonPrefix(a, b string) int {
 		i++
 	}
 	return i
-}
-
-// camelToPath converts CamelCase to kebab-case path segment.
-func camelToPath(s string) string {
-	var result []byte
-	for i, r := range s {
-		if r >= 'A' && r <= 'Z' {
-			if i > 0 {
-				result = append(result, '-')
-			}
-			result = append(result, byte(r+32))
-		} else {
-			result = append(result, byte(r))
-		}
-	}
-	return string(result)
 }
 
 // ---- RouterGroup ----

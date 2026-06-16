@@ -35,4 +35,5 @@ type Input interface {
 	Path() string
 	RemoteIP() string
 	Query() url.Values
+	GetMap() map[string]interface{}
 }

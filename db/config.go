@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	dbsql "github.com/crazy-airhead/aifei-go/db/sql"
@@ -148,9 +149,14 @@ func ResetConfigs() {
 	configs = map[string]*Config{}
 }
 
-// logSQL logs SQL if printer is set.
+// logSQL logs SQL and params if printer is set.
 func (c *Config) logSQL(sql string, args ...interface{}) {
-	if c.Printer != nil {
-		c.Printer(sql, args...)
+	if c.Printer == nil {
+		return
+	}
+	sql = strings.Join(strings.Fields(sql), " ")
+	c.Printer(fmt.Sprintf("[SQL]  %s", sql))
+	if len(args) > 0 {
+		c.Printer(fmt.Sprintf("[PARAM] %v", args))
 	}
 }

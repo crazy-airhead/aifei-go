@@ -170,7 +170,7 @@ func TestGenerator_Generate(t *testing.T) {
 	expectedFiles := []string{
 		"tables.go",
 		"user/base.go",
-		"user/user.go",
+		"user/model.go",
 		"user/dao.go",
 		"user/service.go",
 	}

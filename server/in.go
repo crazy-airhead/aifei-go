@@ -217,6 +217,18 @@ func (in *In) Query() url.Values {
 	return in.Request.URL.Query()
 }
 
+// GetMap returns query parameters as map[string]interface{} for Enjoy SQL templates.
+func (in *In) GetMap() map[string]interface{} {
+	q := in.Query()
+	m := make(map[string]interface{}, len(q))
+	for k, v := range q {
+		if len(v) > 0 {
+			m[k] = v[0]
+		}
+	}
+	return m
+}
+
 // ---- Internal helpers ----
 
 func (in *In) getVal(key string) string {
