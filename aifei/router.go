@@ -103,6 +103,12 @@ func (r *Router) Register(prefix string, service interface{}, middlewares ...Mid
 	v := reflect.ValueOf(service)
 	prefix = strings.TrimRight(prefix, "/")
 
+	// Extract method-level interceptors
+	var methodInterceptors map[string][]Interceptor
+	if provider, ok := service.(MethodInterceptors); ok {
+		methodInterceptors = provider.MethodInterceptors()
+	}
+
 	for i := 0; i < t.NumMethod(); i++ {
 		method := t.Method(i)
 		name := method.Name
@@ -145,12 +151,27 @@ func (r *Router) Register(prefix string, service interface{}, middlewares ...Mid
 
 		m := middlewares
 		handler := func(in Input) Output {
-			results := v.MethodByName(method.Name).Call([]reflect.Value{reflect.ValueOf(in)})
-			if len(results) == 0 || !results[0].IsValid() {
-				return nil
+			// Build the method invocation chain with interceptors
+			invoke := func() Output {
+				results := v.MethodByName(method.Name).Call([]reflect.Value{reflect.ValueOf(in)})
+				if len(results) == 0 || !results[0].IsValid() {
+					return nil
+				}
+				out, _ := results[0].Interface().(Output)
+				return out
 			}
-			out, _ := results[0].Interface().(Output)
-			return out
+
+			if inters, ok := methodInterceptors[name]; ok {
+				for i := len(inters) - 1; i >= 0; i-- {
+					ic := inters[i]
+					next := invoke
+					invoke = func() Output {
+						return ic.Intercept(name, in, next)
+					}
+				}
+			}
+
+			return invoke()
 		}
 
 		for j := len(m) - 1; j >= 0; j-- {

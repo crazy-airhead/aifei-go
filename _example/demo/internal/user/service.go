@@ -1,6 +1,7 @@
 package user
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/crazy-airhead/aifei-go"
@@ -12,6 +13,24 @@ const ServicePrefix = "/user"
 
 func init() {
 	server.RegisterService(ServicePrefix, &Service{})
+}
+
+// MethodInterceptors returns per-method interceptors for this service.
+// Interceptors wrap individual method invocations (method-level AOP).
+func (s *Service) MethodInterceptors() map[string][]aifei.Interceptor {
+	return map[string][]aifei.Interceptor{
+		"Create":     {server.TxInterceptor(), logInterceptor("Create")},
+		"UpdateById": {logInterceptor("UpdateById")},
+	}
+}
+
+func logInterceptor(name string) aifei.Interceptor {
+	return aifei.InterceptorFunc(func(method string, in aifei.Input, invoke func() aifei.Output) aifei.Output {
+		fmt.Printf("[INTERCEPTOR] %s called\n", name)
+		out := invoke()
+		fmt.Printf("[INTERCEPTOR] %s → code=%d\n", name, out.Code())
+		return out
+	})
 }
 
 type Service struct{}
