@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	dbsql "github.com/crazy-airhead/aifei-go/db/sql"
 )
@@ -708,6 +709,11 @@ func execForEach(dao *Dao, fn func(*Row) bool) error {
 	if err != nil {
 		return err
 	}
+	colTypes, _ := rows.ColumnTypes()
+	isBinary := make([]bool, len(colTypes))
+	for i, ct := range colTypes {
+		isBinary[i] = isBinaryColumnType(ct.DatabaseTypeName())
+	}
 	var rowList []*Row
 	for rows.Next() {
 		values := make([]interface{}, len(cols))
@@ -721,7 +727,11 @@ func execForEach(dao *Dao, fn func(*Row) bool) error {
 		for i, col := range cols {
 			val := values[i]
 			if p, ok := val.(*interface{}); ok {
-				data[col] = *p
+				if isBinary[i] {
+					data[col] = *p
+				} else {
+					data[col] = bytesToStr(*p)
+				}
 			} else {
 				data[col] = val
 			}
@@ -963,6 +973,11 @@ func scanRows(rows *sql.Rows) ([]*Row, error) {
 	if err != nil {
 		return nil, err
 	}
+	colTypes, _ := rows.ColumnTypes()
+	isBinary := make([]bool, len(colTypes))
+	for i, ct := range colTypes {
+		isBinary[i] = isBinaryColumnType(ct.DatabaseTypeName())
+	}
 	var results []*Row
 	for rows.Next() {
 		values := make([]interface{}, len(cols))
@@ -976,7 +991,11 @@ func scanRows(rows *sql.Rows) ([]*Row, error) {
 		for i, col := range cols {
 			val := values[i]
 			if p, ok := val.(*interface{}); ok {
-				data[col] = *p
+				if isBinary[i] {
+					data[col] = *p
+				} else {
+					data[col] = bytesToStr(*p)
+				}
 			} else {
 				data[col] = val
 			}
@@ -985,4 +1004,25 @@ func scanRows(rows *sql.Rows) ([]*Row, error) {
 		results = append(results, row)
 	}
 	return results, nil
+}
+
+// bytesToStr converts []byte to string to avoid Base64 encoding in JSON serialization.
+// MySQL driver returns []byte for string columns when scanning into interface{}.
+func bytesToStr(v interface{}) interface{} {
+	if b, ok := v.([]byte); ok {
+		return string(b)
+	}
+	return v
+}
+
+// isBinaryColumnType returns true for database column types that store binary data.
+// BLOBs and BINARY types should remain as []byte, not be converted to string.
+func isBinaryColumnType(dbType string) bool {
+	switch strings.ToUpper(dbType) {
+	case "BLOB", "TINYBLOB", "MEDIUMBLOB", "LONGBLOB",
+		"BINARY", "VARBINARY", "BIT",
+		"BYTEA":
+		return true
+	}
+	return false
 }

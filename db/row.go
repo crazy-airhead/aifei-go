@@ -289,6 +289,9 @@ func (r *Row) GetBytes(field string) []byte {
 	if b, ok := v.([]byte); ok {
 		return b
 	}
+	if s, ok := v.(string); ok {
+		return []byte(s)
+	}
 	return nil
 }
 
