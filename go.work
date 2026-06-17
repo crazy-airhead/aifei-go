@@ -11,4 +11,5 @@ use (
 	./server
 	./_example/demo
 	./_example/db_sqlite_test
+	./_example/enjoy_test
 )

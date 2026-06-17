@@ -1,12 +1,14 @@
-package enjoy
+package enjoy_test
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/crazy-airhead/aifei-go/enjoy"
 )
 
 func TestTextTemplate(t *testing.T) {
-	engine := NewEngine("test1")
+	engine := enjoy.NewEngine("test1")
 	tpl := engine.GetTemplateByString("Hello, World!")
 	result := tpl.RenderToString(nil)
 	if result != "Hello, World!" {
@@ -15,7 +17,7 @@ func TestTextTemplate(t *testing.T) {
 }
 
 func TestOutputExpr(t *testing.T) {
-	engine := NewEngine("test2")
+	engine := enjoy.NewEngine("test2")
 	tpl := engine.GetTemplateByString("Hello, #(name)!")
 	result := tpl.RenderToString(map[string]interface{}{"name": "Aifei"})
 	if result != "Hello, Aifei!" {
@@ -24,7 +26,7 @@ func TestOutputExpr(t *testing.T) {
 }
 
 func TestIfStat(t *testing.T) {
-	engine := NewEngine("test3")
+	engine := enjoy.NewEngine("test3")
 	tpl := engine.GetTemplateByString("#if (show)visible#end")
 	result := tpl.RenderToString(map[string]interface{}{"show": true})
 	if result != "visible" {
@@ -38,7 +40,7 @@ func TestIfStat(t *testing.T) {
 }
 
 func TestForStat(t *testing.T) {
-	engine := NewEngine("test4")
+	engine := enjoy.NewEngine("test4")
 	tpl := engine.GetTemplateByString("#for(item : items)#(item) #end")
 	result := tpl.RenderToString(map[string]interface{}{
 		"items": []interface{}{"a", "b", "c"},
@@ -49,7 +51,7 @@ func TestForStat(t *testing.T) {
 }
 
 func TestSetStat(t *testing.T) {
-	engine := NewEngine("test5")
+	engine := enjoy.NewEngine("test5")
 	tpl := engine.GetTemplateByString("#set(x = 42)#(x)")
 	result := tpl.RenderToString(nil)
 	if result != "42" {
@@ -58,7 +60,7 @@ func TestSetStat(t *testing.T) {
 }
 
 func TestArithExpr(t *testing.T) {
-	engine := NewEngine("test6")
+	engine := enjoy.NewEngine("test6")
 	tpl := engine.GetTemplateByString("#(1 + 2 * 3)")
 	result := tpl.RenderToString(nil)
 	if result != "7" {
@@ -67,7 +69,7 @@ func TestArithExpr(t *testing.T) {
 }
 
 func TestCompareExpr(t *testing.T) {
-	engine := NewEngine("test7")
+	engine := enjoy.NewEngine("test7")
 	tpl := engine.GetTemplateByString("#if(age > 18)adult#end")
 	result := tpl.RenderToString(map[string]interface{}{"age": 20})
 	if result != "adult" {
@@ -80,7 +82,7 @@ func TestCompareExpr(t *testing.T) {
 }
 
 func TestLogicExpr(t *testing.T) {
-	engine := NewEngine("test8")
+	engine := enjoy.NewEngine("test8")
 	tpl := engine.GetTemplateByString("#if(a && b)both#elseone#end")
 	result := tpl.RenderToString(map[string]interface{}{"a": true, "b": true})
 	if result != "both" {
@@ -89,7 +91,7 @@ func TestLogicExpr(t *testing.T) {
 }
 
 func TestTernaryExpr(t *testing.T) {
-	engine := NewEngine("test9")
+	engine := enjoy.NewEngine("test9")
 	tpl := engine.GetTemplateByString("#(ok ? 'yes' : 'no')")
 	result := tpl.RenderToString(map[string]interface{}{"ok": true})
 	if result != "yes" {
@@ -98,7 +100,7 @@ func TestTernaryExpr(t *testing.T) {
 }
 
 func TestFieldAccess(t *testing.T) {
-	engine := NewEngine("test10")
+	engine := enjoy.NewEngine("test10")
 	tpl := engine.GetTemplateByString("#(user.name)")
 	result := tpl.RenderToString(map[string]interface{}{
 		"user": map[string]interface{}{"name": "james"},
@@ -109,7 +111,7 @@ func TestFieldAccess(t *testing.T) {
 }
 
 func TestArrayAccess(t *testing.T) {
-	engine := NewEngine("test11")
+	engine := enjoy.NewEngine("test11")
 	tpl := engine.GetTemplateByString("#(items[0])")
 	result := tpl.RenderToString(map[string]interface{}{
 		"items": []interface{}{"first", "second"},
@@ -120,7 +122,7 @@ func TestArrayAccess(t *testing.T) {
 }
 
 func TestComment(t *testing.T) {
-	engine := NewEngine("test12")
+	engine := enjoy.NewEngine("test12")
 	tpl := engine.GetTemplateByString("before### this is a comment\nafter")
 	result := tpl.RenderToString(nil)
 	if !strings.Contains(result, "before") || !strings.Contains(result, "after") {
@@ -132,7 +134,7 @@ func TestComment(t *testing.T) {
 }
 
 func TestRawBlock(t *testing.T) {
-	engine := NewEngine("test13")
+	engine := enjoy.NewEngine("test13")
 	tpl := engine.GetTemplateByString("#[[#(not_parsed)]]#")
 	result := tpl.RenderToString(nil)
 	if result != "#(not_parsed)" {
@@ -141,7 +143,7 @@ func TestRawBlock(t *testing.T) {
 }
 
 func TestDefineAndCall(t *testing.T) {
-	engine := NewEngine("test14")
+	engine := enjoy.NewEngine("test14")
 	tpl := engine.GetTemplateByString("#define(greet(name))Hello #(name)#end#call greet('Aifei')")
 	result := tpl.RenderToString(nil)
 	if !strings.Contains(result, "Hello Aifei") {
@@ -150,7 +152,7 @@ func TestDefineAndCall(t *testing.T) {
 }
 
 func TestNestedForInIf(t *testing.T) {
-	engine := NewEngine("test-nested")
+	engine := enjoy.NewEngine("test-nested")
 	data := map[string]interface{}{
 		"show": true,
 		"items": []map[string]interface{}{
@@ -166,7 +168,7 @@ func TestNestedForInIf(t *testing.T) {
 }
 
 func TestSwitchBasic(t *testing.T) {
-	engine := NewEngine("test-switch")
+	engine := enjoy.NewEngine("test-switch")
 	tpl := engine.GetTemplateByString(`#switch(x)
 #case(1)
 one
@@ -187,7 +189,7 @@ other
 }
 
 func TestSwitchMultiValue(t *testing.T) {
-	engine := NewEngine("test-switch-multi")
+	engine := enjoy.NewEngine("test-switch-multi")
 	tpl := engine.GetTemplateByString(`#switch(x)
 #case(1, 3, 5)
 odd
@@ -208,7 +210,7 @@ other
 }
 
 func TestSwitchString(t *testing.T) {
-	engine := NewEngine("test-switch-str")
+	engine := enjoy.NewEngine("test-switch-str")
 	tpl := engine.GetTemplateByString(`#switch(x)
 #case('a')
 alpha
@@ -229,7 +231,7 @@ other
 }
 
 func TestSwitchNoDefault(t *testing.T) {
-	engine := NewEngine("test-switch-nodef")
+	engine := enjoy.NewEngine("test-switch-nodef")
 	tpl := engine.GetTemplateByString(`#switch(x)
 #case(1)
 one
@@ -243,11 +245,10 @@ one
 }
 
 func TestInclude(t *testing.T) {
-	engine := NewEngine("test-include")
+	engine := enjoy.NewEngine("test-include")
 	engine.SetBaseTemplatePath("testdata")
 	engine.SetDevMode(true)
 
-	// Pre-compile the sub-template
 	subTpl := engine.GetTemplate("testdata/_sub.html")
 	if strings.Contains(subTpl.RenderToString(nil), "error") {
 		t.Skip("testdata/_sub.html not found, skipping include test")
@@ -261,7 +262,7 @@ func TestInclude(t *testing.T) {
 }
 
 func TestNestedIfInFor(t *testing.T) {
-	engine := NewEngine("test-nested2")
+	engine := enjoy.NewEngine("test-nested2")
 	data := map[string]interface{}{
 		"items": []map[string]interface{}{
 			{"val": 1},
