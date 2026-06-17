@@ -131,6 +131,10 @@ func (d *Dao) Paginate(pageNum, pageSize int) (*Page, error) {
 	return execPaginate(d, pageNum, pageSize)
 }
 
+func (d *Dao) PaginateWithTotalRows(pageNum, pageSize int, totalRowsFn func(sqlPara *dbsql.SqlPara, defaultQuery func() (int64, error)) (int64, error)) (*Page, error) {
+	return execPaginateWithTotalRows(d, pageNum, pageSize, totalRowsFn)
+}
+
 // ---- DML methods ----
 
 func (d *Dao) Update() (int64, error) {
@@ -263,6 +267,14 @@ func (d *Dao) QueryFloat64() (float64, error) {
 		return 0, err
 	}
 	return ToFloat64(v), nil
+}
+
+func (d *Dao) QueryTime() (interface{}, error) {
+	return execQueryTime(d)
+}
+
+func (d *Dao) QueryBytes() ([]byte, error) {
+	return execQueryBytes(d)
 }
 
 func (d *Dao) QueryBool() (bool, error) {

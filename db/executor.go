@@ -406,6 +406,89 @@ func execPaginate(dao *Dao, pageNum, pageSize int) (*Page, error) {
 	return page, nil
 }
 
+// execPaginateWithTotalRows executes a paginated query with a custom totalRows function.
+// The totalRowsFn receives the count SqlPara and a defaultQuery closure for the standard COUNT.
+// Use cases: cache totalRows in Redis, or provide custom COUNT SQL for complex ORDER BY.
+func execPaginateWithTotalRows(dao *Dao, pageNum, pageSize int, totalRowsFn func(sqlPara *dbsql.SqlPara, defaultQuery func() (int64, error)) (int64, error)) (*Page, error) {
+	if pageNum < 1 || pageSize < 1 {
+		return nil, fmt.Errorf("pageNum and pageSize must be greater than 0")
+	}
+
+	config := dao.config
+	dialect := config.Dialect
+	hk := config.GetDbHookKit()
+	query, args := dao.sqlAndArgs()
+
+	countSQL := dialect.ForCountSubquery(query)
+	countSP := &dbsql.SqlPara{Sql: countSQL, Paras: args}
+
+	defaultQuery := func() (int64, error) {
+		pool, err := config.Pool()
+		if err != nil {
+			return 0, err
+		}
+		config.logSQL(countSQL, args...)
+		var total int64
+		if err := pool.QueryRow(countSQL, args...).Scan(&total); err != nil {
+			return 0, err
+		}
+		return total, nil
+	}
+
+	var toAfterCount interface{}
+	if hk != nil && hk.PaginateHook != nil {
+		toAfterCount = hk.PaginateHook.BeforeQueryTotalRows(dao, countSP)
+	}
+
+	totalRows, err := totalRowsFn(countSP, defaultQuery)
+	if err != nil {
+		return nil, err
+	}
+
+	if hk != nil && hk.PaginateHook != nil {
+		hk.PaginateHook.AfterQueryTotalRows(dao, totalRows, toAfterCount)
+	}
+
+	if totalRows == 0 {
+		return NewPage(pageNum, pageSize, 0, nil), nil
+	}
+
+	paginateSQL := dialect.ForPaginate(query, pageNum, pageSize)
+	dataSP := &dbsql.SqlPara{Sql: paginateSQL, Paras: args}
+	dao.setSqlPara(dataSP)
+
+	var toAfterPage interface{}
+	if hk != nil && hk.PaginateHook != nil {
+		toAfterPage = hk.PaginateHook.BeforePaginate(dao, pageNum, pageSize, totalRows, dataSP)
+		if sp := dao.sqlPara; sp != nil {
+			paginateSQL = sp.Sql
+			args = sp.Paras
+		}
+	}
+
+	pool, err := config.Pool()
+	if err != nil {
+		return nil, err
+	}
+	config.logSQL(paginateSQL, args...)
+	rows, err := pool.Query(paginateSQL, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result, err := scanRows(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	page := NewPage(pageNum, pageSize, totalRows, result)
+	if hk != nil && hk.PaginateHook != nil {
+		hk.PaginateHook.AfterPaginate(dao, page, toAfterPage)
+	}
+	return page, nil
+}
+
 // ---- Higher-level executors (SQL building + delegation) ----
 
 // execInsertOrUpdateRow handles INSERT OR UPDATE for a Row with InsertHook.
@@ -797,6 +880,23 @@ func execQueryOne(dao *Dao, allowNull bool) (interface{}, error) {
 	default:
 		return nil, fmt.Errorf("expected one or zero result, but found %d. Consider using QueryFirst instead", len(result))
 	}
+}
+
+// execQueryTime returns the first field as time.Time.
+func execQueryTime(dao *Dao) (interface{}, error) {
+	return execQueryField(dao)
+}
+
+// execQueryBytes returns the first field as []byte.
+func execQueryBytes(dao *Dao) ([]byte, error) {
+	v, err := execQueryField(dao)
+	if err != nil || v == nil {
+		return nil, err
+	}
+	if b, ok := v.([]byte); ok {
+		return b, nil
+	}
+	return nil, fmt.Errorf("expected []byte, got %T", v)
 }
 
 // ---- ByID extensions ----
