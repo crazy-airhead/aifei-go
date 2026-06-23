@@ -1,6 +1,9 @@
 package aifei
 
-import "net/url"
+import (
+	"context"
+	"net/url"
+)
 
 // Input defines the interface for reading request parameters.
 // It abstracts the underlying server (net/http, fasthttp, etc.) so that
@@ -34,6 +37,9 @@ type Input interface {
 	Method() string
 	Path() string
 	RemoteIP() string
+	Header(name string) string
+	Cookie(name string) string
+	Context() context.Context
 	Query() url.Values
 	GetMap() map[string]interface{}
 }

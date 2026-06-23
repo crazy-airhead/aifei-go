@@ -1,6 +1,7 @@
 package gohttp
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net"
@@ -49,6 +50,26 @@ func (c *HttpContext) RemoteIP() string {
 		return c.Request.RemoteAddr
 	}
 	return host
+}
+
+// Header returns the first value of the named request header (case-insensitive), or "" if absent.
+func (c *HttpContext) Header(name string) string {
+	return c.Request.Header.Get(name)
+}
+
+// Cookie returns the value of the named cookie, or "" if it is not present.
+func (c *HttpContext) Cookie(name string) string {
+	ck, err := c.Request.Cookie(name)
+	if err != nil {
+		return ""
+	}
+	return ck.Value
+}
+
+// Context returns the request's context. It is cancelled when the client connection closes
+// or the request completes, so it is safe to pass to downstream calls (db, RPC) for cancellation.
+func (c *HttpContext) Context() context.Context {
+	return c.Request.Context()
 }
 
 func (c *HttpContext) Has(name string) bool {
