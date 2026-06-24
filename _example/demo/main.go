@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/crazy-airhead/aifei-go"
+	"github.com/crazy-airhead/aifei-go/aifei"
 	"github.com/crazy-airhead/aifei-go/db"
 	"github.com/crazy-airhead/aifei-go/server"
 

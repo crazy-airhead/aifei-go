@@ -1,6 +1,6 @@
 package server
 
-import "github.com/crazy-airhead/aifei-go"
+import "github.com/crazy-airhead/aifei-go/aifei"
 
 // ServiceRegistration holds a service instance and its route prefix.
 type ServiceRegistration struct {

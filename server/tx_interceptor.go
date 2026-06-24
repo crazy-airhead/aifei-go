@@ -1,7 +1,7 @@
 package server
 
 import (
-	"github.com/crazy-airhead/aifei-go"
+	"github.com/crazy-airhead/aifei-go/aifei"
 	"github.com/crazy-airhead/aifei-go/db"
 )
 

@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/crazy-airhead/aifei-go"
+	"github.com/crazy-airhead/aifei-go/aifei"
 	gohttp "github.com/crazy-airhead/aifei-go/go-http"
 )
 

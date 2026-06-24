@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/crazy-airhead/aifei-go"
+	"github.com/crazy-airhead/aifei-go/aifei"
 )
 
 // HttpHandler wraps an aifei.Aifei instance as an http.Handler.

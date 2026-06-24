@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/crazy-airhead/aifei-go"
+	"github.com/crazy-airhead/aifei-go/aifei"
 )
 
 // HTTPMeta is the HTTP-specific request metadata that goes beyond the

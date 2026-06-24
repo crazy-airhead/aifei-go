@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/crazy-airhead/aifei-go"
+	"github.com/crazy-airhead/aifei-go/aifei"
 )
 
 // defaultMethodMap defines exact-match method names and their HTTP methods.

@@ -3,7 +3,7 @@ package server
 import (
 	"fmt"
 
-	"github.com/crazy-airhead/aifei-go"
+	"github.com/crazy-airhead/aifei-go/aifei"
 )
 
 // OutCode values follow the Java aifei-vip-arch convention:
