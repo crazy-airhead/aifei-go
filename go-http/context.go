@@ -10,7 +10,20 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/crazy-airhead/aifei-go"
 )
+
+// HTTPMeta is the HTTP-specific request metadata that goes beyond the
+// transport-agnostic aifei.Meta: the HTTP method verb, the client address,
+// and cookies. HttpContext satisfies it; HTTP-aware code obtains it via a
+// type assertion on aifei.Input (e.g. an HTTP logger), so the core aifei.Input
+// stays free of HTTP concepts.
+type HTTPMeta interface {
+	Method() string
+	RemoteIP() string
+	Cookie(name string) string
+}
 
 // HttpContext implements aifei.Input by wrapping *http.Request.
 type HttpContext struct {
@@ -19,6 +32,15 @@ type HttpContext struct {
 	body     []byte
 	bodyRead bool
 }
+
+// Compile-time guarantees that *HttpContext satisfies the aifei contracts and
+// the HTTP-specific HTTPMeta extension.
+var (
+	_ aifei.Param = (*HttpContext)(nil)
+	_ aifei.Meta  = (*HttpContext)(nil)
+	_ aifei.Input = (*HttpContext)(nil)
+	_ HTTPMeta    = (*HttpContext)(nil)
+)
 
 // NewInput creates an HttpContext from an http.Request.
 func NewInput(r *http.Request) *HttpContext {

@@ -10,9 +10,11 @@ import (
 // In implements aifei.Input by embedding go-http.HttpContext.
 //
 // It reuses HttpContext's proven request-reading implementation instead of
-// duplicating it, keeping server a thin convenience layer over go-http. All
-// aifei.Input methods (Method, Path, GetStr, GetBean, Header, Cookie,
-// Context, ...) and SetParams are promoted from the embedded HttpContext.
+// duplicating it, keeping server a thin convenience layer over go-http. The
+// core aifei.Input contract (Param: GetStr/GetBean/...; Meta: Path/Header/
+// Context/Body), the HTTP-specific HttpContext methods (Method/RemoteIP/
+// Cookie, via gohttp.HTTPMeta), and SetParams are all promoted from the
+// embedded HttpContext.
 type In struct {
 	*gohttp.HttpContext
 }

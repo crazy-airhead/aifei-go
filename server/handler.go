@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/crazy-airhead/aifei-go"
+	gohttp "github.com/crazy-airhead/aifei-go/go-http"
 )
 
 // ---- Handler-level middleware (Input → Output) ----
@@ -20,7 +21,12 @@ func Logger() aifei.Handler {
 		return func(in aifei.Input) aifei.Output {
 			start := time.Now()
 			out := next(in)
-			fmt.Printf("[AIFEI] %s %s %d %s\n", in.Method(), in.Path(), out.Code(), time.Since(start).Round(time.Microsecond))
+			// Method is HTTP-specific, so it lives on gohttp.HTTPMeta, not core Input.
+			method := "-"
+			if h, ok := in.(gohttp.HTTPMeta); ok {
+				method = h.Method()
+			}
+			fmt.Printf("[AIFEI] %s %s %d %s\n", method, in.Path(), out.Code(), time.Since(start).Round(time.Microsecond))
 			return out
 		}
 	}

@@ -2,13 +2,24 @@ package aifei
 
 import (
 	"context"
-	"net/url"
 )
 
-// Input defines the interface for reading request parameters.
-// It abstracts the underlying server (net/http, fasthttp, etc.) so that
-// action methods don't depend on a specific transport layer.
-type Input interface {
+// Input is the interface for reading a request. It is the union of two
+// contracts:
+//
+//   - Param: transport-agnostic parameter reading (the part any request
+//     source — HTTP, a test fixture, a programmatic call — can satisfy).
+//   - Meta:  transport-agnostic request metadata (context, header, path,
+//     body).
+//
+// Splitting them lets code depend on the narrow Param when it only needs
+// parameters, and keeps HTTP-specific notions (method verb, remote address,
+// cookies) off this interface — those live on the HTTP adapter. This mirrors
+// Java, where the core Input carries only parameter reading and the
+// HTTP-bound In class adds the rest.
+
+// Param is the transport-agnostic contract for reading request parameters.
+type Param interface {
 	// Parameter existence
 	Has(name string) bool
 
@@ -29,17 +40,25 @@ type Input interface {
 	GetBool(key string) bool
 	GetBoolDefault(key string, def bool) bool
 
-	// Bean / raw body
+	// Bean / structured parameters
 	GetBean(obj interface{}) error
-	Body() []byte
-
-	// Request metadata
-	Method() string
-	Path() string
-	RemoteIP() string
-	Header(name string) string
-	Cookie(name string) string
-	Context() context.Context
-	Query() url.Values
 	GetMap() map[string]interface{}
+}
+
+// Meta is the transport-agnostic contract for request-level metadata. Only
+// concepts every invocation has regardless of transport belong here. The
+// cancellation Context, string metadata via Header, the invocation Path, and
+// the raw Body all generalize beyond HTTP; method verb, remote address, and
+// cookies do not, so they are kept on the HTTP adapter instead.
+type Meta interface {
+	Context() context.Context
+	Header(name string) string
+	Path() string
+	Body() []byte
+}
+
+// Input is the full contract an action handler receives: Param composed with Meta.
+type Input interface {
+	Param
+	Meta
 }
