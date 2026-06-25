@@ -3,8 +3,8 @@ module github.com/crazy-airhead/aifei-go/generator
 go 1.26
 
 require (
-	github.com/crazy-airhead/aifei-go/db v0.0.8
-	github.com/crazy-airhead/aifei-go/enjoy v0.0.8
+	github.com/crazy-airhead/aifei-go/db v0.0.9
+	github.com/crazy-airhead/aifei-go/enjoy v0.0.9
 	modernc.org/sqlite v1.53.0
 )
 
