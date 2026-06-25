@@ -108,8 +108,8 @@ type Service struct{}
 
 // List 分页列表 — GET /user/list
 func (s *Service) List(in aifei.Input) aifei.Output {
-    pageNum := in.GetIntDefault("page", 1)
-    pageSize := in.GetIntDefault("size", 10)
+    pageNum := in.GetInt("page", 1)
+    pageSize := in.GetInt("size", 10)
     page, err := db.SQL("SELECT * FROM user ORDER BY id DESC").Paginate(pageNum, pageSize)
     if err != nil {
         return server.Fail(err.Error())

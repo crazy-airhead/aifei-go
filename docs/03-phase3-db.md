@@ -265,7 +265,7 @@ func (r *Row) GetBool(field string) bool
 func (r *Row) GetTime(field string) time.Time
 func (r *Row) GetBytes(field string) []byte
 func (r *Row) Get(field string) interface{}
-// 带默认值版本: GetStrDefault, GetIntDefault
+// 带默认值版本: GetStr, GetInt
 
 // 主键
 func (r *Row) ID(id interface{}) *Row

@@ -41,8 +41,8 @@ func (s *Service) List(in aifei.Input) aifei.Output {
 
 // Paginate returns paginated records matching query params.
 func (s *Service) Paginate(in aifei.Input) aifei.Output {
-	pageNum := in.GetIntDefault("page", 1)
-	pageSize := in.GetIntDefault("size", 10)
+	pageNum := in.GetInt("page", 1)
+	pageSize := in.GetInt("size", 10)
 	filter := in.GetMap()
 	page, err := db.Sql(listSql, filter).Paginate(pageNum, pageSize)
 	if err != nil {

@@ -28,21 +28,24 @@ type Param interface {
 	PathParaByName(name string) string
 	Param(name string) string // alias for PathParaByName
 
-	// Typed getters by name
-	GetStr(key string) string
-	GetStrDefault(key, def string) string
-	GetInt(key string) int
-	GetIntDefault(key string, def int) int
-	GetInt64(key string) int64
-	GetInt64Default(key string, def int64) int64
-	GetFloat64(key string) float64
-	GetFloat64Default(key string, def float64) float64
-	GetBool(key string) bool
-	GetBoolDefault(key string, def bool) bool
+	// Typed getters by name. Pass a single optional default value;
+	// when the parameter is missing/empty/invalid the default is returned.
+	GetStr(key string, def ...string) string
+	GetInt(key string, def ...int) int
+	GetInt64(key string, def ...int64) int64
+	GetFloat64(key string, def ...float64) float64
+	GetBool(key string, def ...bool) bool
 
-	// Bean / structured parameters
-	GetBean(obj interface{}) error
-	GetMap() map[string]interface{}
+	// Bean / structured parameters. Pass keys to bind a nested subtree:
+	//   GetBean(&user)               → whole body
+	//   GetBean(&user, "data")       → body["data"]
+	GetBean(obj interface{}, keys ...string) error
+
+	// GetMap returns query parameters as a map. Pass keys to filter by
+	// a dot-joined prefix:
+	//   GetMap()              → all params
+	//   GetMap("user")        → "user.*" params, prefix stripped
+	GetMap(keys ...string) map[string]interface{}
 }
 
 // Meta is the transport-agnostic contract for request-level metadata. Only

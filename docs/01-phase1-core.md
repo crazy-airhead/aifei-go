@@ -93,15 +93,15 @@ type Input interface {
     // 请求参数
     Has(name string) bool
     GetStr(name string) string
-    GetStrDefault(name, def string) string
+    GetStr(name, def string) string
     GetInt(name string) int
-    GetIntDefault(name string, def int) int
+    GetInt(name string, def int) int
     GetInt64(name string) int64
-    GetInt64Default(name string, def int64) int64
+    GetInt64(name string, def int64) int64
     GetFloat64(name string) float64
-    GetFloat64Default(name string, def float64) float64
+    GetFloat64(name string, def float64) float64
     GetBool(name string) bool
-    GetBoolDefault(name string, def bool) bool
+    GetBool(name string, def bool) bool
     GetBean(ptr interface{}) error        // JSON body → struct
 
     // 路径参数
