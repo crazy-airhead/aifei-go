@@ -78,7 +78,8 @@ REMOTES=(github origin)
 cd "$(git rev-parse --show-toplevel)"
 
 echo "Tag   : $VERSION"
-echo "Branch: $(git branch --show-current)"
+BRANCH="$(git branch --show-current)"
+echo "Branch: $BRANCH"
 echo "github: $(git remote get-url github 2>/dev/null || echo '(missing remote!)')"
 echo "origin: $(git remote get-url origin 2>/dev/null || echo '(missing remote!)')"
 echo ""
@@ -184,8 +185,8 @@ done
 echo ""
 
 # ---------------------------------------------------------------------------
-# Push — send all refs in a single git push per remote (avoids half-pushed
-# state if one ref were to fail mid-loop).
+# Push — push the commit first, then tags. Both go in a single push per remote
+# to avoid half-pushed state.
 # ---------------------------------------------------------------------------
 if [[ "$DO" == "--push" ]]; then
   REFS=()
@@ -193,7 +194,7 @@ if [[ "$DO" == "--push" ]]; then
     REFS+=("$mod/$VERSION")
   done
 
-  echo "=== Pushing tags ==="
+  echo "=== Pushing branch + tags ==="
   FAILED=0
   for remote in "${REMOTES[@]}"; do
     if ! git remote get-url "$remote" >/dev/null 2>&1; then
@@ -202,7 +203,8 @@ if [[ "$DO" == "--push" ]]; then
       continue
     fi
     printf "  -> %s  (%s)\n" "$remote" "$(git remote get-url "$remote")"
-    if git push "$remote" "${REFS[@]}"; then
+    # Push branch HEAD + all tags in one push
+    if git push "$remote" "HEAD:${BRANCH}" "${REFS[@]}"; then
       echo "     (ok)"
     else
       echo "     (FAILED)"
