@@ -1,10 +1,12 @@
 go 1.26
 
 use (
+	./_example/cache_redis_test
 	./_example/db_sqlite_test
 	./_example/demo
 	./_example/enjoy_test
 	./aifei
+	./cache
 	./config
 	./db
 	./enjoy
