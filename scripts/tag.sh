@@ -42,20 +42,31 @@ fi
 
 # ---------------------------------------------------------------------------
 # Module list — every importable library module.
-# Order is cosmetic; subdir tags carry their own <mod>/ prefix, so there is no
-# dependency ordering requirement between them.
+# Order matters for dependency resolution during go.mod update:
+# leaf modules first, then modules that depend on them.
 # ---------------------------------------------------------------------------
 MODULES=(
   aifei         # github.com/crazy-airhead/aifei-go/aifei    (./aifei/go.mod)
+  config        # github.com/crazy-airhead/aifei-go/config   (./config/go.mod)
   db            # github.com/crazy-airhead/aifei-go/db       (./db/go.mod)
   enjoy         # github.com/crazy-airhead/aifei-go/enjoy    (./enjoy/go.mod)
-  generator     # github.com/crazy-airhead/aifei-go/generator (./generator/go.mod)
-  go-http       # github.com/crazy-airhead/aifei-go/go-http  (./go-http/go.mod)
   json          # github.com/crazy-airhead/aifei-go/json     (./json/go.mod)
   log           # github.com/crazy-airhead/aifei-go/log      (./log/go.mod)
   nami          # github.com/crazy-airhead/aifei-go/nami     (./nami/go.mod)
-  nacos         # github.com/crazy-airhead/aifei-go/nacos    (./nacos/go.mod)
-  server        # github.com/crazy-airhead/aifei-go/server   (./server/go.mod)
+  go-http       # github.com/crazy-airhead/aifei-go/go-http  (./go-http/go.mod)   → aifei
+  generator     # github.com/crazy-airhead/aifei-go/generator (./generator/go.mod) → db, enjoy
+  server        # github.com/crazy-airhead/aifei-go/server   (./server/go.mod)     → aifei, go-http
+  nacos         # github.com/crazy-airhead/aifei-go/nacos    (./nacos/go.mod)      → aifei, config, log, nami
+)
+
+# Internal dependency map: "module:deps" pairs (compatible with bash 3.2).
+# Format: "<module>:<space-separated list of repo modules it depends on>"
+# Only modules that depend on other modules in this repo need entries here.
+MODULE_DEPS=(
+  "go-http:aifei"
+  "generator:db enjoy"
+  "server:aifei go-http"
+  "nacos:aifei config log nami"
 )
 
 # Remotes to push to (github publishes to the Go module proxy).
@@ -89,6 +100,62 @@ if [[ "$DO" == "--do" || "$DO" == "--push" ]]; then
   if ! git diff-index --quiet HEAD --; then
     echo "ERROR: working tree is dirty. Commit or stash changes first."
     exit 4
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Update internal dependency versions in go.mod files
+# ---------------------------------------------------------------------------
+if [[ "$DO" == "--do" || "$DO" == "--push" ]]; then
+  echo "=== Updating internal dependency versions to $VERSION ==="
+  UPDATED_ANY=0
+
+  for entry in "${MODULE_DEPS[@]}"; do
+    mod="${entry%%:*}"
+    DEPS="${entry#*:}"
+    MOD_FILE="$mod/go.mod"
+    MODIFIED=0
+
+    for dep in $DEPS; do
+      DEP_PATH="github.com/crazy-airhead/aifei-go/${dep}"
+
+      # Update require line: replace old version with new version
+      if grep -q "${DEP_PATH} v" "$MOD_FILE"; then
+        sed -i '' "s|\\(${DEP_PATH}\\) v[0-9][0-9.]*|\\1 ${VERSION}|g" "$MOD_FILE"
+        echo "  ${mod}/go.mod: ${dep} → ${VERSION}"
+        MODIFIED=1
+      else
+        echo "  WARNING: ${mod}/go.mod does not require ${DEP_PATH} (skip)"
+      fi
+    done
+
+    if [[ "$MODIFIED" == "1" ]]; then
+      # Run go mod tidy to sync go.sum (go.work resolves local modules)
+      echo "  → go mod tidy ${mod}/"
+      if ! (cd "$mod" && go mod tidy); then
+        echo "ERROR: go mod tidy failed in ${mod}/"
+        exit 5
+      fi
+      UPDATED_ANY=1
+    fi
+  done
+
+  echo ""
+
+  # Commit the go.mod / go.sum changes so the tag points to a consistent state
+  if [[ "$UPDATED_ANY" == "1" ]]; then
+    echo "=== Committing dependency updates ==="
+    git add -A
+    if git diff-index --quiet HEAD --; then
+      echo "  (no changes to commit)"
+    else
+      git commit -m "chore: bump internal deps to ${VERSION}"
+      echo "  committed: bump internal deps to ${VERSION}"
+    fi
+    echo ""
+  else
+    echo "  (no dependency updates needed)"
+    echo ""
   fi
 fi
 
@@ -146,7 +213,7 @@ if [[ "$DO" == "--push" ]]; then
   echo ""
   if [[ "$FAILED" == "1" ]]; then
     echo "WARNING: at least one remote failed. Local tags were created; retry the push manually."
-    exit 5
+    exit 6
   fi
   echo "Done. All tags pushed to: ${REMOTES[*]}"
 elif [[ "$DO" == "--do" ]]; then
