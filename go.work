@@ -15,4 +15,5 @@ use (
 	./nacos
 	./nami
 	./server
+	./storage
 )

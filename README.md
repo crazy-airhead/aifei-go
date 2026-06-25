@@ -4,14 +4,18 @@
 
 ## 特性
 
-- **零外部依赖** — 所有库模块仅使用 Go 标准库
-- **模块化设计** — enjoy/db/json/log 可独立引入
+- **零外部依赖（核心）** — 核心库模块（aifei/enjoy/db/json/log/nami）仅使用 Go 标准库；可选插件（config/nacos/storage）按需引入第三方库
+- **模块化设计** — 各模块可独立 `go get`，按需组合，不拉入多余依赖
 - **Enjoy 模板引擎** — 自研模板语言，支持表达式、条件、循环、宏定义
 - **Active Record ORM** — Row + Dao 链式操作，变更追踪
 - **代码生成器** — 从数据库 Schema 自动生成类型安全的 CRUD 代码
-- **Enjoy SQL** — 模板 SQL 引擎，支持动态 WHERE/ORDER BY/参数占位（18种操作符）
+- **Enjoy SQL** — 模板 SQL 引擎，支持动态 WHERE/ORDER BY/参数占位（18 种操作符）
 - **基数树路由** — 高性能路由匹配，支持参数和通配符
 - **Handler 包装链 + 拦截器** — Logger/Recover/CORS/Auth 等内置 Handler，方法级 AOP 拦截器
+- **分层配置** — `app.yml` + 环境变量 + 命令行参数 + 云配置分层加载，支持运行时热更新
+- **Nacos 集成** — 服务注册与发现、配置中心，自动桥接到 nami RPC 客户端
+- **文件存储** — 统一本地文件系统与 S3 兼容后端（AWS S3 / Minio / OSS / COS），按 bucket 路由
+- **Nami RPC 客户端** — 轻量 HTTP RPC 客户端框架，Filter 链 + 服务发现
 
 ## 模块结构
 
@@ -22,9 +26,15 @@
 | `aifei-go/db` | 数据库访问（Row/Dao/Dialect/Enjoy SQL） | 无 |
 | `aifei-go/json` | JSON 工具 | 无 |
 | `aifei-go/log` | 日志接口 | 无 |
+| `aifei-go/nami` | HTTP RPC 客户端框架（channel/coder/Filter/Discovery） | 无 |
+| `aifei-go/config` | 分层配置加载（yml + 环境变量 + 命令行 + 云配置） | yaml.v3 |
 | `aifei-go/generator` | 代码生成器（Schema → 类型安全代码） | db, enjoy |
 | `aifei-go/go-http` | net/http 适配器 | aifei |
 | `aifei-go/server` | 服务启动、内置 Handler 包装器、响应构建器 | aifei, go-http |
+| `aifei-go/nacos` | Nacos 插件（服务注册、配置中心、发现） | aifei, nami, log, nacos-sdk-go/v2 |
+| `aifei-go/storage` | 文件存储插件（本地 + S3 兼容后端） | aifei, config, log, minio-go/v7 |
+
+Requires Go 1.26.
 
 ## 快速开始
 
@@ -48,11 +58,11 @@ func main() {
 
     // 路由 — HandlerFunc: func(in aifei.Input) aifei.Output
     app.GET("/", func(in aifei.Input) aifei.Output {
-        return server.OkMsg("Hello, Aifei!")
+        return server.Ok("Hello, Aifei!")
     })
 
     app.GET("/hello/:name", func(in aifei.Input) aifei.Output {
-        return server.OkMsg("Hello, " + in.Param("name"))
+        return server.Ok("Hello, " + in.Param("name"))
     })
 
     // 启动（支持 CORS、BasicAuth 等 HTTP 级包装器）
@@ -119,6 +129,55 @@ u, _ := user.FindById(123)
 u.SetName("new name").Update()
 ```
 
+### 文件存储
+
+`storage` 插件统一本地文件系统与 S3 兼容后端（AWS S3 / Minio / OSS / COS），按 bucket 路由；默认 bucket 由顶层 `storage.Put/Get/...` 操作：
+
+```go
+import (
+    "os"
+    "strings"
+
+    "github.com/crazy-airhead/aifei-go/aifei"
+    "github.com/crazy-airhead/aifei-go/config"
+    "github.com/crazy-airhead/aifei-go/server"
+    "github.com/crazy-airhead/aifei-go/storage"
+)
+
+func main() {
+    props, _ := config.Init(os.Args)
+    p, _ := storage.NewPlugin(props, nil) // 读 storage.* 配置，自动装配多 bucket
+    app := aifei.New(aifei.WithPlugin(p))
+    server.Run(app, ":8080")
+
+    // 顶层便捷函数操作默认 bucket
+    media := storage.NewMedia(strings.NewReader("hello"), "text/plain")
+    storage.Put("a/b.txt", media)
+    got, _ := storage.Get("a/b.txt") // *storage.Media
+
+    // 指定 bucket
+    storage.Use("avatars").Put("u1.png", media)
+}
+```
+
+对应 `app.yml` 配置（驱动由 `driver` 字段或 endpoint 协议推断）：
+
+```yaml
+storage:
+  default: local
+  buckets:
+    local:
+      driver: local
+      endpoint: /var/data
+    s3:
+      driver: s3
+      endpoint: https://s3.example.com
+      regionId: us-east-1
+      accessKey: AK...
+      secretKey: SK...
+      autoCreateBucket: true
+```
+
 ## Just Service
 
 通过 `Register()` 自动映射 struct 方法为路由，方法签名遵循 `func(in aifei.Input) aifei.Output`：
@@ -174,16 +233,20 @@ const ServicePrefix = "/api/v1/loginLogs"   // 手动改为复数
 
 | 包 | 代码行数 | 测试行数 | 文件数 |
 |---|---|---|---|
-| enjoy | ~2,500 | 182 | 16 |
-| db + db/sql | ~2,670 | 53 + 228 | 20 |
-| generator | ~1,250 | 314 | 13 |
-| aifei | ~780 | — | 8 |
-| server | ~740 | — | 6 |
-| go-http | ~330 | — | 3 |
+| enjoy | ~2,800 | — | 16 |
+| db + db/sql | ~3,800 | 281 | 22 |
+| nami | ~1,700 | ~1,600 | 17 |
+| generator | ~1,290 | 371 | 13 |
+| storage | ~880 | 419 | 9 |
+| config | ~780 | ~1,490 | 2 |
+| server | ~630 | — | 7 |
+| aifei | ~620 | — | 8 |
+| nacos | ~620 | 95 | 6 |
+| go-http | ~430 | — | 3 |
+| _example | ~760 | ~1,400 | 14 |
 | log | ~110 | 114 | 1 |
 | json | ~40 | 45 | 1 |
-| _example | ~220 | 1,120 | 6 |
-| **总计** | **~8,350** | **~2,060** | **74** |
+| **总计** | **~14,500** | **~5,800** | **119** |
 
 ## 协议
 

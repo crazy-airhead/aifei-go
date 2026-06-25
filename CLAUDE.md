@@ -44,6 +44,7 @@ This project uses Go workspace (`go.work`) with independent modules. Each librar
 | `github.com/crazy-airhead/aifei-go/server` | `./server` | aifei, go-http (zero external deps) |
 | `github.com/crazy-airhead/aifei-go/nami` | `./nami` | None (HTTP RPC client framework) |
 | `github.com/crazy-airhead/aifei-go/nacos` | `./nacos` | aifei, nami, log, nacos-sdk-go/v2 |
+| `github.com/crazy-airhead/aifei-go/storage` | `./storage` | aifei, config, log, minio-go/v7 |
 | `github.com/crazy-airhead/aifei-go/config` | `./config` | `gopkg.in/yaml.v3` |
 | `_example/demo` | `./_example/demo` | `modernc.org/sqlite` |
 | `_example/db_sqlite_test` | `./_example/db_sqlite_test` | `modernc.org/sqlite` |
@@ -54,6 +55,7 @@ Users can import individual modules without pulling unwanted dependencies:
 - `go get github.com/crazy-airhead/aifei-go` — core web framework, zero external deps
 - `go get github.com/crazy-airhead/aifei-go/nami` — HTTP RPC client framework, zero external deps
 - `go get github.com/crazy-airhead/aifei-go/nacos` — Nacos plugin (service registry, config center, discovery)
+- `go get github.com/crazy-airhead/aifei-go/storage` — storage plugin (local filesystem + S3-compatible backends)
 
 Requires Go 1.26. All library code uses only the Go standard library.
 
@@ -132,6 +134,7 @@ Generates type-safe per-table packages from database schema:
 - **`./nami`** — Lightweight HTTP RPC **client** framework (ported from Java Solon Nami). Channel transport (`channel/http`), Encoder/Decoder (`coder/json`), `Filter` chain, `Upstream`/`Discovery`, fluent `Builder`/`ClientFactory`, and a `util` package (`GetJSON[T]` etc.). Server-side counterpart to aifei; zero external deps.
 - **`./nacos`** — Nacos integration plugin built on nacos-sdk-go/v2. Implements `aifei.Plugin` for service registration (ephemeral instances with SDK heartbeats), config center (watch DataID, push changes via callback), and discovery (`NewNamiUpstream` converts Nacos discovery into `nami.Upstream`). Auto-registers a `config.CloudLoader` via `init()` so `config.Init()` automatically fetches config from Nacos at L5 when `nacos.server_addr` + `nacos.data_id` are set. `BindStore(store)` method chains `ConfigChangeCallback` to auto-update the Store on runtime config changes from Nacos.
 - **`./config`** — Layered configuration loading with generic `Store` (key-value map). Supports L1-L5 loading order: `app.yml` + `app-{env}.yml` → extension configs → env vars + CLI args → programmatic `LoadInto()` → cloud loaders (e.g., Nacos). Provides `Get`/`GetStr`/`GetBool`/`GetInt` accessors, `Sub(prefix)` for scoped sub-props, `Bind(v)` for YAML round-trip to user-defined structs, and functional options (`WithEnvPrefix`, `WithEnv`, `WithConfigDir`, `WithBaseFiles`). Thread-safe (`sync.RWMutex`) — safe for concurrent reads and dynamic updates from cloud config watchers. Does NOT define application-level config structs — each app defines its own.
+- **`./storage`** — Unified file-storage abstraction (ported from ficus `ficus-starter-storage`) with local filesystem and S3-compatible backends (AWS S3/Minio/OSS/COS) via minio-go. `Client` interface (`Exists`/`TempURL`/`Get`/`Put`/`Delete`/`DeleteBatch`, bucket-scoped) + `Media` model (`io.Reader` + content type/size, stdlib `mime` inference). `Manager` routes by bucket name with a default; `Plugin` (`aifei.Plugin`) reads `storage.*` from `config.Props` (`storage.default` + `storage.buckets.<name>.{driver,endpoint,regionId,accessKey,secretKey,autoCreateBucket}`) and installs the package-level default so top-level `storage.Put/Get/...` and `storage.Use(bucket)` work. Driver inferred from `driver` (`local`/`s3`) or endpoint scheme.
 
 ### Examples
 
