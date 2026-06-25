@@ -3,7 +3,7 @@ module github.com/crazy-airhead/aifei-go/_example/demo
 go 1.26
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v0.0.0
+	github.com/crazy-airhead/aifei-go/aifei v0.0.3
 	github.com/crazy-airhead/aifei-go/db v0.0.0
 	github.com/crazy-airhead/aifei-go/generator v0.0.0
 	github.com/crazy-airhead/aifei-go/server v0.0.0
@@ -11,6 +11,8 @@ require (
 )
 
 require (
+	github.com/crazy-airhead/aifei-go/enjoy v0.0.0 // indirect
+	github.com/crazy-airhead/aifei-go/go-http v0.0.3 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

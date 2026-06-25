@@ -1,17 +1,18 @@
 go 1.26
 
 use (
+	./_example/db_sqlite_test
+	./_example/demo
+	./_example/enjoy_test
 	./aifei
-	./enjoy
+	./config
 	./db
+	./enjoy
 	./generator
+	./go-http
 	./json
 	./log
-	./go-http
-	./server
-	./nami
 	./nacos
-	./_example/demo
-	./_example/db_sqlite_test
-	./_example/enjoy_test
+	./nami
+	./server
 )

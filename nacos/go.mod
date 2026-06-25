@@ -4,6 +4,7 @@ go 1.26
 
 require (
 	github.com/crazy-airhead/aifei-go/aifei v0.0.4
+	github.com/crazy-airhead/aifei-go/config v0.0.4
 	github.com/crazy-airhead/aifei-go/log v0.0.4
 	github.com/crazy-airhead/aifei-go/nami v0.0.4
 	github.com/nacos-group/nacos-sdk-go/v2 v2.2.8
@@ -52,8 +53,8 @@ require (
 	go.uber.org/zap v1.21.0 // indirect
 	golang.org/x/crypto v0.31.0 // indirect
 	golang.org/x/net v0.33.0 // indirect
-	golang.org/x/sync v0.10.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/time v0.1.0 // indirect
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
@@ -65,6 +66,7 @@ require (
 
 replace (
 	github.com/crazy-airhead/aifei-go/aifei => ../aifei
+	github.com/crazy-airhead/aifei-go/config => ../config
 	github.com/crazy-airhead/aifei-go/log => ../log
 	github.com/crazy-airhead/aifei-go/nami => ../nami
 )

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Run all tests (workspace mode)
-go test ./aifei ./enjoy ./db ./json ./log ./generator ./nacos ./_example/db_sqlite_test
+go test ./aifei ./enjoy ./db ./json ./log ./generator ./nacos ./config ./_example/db_sqlite_test
 
 # Run tests for a single module
 go test ./aifei
@@ -16,6 +16,7 @@ go test ./json
 go test ./log
 go test ./nacos
 go test ./generator
+go test ./config
 
 # Run db integration tests (requires sqlite)
 go test ./_example/db_sqlite_test
@@ -43,6 +44,7 @@ This project uses Go workspace (`go.work`) with independent modules. Each librar
 | `github.com/crazy-airhead/aifei-go/server` | `./server` | aifei, go-http (zero external deps) |
 | `github.com/crazy-airhead/aifei-go/nami` | `./nami` | None (HTTP RPC client framework) |
 | `github.com/crazy-airhead/aifei-go/nacos` | `./nacos` | aifei, nami, log, nacos-sdk-go/v2 |
+| `github.com/crazy-airhead/aifei-go/config` | `./config` | `gopkg.in/yaml.v3` |
 | `_example/demo` | `./_example/demo` | `modernc.org/sqlite` |
 | `_example/db_sqlite_test` | `./_example/db_sqlite_test` | `modernc.org/sqlite` |
 
@@ -128,7 +130,8 @@ Generates type-safe per-table packages from database schema:
 - **`./json`** — Lightweight JSON marshal/unmarshal wrappers.
 - **`./log`** — Logging interface (`Logger` with 5 levels) + default implementation.
 - **`./nami`** — Lightweight HTTP RPC **client** framework (ported from Java Solon Nami). Channel transport (`channel/http`), Encoder/Decoder (`coder/json`), `Filter` chain, `Upstream`/`Discovery`, fluent `Builder`/`ClientFactory`, and a `util` package (`GetJSON[T]` etc.). Server-side counterpart to aifei; zero external deps.
-- **`./nacos`** — Nacos integration plugin built on nacos-sdk-go/v2. Implements `aifei.Plugin` for service registration (ephemeral instances with SDK heartbeats), config center (watch DataID, push changes via callback), and discovery (`NewNamiUpstream` converts Nacos discovery into `nami.Upstream`).
+- **`./nacos`** — Nacos integration plugin built on nacos-sdk-go/v2. Implements `aifei.Plugin` for service registration (ephemeral instances with SDK heartbeats), config center (watch DataID, push changes via callback), and discovery (`NewNamiUpstream` converts Nacos discovery into `nami.Upstream`). Auto-registers a `config.CloudLoader` via `init()` so `config.Init()` automatically fetches config from Nacos at L5 when `nacos.server_addr` + `nacos.data_id` are set. `BindStore(store)` method chains `ConfigChangeCallback` to auto-update the Store on runtime config changes from Nacos.
+- **`./config`** — Layered configuration loading with generic `Store` (key-value map). Supports L1-L5 loading order: `app.yml` + `app-{env}.yml` → extension configs → env vars + CLI args → programmatic `LoadInto()` → cloud loaders (e.g., Nacos). Provides `Get`/`GetStr`/`GetBool`/`GetInt` accessors, `Sub(prefix)` for scoped sub-props, `Bind(v)` for YAML round-trip to user-defined structs, and functional options (`WithEnvPrefix`, `WithEnv`, `WithConfigDir`, `WithBaseFiles`). Thread-safe (`sync.RWMutex`) — safe for concurrent reads and dynamic updates from cloud config watchers. Does NOT define application-level config structs — each app defines its own.
 
 ### Examples
 
