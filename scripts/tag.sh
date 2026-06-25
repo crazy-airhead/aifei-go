@@ -57,6 +57,8 @@ MODULES=(
   generator     # github.com/crazy-airhead/aifei-go/generator (./generator/go.mod) → db, enjoy
   server        # github.com/crazy-airhead/aifei-go/server   (./server/go.mod)     → aifei, go-http
   nacos         # github.com/crazy-airhead/aifei-go/nacos    (./nacos/go.mod)      → aifei, config, log, nami
+  storage       # github.com/crazy-airhead/aifei-go/storage  (./storage/go.mod)    → aifei, config, log
+  cache         # github.com/crazy-airhead/aifei-go/cache    (./cache/go.mod)      → aifei, config, log
 )
 
 # Internal dependency map: "module:deps" pairs (compatible with bash 3.2).
@@ -67,6 +69,8 @@ MODULE_DEPS=(
   "generator:db enjoy"
   "server:aifei go-http"
   "nacos:aifei config log nami"
+  "storage:aifei config log"
+  "cache:aifei config log"
 )
 
 # Remotes to push to (github publishes to the Go module proxy).
