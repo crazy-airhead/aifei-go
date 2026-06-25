@@ -9,6 +9,7 @@ use (
 	./log
 	./go-http
 	./server
+	./nami
 	./_example/demo
 	./_example/db_sqlite_test
 	./_example/enjoy_test

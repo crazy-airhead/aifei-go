@@ -40,6 +40,7 @@ This project uses Go workspace (`go.work`) with independent modules. Each librar
 | `github.com/crazy-airhead/aifei-go/generator` | `./generator` | db, enjoy (both zero external deps) |
 | `github.com/crazy-airhead/aifei-go/go-http` | `./go-http` | aifei (zero external deps) |
 | `github.com/crazy-airhead/aifei-go/server` | `./server` | aifei, go-http (zero external deps) |
+| `github.com/crazy-airhead/aifei-go/nami` | `./nami` | None (HTTP RPC client framework) |
 | `_example/demo` | `./_example/demo` | `modernc.org/sqlite` |
 | `_example/db_sqlite_test` | `./_example/db_sqlite_test` | `modernc.org/sqlite` |
 
@@ -47,6 +48,7 @@ Users can import individual modules without pulling unwanted dependencies:
 - `go get github.com/crazy-airhead/aifei-go/enjoy` — template engine only, zero external deps
 - `go get github.com/crazy-airhead/aifei-go/db` — database access only, zero external deps (user provides their own driver)
 - `go get github.com/crazy-airhead/aifei-go` — core web framework, zero external deps
+- `go get github.com/crazy-airhead/aifei-go/nami` — HTTP RPC client framework, zero external deps
 
 Requires Go 1.26. All library code uses only the Go standard library.
 
@@ -122,6 +124,7 @@ Generates type-safe per-table packages from database schema:
 
 - **`./json`** — Lightweight JSON marshal/unmarshal wrappers.
 - **`./log`** — Logging interface (`Logger` with 5 levels) + default implementation.
+- **`./nami`** — Lightweight HTTP RPC **client** framework (ported from Java Solon Nami). Channel transport (`channel/http`), Encoder/Decoder (`coder/json`), `Filter` chain, `Upstream`/`Discovery`, fluent `Builder`/`ClientFactory`, and a `util` package (`GetJSON[T]` etc.). Server-side counterpart to aifei; zero external deps.
 
 ### Examples
 
