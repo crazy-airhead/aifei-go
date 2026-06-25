@@ -10,7 +10,7 @@ import (
 // 0 = success, non-zero = error.
 const (
 	CodeOK   = 0
-	CodeFail = 90000
+	CodeFail = 500
 )
 
 // Out is a transport-agnostic result builder that implements aifei.Output.
@@ -30,29 +30,22 @@ type Out struct {
 
 // ---- Static constructors ----
 
-// Ok creates an Out with success status.
-func Ok() *Out {
+// Ok creates an Out with success status. An optional message can be passed.
+func Ok(msg ...string) *Out {
+	if len(msg) > 0 {
+		return &Out{code: CodeOK, msg: msg[0]}
+	}
 	return &Out{code: CodeOK, msg: "ok"}
 }
 
-// OkMsg creates an Out with success status and a custom message.
-func OkMsg(msg string) *Out {
-	return &Out{code: CodeOK, msg: msg}
-}
+// Fail creates an Out with failure status. If no args are given, msg is used directly.
+// Otherwise msg is treated as a format string.
+func Fail(msg string, args ...interface{}) *Out {
+	if len(args) == 0 {
+		return &Out{code: CodeFail, msg: msg}
+	}
 
-// OkMsgf creates an Out with success status and a formatted message.
-func OkMsgf(format string, args ...interface{}) *Out {
-	return &Out{code: CodeOK, msg: fmt.Sprintf(format, args...)}
-}
-
-// Fail creates an Out with failure status and a message.
-func Fail(msg string) *Out {
-	return &Out{code: CodeFail, msg: msg}
-}
-
-// FailMsgf creates an Out with failure status and a formatted message.
-func FailMsgf(format string, args ...interface{}) *Out {
-	return &Out{code: CodeFail, msg: fmt.Sprintf(format, args...)}
+	return &Out{code: CodeFail, msg: fmt.Sprintf(msg, args...)}
 }
 
 // FailWithCode creates an Out with a specific error code and message.
@@ -62,17 +55,17 @@ func FailWithCode(code int, msg string) *Out {
 
 // Of creates an Out with data. Code defaults to 0 (success).
 func Of(data interface{}) *Out {
-	return &Out{data: data}
+	return &Out{code: CodeOK, data: data}
 }
 
 // OfField creates an Out with a key-value pair in data.
 func OfField(field string, value interface{}) *Out {
-	return (&Out{}).Set(field, value)
+	return (&Out{code: CodeOK}).Set(field, value)
 }
 
 // Forward creates an Out that forwards to another action path.
 func Forward(path string) *Out {
-	return &Out{view: "forward:" + path}
+	return &Out{code: CodeOK, view: "forward:" + path}
 }
 
 // Compile-time check: Out implements aifei.Output.
@@ -109,15 +102,14 @@ func (o *Out) SetFail() *Out {
 	return o
 }
 
-// SetMsg sets the message.
-func (o *Out) SetMsg(msg string) *Out {
-	o.msg = msg
-	return o
-}
-
-// SetMsgf sets the message using a format string.
-func (o *Out) SetMsgf(format string, args ...interface{}) *Out {
-	o.msg = fmt.Sprintf(format, args...)
+// SetMsg sets the message. If no args are given, msg is used directly.
+// Otherwise msg is treated as a format string.
+func (o *Out) SetMsg(msg string, args ...interface{}) *Out {
+	if len(args) == 0 {
+		o.msg = msg
+	} else {
+		o.msg = fmt.Sprintf(msg, args...)
+	}
 	return o
 }
 
