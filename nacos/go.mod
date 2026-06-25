@@ -3,10 +3,10 @@ module github.com/crazy-airhead/aifei-go/nacos
 go 1.26
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v0.0.6
-	github.com/crazy-airhead/aifei-go/config v0.0.6
-	github.com/crazy-airhead/aifei-go/log v0.0.6
-	github.com/crazy-airhead/aifei-go/nami v0.0.6
+	github.com/crazy-airhead/aifei-go/aifei v0.0.7
+	github.com/crazy-airhead/aifei-go/config v0.0.7
+	github.com/crazy-airhead/aifei-go/log v0.0.7
+	github.com/crazy-airhead/aifei-go/nami v0.0.7
 	github.com/nacos-group/nacos-sdk-go/v2 v2.2.8
 )
 
