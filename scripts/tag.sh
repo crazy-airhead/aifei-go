@@ -54,6 +54,7 @@ MODULES=(
   json          # github.com/crazy-airhead/aifei-go/json     (./json/go.mod)
   log           # github.com/crazy-airhead/aifei-go/log      (./log/go.mod)
   nami          # github.com/crazy-airhead/aifei-go/nami     (./nami/go.mod)
+  nacos         # github.com/crazy-airhead/aifei-go/nacos    (./nacos/go.mod)
   server        # github.com/crazy-airhead/aifei-go/server   (./server/go.mod)
 )
 

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Run all tests (workspace mode)
-go test ./aifei ./enjoy ./db ./json ./log ./generator ./_example/db_sqlite_test
+go test ./aifei ./enjoy ./db ./json ./log ./generator ./nacos ./_example/db_sqlite_test
 
 # Run tests for a single module
 go test ./aifei
@@ -14,6 +14,7 @@ go test ./enjoy
 go test ./db
 go test ./json
 go test ./log
+go test ./nacos
 go test ./generator
 
 # Run db integration tests (requires sqlite)
@@ -41,6 +42,7 @@ This project uses Go workspace (`go.work`) with independent modules. Each librar
 | `github.com/crazy-airhead/aifei-go/go-http` | `./go-http` | aifei (zero external deps) |
 | `github.com/crazy-airhead/aifei-go/server` | `./server` | aifei, go-http (zero external deps) |
 | `github.com/crazy-airhead/aifei-go/nami` | `./nami` | None (HTTP RPC client framework) |
+| `github.com/crazy-airhead/aifei-go/nacos` | `./nacos` | aifei, nami, log, nacos-sdk-go/v2 |
 | `_example/demo` | `./_example/demo` | `modernc.org/sqlite` |
 | `_example/db_sqlite_test` | `./_example/db_sqlite_test` | `modernc.org/sqlite` |
 
@@ -49,6 +51,7 @@ Users can import individual modules without pulling unwanted dependencies:
 - `go get github.com/crazy-airhead/aifei-go/db` — database access only, zero external deps (user provides their own driver)
 - `go get github.com/crazy-airhead/aifei-go` — core web framework, zero external deps
 - `go get github.com/crazy-airhead/aifei-go/nami` — HTTP RPC client framework, zero external deps
+- `go get github.com/crazy-airhead/aifei-go/nacos` — Nacos plugin (service registry, config center, discovery)
 
 Requires Go 1.26. All library code uses only the Go standard library.
 
@@ -125,6 +128,7 @@ Generates type-safe per-table packages from database schema:
 - **`./json`** — Lightweight JSON marshal/unmarshal wrappers.
 - **`./log`** — Logging interface (`Logger` with 5 levels) + default implementation.
 - **`./nami`** — Lightweight HTTP RPC **client** framework (ported from Java Solon Nami). Channel transport (`channel/http`), Encoder/Decoder (`coder/json`), `Filter` chain, `Upstream`/`Discovery`, fluent `Builder`/`ClientFactory`, and a `util` package (`GetJSON[T]` etc.). Server-side counterpart to aifei; zero external deps.
+- **`./nacos`** — Nacos integration plugin built on nacos-sdk-go/v2. Implements `aifei.Plugin` for service registration (ephemeral instances with SDK heartbeats), config center (watch DataID, push changes via callback), and discovery (`NewNamiUpstream` converts Nacos discovery into `nami.Upstream`).
 
 ### Examples
 
