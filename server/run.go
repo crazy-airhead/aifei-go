@@ -17,6 +17,8 @@ type Option func(*options)
 
 type options struct {
 	httpHandlers []func(http.Handler) http.Handler
+	rootWrapper  func(http.Handler) http.Handler
+	ioOptions    []IoOption
 }
 
 // WithCORS adds CORS handler to the HTTP handler chain.
@@ -47,6 +49,20 @@ func WithHTTPHandler(m func(http.Handler) http.Handler) Option {
 	}
 }
 
+// WithRootHandler wraps the core aifei handler (the innermost handler) before
+// the httpHandler middleware chain is applied. Use it to short-circuit specific
+// paths (e.g. raw file endpoints that write binary/302 responses) ahead of the
+// aifei JSON router.
+func WithRootHandler(wrap func(http.Handler) http.Handler) Option {
+	return func(o *options) { o.rootWrapper = wrap }
+}
+
+// WithIoOptions configures the IoHandler that renders responses (view engine,
+// download base, dev mode, ...).
+func WithIoOptions(opts ...IoOption) Option {
+	return func(o *options) { o.ioOptions = append(o.ioOptions, opts...) }
+}
+
 // Run starts the server and blocks until a shutdown signal is received.
 func Run(app *aifei.Aifei, addr string, opts ...Option) {
 	o := &options{}
@@ -54,8 +70,13 @@ func Run(app *aifei.Aifei, addr string, opts ...Option) {
 		opt(o)
 	}
 
-	// Build the HTTP handler chain
-	var h http.Handler = gohttp.NewHttpHandler(app)
+	// Build the HTTP handler chain. The core aifei handler may be wrapped
+	// (e.g. to serve raw file endpoints) before the middleware chain applies.
+	core := http.Handler(NewIoHandler(app, o.ioOptions...))
+	if o.rootWrapper != nil {
+		core = o.rootWrapper(core)
+	}
+	var h http.Handler = core
 	for i := len(o.httpHandlers) - 1; i >= 0; i-- {
 		h = o.httpHandlers[i](h)
 	}
