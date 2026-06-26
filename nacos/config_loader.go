@@ -7,11 +7,11 @@ import (
 func init() {
 	config.RegisterCloudLoader(func(props *config.Props) ([]byte, error) {
 		// Check if Nacos config loading is configured in the local config.
-		serverAddr := props.GetStr("nacos.server_addr")
+		serverAddr := props.GetStr("nacos.serverAddr")
 		if serverAddr == "" {
 			return nil, nil // not configured, skip
 		}
-		dataID := props.GetStr("nacos.data_id")
+		dataID := props.GetStr("nacos.dataId")
 		if dataID == "" {
 			return nil, nil // no data_id, skip
 		}

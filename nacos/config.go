@@ -18,16 +18,16 @@ type Config struct {
 	// it from configuration.
 	Enabled bool `json:"enabled" yaml:"enabled"`
 
-	ServerAddr string `json:"server_addr" yaml:"server_addr"` // host:port of the Nacos server
-	Namespace  string `json:"namespace" yaml:"namespace"`     // tenant/namespace id (empty = public)
-	Group      string `json:"group" yaml:"group"`             // config & service group
-	DataID     string `json:"data_id" yaml:"data_id"`         // config data id to watch (empty disables config listen)
+	ServerAddr string `json:"server_addr" yaml:"serverAddr"` // host:port of the Nacos server
+	Namespace  string `json:"namespace" yaml:"namespace"`    // tenant/namespace id (empty = public)
+	Group      string `json:"group" yaml:"group"`            // config & service group
+	DataID     string `json:"data_id" yaml:"dataId"`         // config data id to watch (empty disables config listen)
 
 	// Service registration. ServiceIP auto-detected when empty; ServicePort
 	// defaults to 8080 when zero.
-	ServiceName string `json:"service_name" yaml:"service_name"`
-	ServiceIP   string `json:"service_ip" yaml:"service_ip"`
-	ServicePort uint64 `json:"service_port" yaml:"service_port"`
+	ServiceName string `json:"service_name" yaml:"serviceName"`
+	ServiceIP   string `json:"service_ip" yaml:"serviceIp"`
+	ServicePort uint64 `json:"service_port" yaml:"servicePort"`
 
 	// Username/Password carry credentials for Nacos 2.x auth (optional).
 	Username string `json:"username" yaml:"username"`

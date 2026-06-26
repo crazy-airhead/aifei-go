@@ -48,7 +48,7 @@ func clientConfig(cfg *Config) constant.ClientConfig {
 func serverConfig(serverAddr string) (constant.ServerConfig, error) {
 	host, portStr, err := net.SplitHostPort(serverAddr)
 	if err != nil {
-		return constant.ServerConfig{}, fmt.Errorf("invalid nacos server_addr %q: %w", serverAddr, err)
+		return constant.ServerConfig{}, fmt.Errorf("invalid nacos serverAddr %q: %w", serverAddr, err)
 	}
 	port, err := strconv.ParseUint(portStr, 10, 64)
 	if err != nil {
