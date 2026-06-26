@@ -59,6 +59,7 @@ MODULES=(
   nacos         # github.com/crazy-airhead/aifei-go/nacos    (./nacos/go.mod)      → aifei, config, log, nami
   storage       # github.com/crazy-airhead/aifei-go/storage  (./storage/go.mod)    → aifei, config, log
   cache         # github.com/crazy-airhead/aifei-go/cache    (./cache/go.mod)      → aifei, config, log
+  swagger       # github.com/crazy-airhead/aifei-go/swagger  (./swagger/go.mod)    → aifei, config, log
 )
 
 # Internal dependency map: "module:deps" pairs (compatible with bash 3.2).
@@ -71,6 +72,7 @@ MODULE_DEPS=(
   "nacos:aifei config log nami"
   "storage:aifei config log"
   "cache:aifei config log"
+  "swagger:aifei config log"
 )
 
 # Remotes to push to (github publishes to the Go module proxy).
