@@ -42,7 +42,9 @@ func init() {
 //
 // Example:
 //
-//	props, _ := config.Init(os.Args)
+//	if err := config.Init(os.Args); err != nil { ... }
+//	props := config.NewProps()
+//	// ... populate props ...
 //	p := nacos.NewPlugin(cfg, nil).BindProps(props)
 //
 // Returns the Plugin for method chaining.

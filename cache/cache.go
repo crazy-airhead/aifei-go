@@ -6,7 +6,8 @@
 // Use(name) returns the cache for a named instance. Install a Manager as the
 // default with SetDefault, or wire it automatically via the Plugin:
 //
-//	props, _ := config.Init(os.Args)
+//	config.Init(os.Args)
+//	props := config.NewProps()
 //	p, _ := cache.NewPlugin(props, nil)
 //	app := aifei.New(aifei.WithPlugin(p))
 //	server.Run(app, ":8080")

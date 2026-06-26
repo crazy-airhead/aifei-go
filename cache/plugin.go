@@ -18,7 +18,11 @@ var _ aifei.Plugin = (*Plugin)(nil)
 //
 // Usage:
 //
-//	props, _ := config.Init(os.Args)
+//	if err := config.Init(os.Args); err != nil {
+//	    log.Fatal(err)
+//	}
+//	props := config.NewProps()
+//	// ... populate props ...
 //	p, err := cache.NewPlugin(props, nil)
 //	app := aifei.New(aifei.WithPlugin(p))
 //	server.Run(app, ":8080")

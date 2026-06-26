@@ -6,7 +6,9 @@
 // returns the client for a named bucket. Install a Manager as the default with
 // SetDefault, or wire it automatically via the Plugin:
 //
-//	props, _ := config.Init(os.Args)
+//	if err := config.Init(os.Args); err != nil { ... }
+//	props := config.NewProps()
+//	// ... populate props ...
 //	p, _ := storage.NewPlugin(props, nil)
 //	app := aifei.New(aifei.WithPlugin(p))
 //	server.Run(app, ":8080")

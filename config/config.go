@@ -12,7 +12,7 @@ import (
 // YAML content to deep-merge as the final layer. Return nil bytes to skip.
 type CloudLoader func(store *Props) ([]byte, error)
 
-// Option configures the Init/LoadStore pipeline.
+// Option configures the Init/Load pipeline.
 type Option func(*loaderConfig)
 
 // loaderConfig holds the pipeline configuration.
@@ -87,7 +87,8 @@ func RegisterCloudLoader(cl CloudLoader) {
 	cloudLoaders = append(cloudLoaders, cl)
 }
 
-// Init runs the full configuration loading pipeline (L1-L5).
+// Init runs the full configuration loading pipeline (L1-L5) and sets the global
+// Props so package-level functions (Get, GetStr, etc.) work immediately.
 // args should be os.Args (the full command-line arguments).
 // args[0] is stored as "app.path".
 //
@@ -96,34 +97,33 @@ func RegisterCloudLoader(cl CloudLoader) {
 //	L1) base config files (default: app.yml), then env-specific variants
 //	L2) extension configs from config.include + <prefix>_CONFIG_INCLUDE
 //	L3) dynamic: <prefix>_ env vars + CLI args (--key=value)
-//	L4) programmatic via LoadInto()
+//	L4) programmatic via Load()
 //	L5) cloud config via registered CloudLoaders (e.g., Nacos)
-func Init(args []string, opts ...Option) (*Props, error) {
-	store, err := LoadStore(args, opts...)
-	if err != nil {
-		return nil, err
+func Init(args []string, opts ...Option) error {
+	if err := Load(args, opts...); err != nil {
+		return err
 	}
 
 	// L5: Apply cloud loaders
 	for _, cl := range cloudLoaders {
-		content, err := cl(store)
+		content, err := cl(globalProps)
 		if err != nil {
-			return nil, fmt.Errorf("cloud loader: %w", err)
+			return fmt.Errorf("cloud loader: %w", err)
 		}
 		if len(content) > 0 {
-			if err := store.MergeYAML(content); err != nil {
-				return nil, fmt.Errorf("merge cloud config: %w", err)
+			if err := globalProps.MergeYAML(content); err != nil {
+				return fmt.Errorf("merge cloud config: %w", err)
 			}
 		}
 	}
 
-	return store, nil
+	return nil
 }
 
-// LoadStore runs L1-L3 only and returns the Props.
+// Load runs L1-L3 and sets the global Props.
 // Useful when callers want to inspect or modify the props before
-// applying L4 (LoadInto) and L5 (cloud loaders).
-func LoadStore(args []string, opts ...Option) (*Props, error) {
+// applying L4 (Load) and L5 (cloud loaders via Init).
+func Load(args []string, opts ...Option) error {
 	cfg := defaultLoaderConfig()
 	for _, opt := range opts {
 		opt(cfg)
@@ -156,14 +156,14 @@ func LoadStore(args []string, opts ...Option) (*Props, error) {
 	for _, base := range cfg.baseFiles {
 		basePath := filepath.Join(cfg.configDir, base)
 		if err := store.LoadYAML(basePath); err != nil {
-			return nil, err
+			return err
 		}
 
 		// Load env-specific variant (e.g., app-dev.yml)
 		if env != "" {
 			envPath := filepath.Join(cfg.configDir, envFileName(base, env))
 			if err := store.LoadYAML(envPath); err != nil {
-				return nil, err
+				return err
 			}
 		}
 	}
@@ -173,7 +173,7 @@ func LoadStore(args []string, opts ...Option) (*Props, error) {
 	for _, p := range extPaths {
 		fullPath := filepath.Join(cfg.configDir, p)
 		if err := store.LoadYAMLPattern(fullPath); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
@@ -192,14 +192,20 @@ func LoadStore(args []string, opts ...Option) (*Props, error) {
 		}
 	}
 
-	return store, nil
+	// Set global Props so package-level functions work.
+	setProps(store)
+
+	return nil
 }
 
-// LoadInto loads YAML files into an existing store (L4 programmatic loading).
-// Missing files are silently skipped.
-func LoadInto(store *Props, paths ...string) error {
+// LoadFiles loads YAML files into the global Props (L4 programmatic loading).
+// Missing files are silently skipped. No-op if the global is nil.
+func LoadFiles(paths ...string) error {
+	if globalProps == nil {
+		return nil
+	}
 	for _, p := range paths {
-		if err := store.LoadYAML(p); err != nil {
+		if err := globalProps.LoadYAML(p); err != nil {
 			return err
 		}
 	}

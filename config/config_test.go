@@ -15,7 +15,15 @@ func writeYAMLFile(t *testing.T, dir, name, content string) {
 	}
 }
 
-func TestLoadStoreBasic(t *testing.T) {
+// saveGlobal saves and returns the current global Props so tests can restore it.
+func saveGlobal() *Props {
+	return globalProps
+}
+
+func TestLoadBasic(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 	writeYAMLFile(t, dir, "app.yml", `
 server:
@@ -25,26 +33,29 @@ db:
   driver: sqlite
 `)
 
-	props, err := LoadStore([]string{"/path/to/app"}, WithConfigDir(dir))
+	err := Load([]string{"/path/to/app"}, WithConfigDir(dir))
 	if err != nil {
-		t.Fatalf("LoadStore failed: %v", err)
+		t.Fatalf("Load failed: %v", err)
 	}
 
-	if v := props.GetStr("app.path"); v != "/path/to/app" {
+	if v := GetStr("app.path"); v != "/path/to/app" {
 		t.Fatalf("expected '/path/to/app', got '%s'", v)
 	}
-	if v := props.GetInt("server.port"); v != 8080 {
+	if v := GetInt("server.port"); v != 8080 {
 		t.Fatalf("expected 8080, got %d", v)
 	}
-	if v := props.GetStr("server.name"); v != "myapp" {
+	if v := GetStr("server.name"); v != "myapp" {
 		t.Fatalf("expected 'myapp', got '%s'", v)
 	}
-	if v := props.GetStr("db.driver"); v != "sqlite" {
+	if v := GetStr("db.driver"); v != "sqlite" {
 		t.Fatalf("expected 'sqlite', got '%s'", v)
 	}
 }
 
-func TestLoadStoreWithProfile(t *testing.T) {
+func TestLoadWithProfile(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 
 	writeYAMLFile(t, dir, "app.yml", `
@@ -63,26 +74,29 @@ db:
 	os.Setenv("AIFEI_ENV", "dev")
 	defer os.Unsetenv("AIFEI_ENV")
 
-	props, err := LoadStore([]string{"/app"}, WithConfigDir(dir))
+	err := Load([]string{"/app"}, WithConfigDir(dir))
 	if err != nil {
-		t.Fatalf("LoadStore failed: %v", err)
+		t.Fatalf("Load failed: %v", err)
 	}
 
 	// Profile overrides port
-	if v := props.GetInt("server.port"); v != 9090 {
+	if v := GetInt("server.port"); v != 9090 {
 		t.Fatalf("expected 9090 from profile, got %d", v)
 	}
 	// Base value preserved
-	if v := props.GetStr("db.driver"); v != "sqlite" {
+	if v := GetStr("db.driver"); v != "sqlite" {
 		t.Fatalf("expected 'sqlite' from base, got '%s'", v)
 	}
 	// Profile adds new key
-	if v := props.GetStr("db.dsn"); v != "dev.db" {
+	if v := GetStr("db.dsn"); v != "dev.db" {
 		t.Fatalf("expected 'dev.db' from profile, got '%s'", v)
 	}
 }
 
-func TestLoadStoreWithProfileFromArgs(t *testing.T) {
+func TestLoadWithProfileFromArgs(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 
 	writeYAMLFile(t, dir, "app.yml", `
@@ -98,17 +112,20 @@ server:
 	os.Setenv("AIFEI_ENV", "dev")
 	defer os.Unsetenv("AIFEI_ENV")
 
-	props, err := LoadStore([]string{"/app", "--env=prod"}, WithConfigDir(dir))
+	err := Load([]string{"/app", "--env=prod"}, WithConfigDir(dir))
 	if err != nil {
-		t.Fatalf("LoadStore failed: %v", err)
+		t.Fatalf("Load failed: %v", err)
 	}
 
-	if v := props.GetInt("server.port"); v != 80 {
+	if v := GetInt("server.port"); v != 80 {
 		t.Fatalf("expected 80 from prod profile (via args), got %d", v)
 	}
 }
 
-func TestLoadStoreWithProfileFromEnv(t *testing.T) {
+func TestLoadWithProfileFromEnv(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 
 	writeYAMLFile(t, dir, "app.yml", `
@@ -123,17 +140,20 @@ server:
 	os.Setenv("AIFEI_PROFILE", "staging")
 	defer os.Unsetenv("AIFEI_PROFILE")
 
-	props, err := LoadStore([]string{"/app"}, WithConfigDir(dir))
+	err := Load([]string{"/app"}, WithConfigDir(dir))
 	if err != nil {
-		t.Fatalf("LoadStore failed: %v", err)
+		t.Fatalf("Load failed: %v", err)
 	}
 
-	if v := props.GetInt("server.port"); v != 3000 {
+	if v := GetInt("server.port"); v != 3000 {
 		t.Fatalf("expected 3000 from staging profile, got %d", v)
 	}
 }
 
-func TestLoadStoreExtensions(t *testing.T) {
+func TestLoadExtensions(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 
 	writeYAMLFile(t, dir, "app.yml", `
@@ -159,23 +179,26 @@ email:
   smtp: smtp.example.com
 `)
 
-	props, err := LoadStore([]string{"/app"}, WithConfigDir(dir))
+	err := Load([]string{"/app"}, WithConfigDir(dir))
 	if err != nil {
-		t.Fatalf("LoadStore failed: %v", err)
+		t.Fatalf("Load failed: %v", err)
 	}
 
-	if v := props.GetStr("redis.host"); v != "localhost" {
+	if v := GetStr("redis.host"); v != "localhost" {
 		t.Fatalf("expected 'localhost', got '%s'", v)
 	}
-	if v := props.GetInt("redis.port"); v != 6379 {
+	if v := GetInt("redis.port"); v != 6379 {
 		t.Fatalf("expected 6379, got %d", v)
 	}
-	if v := props.GetStr("email.smtp"); v != "smtp.example.com" {
+	if v := GetStr("email.smtp"); v != "smtp.example.com" {
 		t.Fatalf("expected 'smtp.example.com', got '%s'", v)
 	}
 }
 
-func TestLoadStoreExtensionsFromEnv(t *testing.T) {
+func TestLoadExtensionsFromEnv(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 
 	writeYAMLFile(t, dir, "app.yml", `
@@ -195,17 +218,20 @@ logging:
 	os.Setenv("AIFEI_CONFIG_INCLUDE", "extra/*.yml")
 	defer os.Unsetenv("AIFEI_CONFIG_INCLUDE")
 
-	props, err := LoadStore([]string{"/app"}, WithConfigDir(dir))
+	err := Load([]string{"/app"}, WithConfigDir(dir))
 	if err != nil {
-		t.Fatalf("LoadStore failed: %v", err)
+		t.Fatalf("Load failed: %v", err)
 	}
 
-	if v := props.GetStr("logging.level"); v != "debug" {
+	if v := GetStr("logging.level"); v != "debug" {
 		t.Fatalf("expected 'debug', got '%s'", v)
 	}
 }
 
-func TestLoadStoreEnvVars(t *testing.T) {
+func TestLoadEnvVars(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 
 	writeYAMLFile(t, dir, "app.yml", `
@@ -223,20 +249,23 @@ db:
 		os.Unsetenv("AIFEI_DB__DRIVER")
 	}()
 
-	props, err := LoadStore([]string{"/app"}, WithConfigDir(dir))
+	err := Load([]string{"/app"}, WithConfigDir(dir))
 	if err != nil {
-		t.Fatalf("LoadStore failed: %v", err)
+		t.Fatalf("Load failed: %v", err)
 	}
 
-	if v := props.GetStr("server.port"); v != "9090" {
+	if v := GetStr("server.port"); v != "9090" {
 		t.Fatalf("expected '9090' from env, got '%s'", v)
 	}
-	if v := props.GetStr("db.driver"); v != "postgres" {
+	if v := GetStr("db.driver"); v != "postgres" {
 		t.Fatalf("expected 'postgres' from env, got '%s'", v)
 	}
 }
 
-func TestLoadStoreArgs(t *testing.T) {
+func TestLoadArgs(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 
 	writeYAMLFile(t, dir, "app.yml", `
@@ -250,21 +279,24 @@ db:
 	os.Setenv("AIFEI_SERVER_PORT", "9090") // env override
 	defer os.Unsetenv("AIFEI_SERVER_PORT")
 
-	props, err := LoadStore([]string{"/app", "--server.port=7070", "--db.driver=mysql"}, WithConfigDir(dir))
+	err := Load([]string{"/app", "--server.port=7070", "--db.driver=mysql"}, WithConfigDir(dir))
 	if err != nil {
-		t.Fatalf("LoadStore failed: %v", err)
+		t.Fatalf("Load failed: %v", err)
 	}
 
 	// CLI arg should win over both YAML and env var
-	if v := props.GetStr("server.port"); v != "7070" {
+	if v := GetStr("server.port"); v != "7070" {
 		t.Fatalf("expected '7070' from CLI, got '%s'", v)
 	}
-	if v := props.GetStr("db.driver"); v != "mysql" {
+	if v := GetStr("db.driver"); v != "mysql" {
 		t.Fatalf("expected 'mysql' from CLI, got '%s'", v)
 	}
 }
 
 func TestInitFullPipeline(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 
 	writeYAMLFile(t, dir, "app.yml", `
@@ -286,26 +318,34 @@ nacos:
 `), nil
 	})
 
-	props, err := Init([]string{"/app"}, WithConfigDir(dir))
+	err := Init([]string{"/app"}, WithConfigDir(dir))
 	if err != nil {
 		t.Fatalf("Init failed: %v", err)
 	}
 
 	// L1 values
-	if v := props.GetInt("server.port"); v != 8080 {
+	if v := GetInt("server.port"); v != 8080 {
 		t.Fatalf("expected 8080, got %d", v)
 	}
 
 	// L5 cloud loader values
-	if v := props.GetBool("nacos.enabled"); !v {
+	if v := GetBool("nacos.enabled"); !v {
 		t.Fatal("expected nacos.enabled=true")
 	}
-	if v := props.GetStr("nacos.addr"); v != "127.0.0.1:8848" {
+	if v := GetStr("nacos.addr"); v != "127.0.0.1:8848" {
 		t.Fatalf("expected '127.0.0.1:8848', got '%s'", v)
+	}
+
+	// Init should set the global Props so package-level functions work.
+	if globalProps == nil {
+		t.Fatal("expected globalProps to be set by Init")
 	}
 }
 
 func TestInitCloudLoaderOverrides(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 
 	writeYAMLFile(t, dir, "app.yml", `
@@ -325,17 +365,20 @@ server:
 `), nil
 	})
 
-	props, err := Init([]string{"/app"}, WithConfigDir(dir))
+	err := Init([]string{"/app"}, WithConfigDir(dir))
 	if err != nil {
 		t.Fatalf("Init failed: %v", err)
 	}
 
-	if v := props.GetInt("server.port"); v != 9999 {
+	if v := GetInt("server.port"); v != 9999 {
 		t.Fatalf("expected 9999 from cloud loader override, got %d", v)
 	}
 }
 
 func TestInitCloudLoaderEmptyContent(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 
 	writeYAMLFile(t, dir, "app.yml", `
@@ -352,17 +395,20 @@ server:
 		return nil, nil
 	})
 
-	props, err := Init([]string{"/app"}, WithConfigDir(dir))
+	err := Init([]string{"/app"}, WithConfigDir(dir))
 	if err != nil {
 		t.Fatalf("Init failed: %v", err)
 	}
 
-	if v := props.GetInt("server.port"); v != 8080 {
+	if v := GetInt("server.port"); v != 8080 {
 		t.Fatalf("expected 8080 unchanged, got %d", v)
 	}
 }
 
 func TestWithEnvPrefix(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 
 	writeYAMLFile(t, dir, "app.yml", `
@@ -377,18 +423,21 @@ server:
 		os.Unsetenv("AIFEI_SERVER_PORT")
 	}()
 
-	props, err := LoadStore([]string{"/app"}, WithConfigDir(dir), WithEnvPrefix("MYAPP"))
+	err := Load([]string{"/app"}, WithConfigDir(dir), WithEnvPrefix("MYAPP"))
 	if err != nil {
-		t.Fatalf("LoadStore failed: %v", err)
+		t.Fatalf("Load failed: %v", err)
 	}
 
 	// Custom prefix env var is loaded
-	if v := props.GetStr("server.port"); v != "5050" {
+	if v := GetStr("server.port"); v != "5050" {
 		t.Fatalf("expected '5050' from custom prefix, got '%s'", v)
 	}
 }
 
 func TestWithEnv(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 
 	writeYAMLFile(t, dir, "app.yml", `
@@ -404,17 +453,20 @@ server:
 	os.Setenv("AIFEI_ENV", "dev")
 	defer os.Unsetenv("AIFEI_ENV")
 
-	props, err := LoadStore([]string{"/app"}, WithConfigDir(dir), WithEnv("test"))
+	err := Load([]string{"/app"}, WithConfigDir(dir), WithEnv("test"))
 	if err != nil {
-		t.Fatalf("LoadStore failed: %v", err)
+		t.Fatalf("Load failed: %v", err)
 	}
 
-	if v := props.GetInt("server.port"); v != 7777 {
+	if v := GetInt("server.port"); v != 7777 {
 		t.Fatalf("expected 7777 from forced test env, got %d", v)
 	}
 }
 
 func TestWithBaseFiles(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 
 	writeYAMLFile(t, dir, "config.yml", `
@@ -429,17 +481,20 @@ server:
 	os.Setenv("AIFEI_ENV", "dev")
 	defer os.Unsetenv("AIFEI_ENV")
 
-	props, err := LoadStore([]string{"/app"}, WithConfigDir(dir), WithBaseFiles("config.yml"))
+	err := Load([]string{"/app"}, WithConfigDir(dir), WithBaseFiles("config.yml"))
 	if err != nil {
-		t.Fatalf("LoadStore failed: %v", err)
+		t.Fatalf("Load failed: %v", err)
 	}
 
-	if v := props.GetInt("server.port"); v != 4000 {
+	if v := GetInt("server.port"); v != 4000 {
 		t.Fatalf("expected 4000 from custom base file + profile, got %d", v)
 	}
 }
 
-func TestLoadInto(t *testing.T) {
+func TestLoadFiles(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 
 	writeYAMLFile(t, dir, "app.yml", `
@@ -455,35 +510,38 @@ cache:
   maxSize: 1024
 `)
 
-	props, err := LoadStore([]string{"/app"}, WithConfigDir(dir))
+	err := Load([]string{"/app"}, WithConfigDir(dir))
 	if err != nil {
-		t.Fatalf("LoadStore failed: %v", err)
+		t.Fatalf("Load failed: %v", err)
 	}
 
-	// L4: Load additional files
-	if err := LoadInto(props,
+	// L4: Load additional files into the global
+	if err := LoadFiles(
 		filepath.Join(dir, "extra.yml"),
 		filepath.Join(dir, "more.yml"),
 	); err != nil {
-		t.Fatalf("LoadInto failed: %v", err)
+		t.Fatalf("LoadFiles failed: %v", err)
 	}
 
-	if v := props.GetInt("server.port"); v != 8080 {
+	if v := GetInt("server.port"); v != 8080 {
 		t.Fatalf("expected 8080, got %d", v)
 	}
-	if v := props.GetInt("cache.ttl"); v != 3600 {
+	if v := GetInt("cache.ttl"); v != 3600 {
 		t.Fatalf("expected 3600, got %d", v)
 	}
-	if v := props.GetInt("cache.maxSize"); v != 1024 {
+	if v := GetInt("cache.maxSize"); v != 1024 {
 		t.Fatalf("expected 1024, got %d", v)
 	}
 }
 
-func TestLoadIntoMissingFile(t *testing.T) {
-	props := NewProps()
-	err := LoadInto(props, "/nonexistent/file.yml")
+func TestLoadFilesMissingFile(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
+	setProps(NewProps())
+	err := LoadFiles("/nonexistent/file.yml")
 	if err != nil {
-		t.Fatalf("LoadInto should not error on missing file: %v", err)
+		t.Fatalf("LoadFiles should not error on missing file: %v", err)
 	}
 }
 
@@ -589,21 +647,27 @@ func TestSplitComma(t *testing.T) {
 }
 
 func TestInitEmpty(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 	// No config files at all
 
-	props, err := Init([]string{"/app"}, WithConfigDir(dir))
+	err := Init([]string{"/app"}, WithConfigDir(dir))
 	if err != nil {
 		t.Fatalf("Init should not error with no config files: %v", err)
 	}
 
 	// Should only have app.path
-	if v := props.GetStr("app.path"); v != "/app" {
+	if v := GetStr("app.path"); v != "/app" {
 		t.Fatalf("expected '/app', got '%s'", v)
 	}
 }
 
 func TestYAMLExtensionHandling(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 
 	// Test with .yaml extension
@@ -619,17 +683,20 @@ server:
 	os.Setenv("AIFEI_ENV", "dev")
 	defer os.Unsetenv("AIFEI_ENV")
 
-	props, err := LoadStore([]string{"/app"}, WithConfigDir(dir), WithBaseFiles("app.yaml"))
+	err := Load([]string{"/app"}, WithConfigDir(dir), WithBaseFiles("app.yaml"))
 	if err != nil {
-		t.Fatalf("LoadStore failed: %v", err)
+		t.Fatalf("Load failed: %v", err)
 	}
 
-	if v := props.GetInt("server.port"); v != 9090 {
+	if v := GetInt("server.port"); v != 9090 {
 		t.Fatalf("expected 9090, got %d", v)
 	}
 }
 
-func TestLoadStoreRecheckEnvAfterL3(t *testing.T) {
+func TestLoadRecheckEnvAfterL3(t *testing.T) {
+	old := saveGlobal()
+	defer setProps(old)
+
 	dir := t.TempDir()
 
 	writeYAMLFile(t, dir, "app.yml", `
@@ -644,12 +711,12 @@ server:
 	// --env=dynamic in args but env var says dev
 	// The --env flag should be detected by resolveEnv before L1
 	// But if it wasn't, the re-check after L3 should catch it
-	props, err := LoadStore([]string{"/app", "--env=dynamic"}, WithConfigDir(dir))
+	err := Load([]string{"/app", "--env=dynamic"}, WithConfigDir(dir))
 	if err != nil {
-		t.Fatalf("LoadStore failed: %v", err)
+		t.Fatalf("Load failed: %v", err)
 	}
 
-	if v := props.GetInt("server.port"); v != 5555 {
+	if v := GetInt("server.port"); v != 5555 {
 		t.Fatalf("expected 5555 from dynamic profile, got %d", v)
 	}
 }

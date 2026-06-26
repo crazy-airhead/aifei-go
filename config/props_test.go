@@ -829,3 +829,272 @@ func TestStoreGetFloat64WithDefault(t *testing.T) {
 		t.Fatalf("expected 3.14, got %f", v)
 	}
 }
+
+// =============================================================================
+// Global Props tests
+// =============================================================================
+
+func TestGlobalGetSet(t *testing.T) {
+	// Save and restore global
+	old := globalProps
+	defer setProps(old)
+
+	p := NewProps()
+	p.Set("name", "test")
+	p.Set("server.port", 8080)
+	setProps(p)
+
+	// Get
+	if v := Get("name"); v != "test" {
+		t.Fatalf("expected 'test', got %v", v)
+	}
+
+	// GetStr
+	if v := GetStr("name"); v != "test" {
+		t.Fatalf("expected 'test', got '%s'", v)
+	}
+
+	// GetInt
+	if v := GetInt("server.port"); v != 8080 {
+		t.Fatalf("expected 8080, got %d", v)
+	}
+
+	// GetInt64
+	if v := GetInt64("server.port"); v != 8080 {
+		t.Fatalf("expected 8080, got %d", v)
+	}
+
+	// GetFloat64
+	if v := GetFloat64("server.port"); v != 8080.0 {
+		t.Fatalf("expected 8080.0, got %f", v)
+	}
+
+	// GetBool
+	p.Set("enabled", true)
+	if v := GetBool("enabled"); !v {
+		t.Fatal("expected true")
+	}
+
+	// Has
+	if !Has("name") {
+		t.Fatal("expected Has('name') to be true")
+	}
+	if Has("missing") {
+		t.Fatal("expected Has('missing') to be false")
+	}
+
+	// Keys
+	keys := Keys()
+	if len(keys) != 3 {
+		t.Fatalf("expected 3 keys, got %d", len(keys))
+	}
+
+	// Set via global
+	Set("newkey", "newvalue")
+	if v := p.GetStr("newkey"); v != "newvalue" {
+		t.Fatalf("expected 'newvalue', got '%s'", v)
+	}
+}
+
+func TestGlobalNilProps(t *testing.T) {
+	// Save and restore global
+	old := globalProps
+	defer setProps(old)
+
+	globalProps = nil
+
+	// All getters should return zero values / defaults
+	if v := Get("key"); v != nil {
+		t.Fatalf("expected nil, got %v", v)
+	}
+	if v := Get("key", "default"); v != "default" {
+		t.Fatalf("expected 'default', got %v", v)
+	}
+	if v := GetStr("key"); v != "" {
+		t.Fatalf("expected empty string, got '%s'", v)
+	}
+	if v := GetStr("key", "fallback"); v != "fallback" {
+		t.Fatalf("expected 'fallback', got '%s'", v)
+	}
+	if v := GetBool("key"); v {
+		t.Fatal("expected false")
+	}
+	if v := GetBool("key", true); !v {
+		t.Fatal("expected default true")
+	}
+	if v := GetInt("key"); v != 0 {
+		t.Fatalf("expected 0, got %d", v)
+	}
+	if v := GetInt("key", 42); v != 42 {
+		t.Fatalf("expected 42, got %d", v)
+	}
+	if v := GetInt64("key"); v != 0 {
+		t.Fatalf("expected 0, got %d", v)
+	}
+	if v := GetFloat64("key"); v != 0 {
+		t.Fatalf("expected 0, got %f", v)
+	}
+	if Has("key") {
+		t.Fatal("expected false")
+	}
+	if keys := Keys(); keys != nil {
+		t.Fatalf("expected nil keys, got %v", keys)
+	}
+
+	// Set should be a no-op (doesn't panic)
+	Set("key", "value")
+
+	// Sub returns empty Props
+	sub := Sub("prefix")
+	if sub == nil {
+		t.Fatal("Sub should return non-nil empty Props")
+	}
+	if len(sub.Keys()) != 0 {
+		t.Fatalf("expected 0 keys, got %d", len(sub.Keys()))
+	}
+
+	// SubBind returns nil
+	type DBConf struct {
+		Driver string `yaml:"driver"`
+	}
+	var db DBConf
+	if err := SubBind("db", &db); err != nil {
+		t.Fatalf("SubBind should not error on nil global: %v", err)
+	}
+
+	// Bind returns nil
+	var cfg map[string]interface{}
+	if err := Bind(&cfg); err != nil {
+		t.Fatalf("Bind should not error on nil global: %v", err)
+	}
+}
+
+func TestGlobalSubAndSubBind(t *testing.T) {
+	old := globalProps
+	defer setProps(old)
+
+	p := NewProps()
+	p.Set("db.driver", "mysql")
+	p.Set("db.port", 3306)
+	setProps(p)
+
+	// Sub
+	dbProps := Sub("db")
+	if v := dbProps.GetStr("driver"); v != "mysql" {
+		t.Fatalf("expected 'mysql', got '%s'", v)
+	}
+	if v := dbProps.GetInt("port"); v != 3306 {
+		t.Fatalf("expected 3306, got %d", v)
+	}
+
+	// SubBind
+	type DBConf struct {
+		Driver string `yaml:"driver"`
+		Port   int    `yaml:"port"`
+	}
+	var db DBConf
+	if err := SubBind("db", &db); err != nil {
+		t.Fatalf("SubBind failed: %v", err)
+	}
+	if db.Driver != "mysql" {
+		t.Fatalf("expected 'mysql', got '%s'", db.Driver)
+	}
+	if db.Port != 3306 {
+		t.Fatalf("expected 3306, got %d", db.Port)
+	}
+}
+
+func TestGlobalBind(t *testing.T) {
+	old := globalProps
+	defer setProps(old)
+
+	p := NewProps()
+	p.Set("server.port", 9090)
+	p.Set("server.name", "myapp")
+	setProps(p)
+
+	type ServerConf struct {
+		Port int    `yaml:"port"`
+		Name string `yaml:"name"`
+	}
+	type AppConf struct {
+		Server ServerConf `yaml:"server"`
+	}
+	var cfg AppConf
+	if err := Bind(&cfg); err != nil {
+		t.Fatalf("Bind failed: %v", err)
+	}
+	if cfg.Server.Port != 9090 {
+		t.Fatalf("expected 9090, got %d", cfg.Server.Port)
+	}
+	if cfg.Server.Name != "myapp" {
+		t.Fatalf("expected 'myapp', got '%s'", cfg.Server.Name)
+	}
+}
+
+func TestGlobalGetDefaults(t *testing.T) {
+	old := globalProps
+	defer setProps(old)
+
+	p := NewProps()
+	setProps(p)
+
+	// Get with default
+	if v := Get("missing", "default"); v != "default" {
+		t.Fatalf("expected 'default', got %v", v)
+	}
+
+	// GetStr with default
+	if v := GetStr("missing", "fallback"); v != "fallback" {
+		t.Fatalf("expected 'fallback', got '%s'", v)
+	}
+	// empty string triggers default
+	p.Set("empty", "")
+	if v := GetStr("empty", "nonempty"); v != "nonempty" {
+		t.Fatalf("expected 'nonempty', got '%s'", v)
+	}
+
+	// GetBool with default
+	if v := GetBool("missing", true); !v {
+		t.Fatal("expected default true")
+	}
+	// non-bool triggers default
+	p.Set("name", "hello")
+	if v := GetBool("name", true); !v {
+		t.Fatal("expected default true for non-bool")
+	}
+
+	// GetInt with default
+	if v := GetInt("missing", 3000); v != 3000 {
+		t.Fatalf("expected 3000, got %d", v)
+	}
+
+	// GetInt64 with default
+	if v := GetInt64("missing", 100); v != 100 {
+		t.Fatalf("expected 100, got %d", v)
+	}
+
+	// GetFloat64 with default
+	if v := GetFloat64("missing", 3.14); v != 3.14 {
+		t.Fatalf("expected 3.14, got %f", v)
+	}
+}
+
+func TestSetPropsFunc(t *testing.T) {
+	old := globalProps
+	defer setProps(old)
+
+	p := NewProps()
+	p.Set("key", "value")
+	setProps(p)
+
+	if v := GetStr("key"); v != "value" {
+		t.Fatalf("expected 'value', got '%s'", v)
+	}
+
+	// setProps with nil
+	setProps(nil)
+	if globalProps != nil {
+		t.Fatal("expected Props to be nil after setProps(nil)")
+	}
+}
