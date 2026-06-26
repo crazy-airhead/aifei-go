@@ -46,7 +46,7 @@ func main() {
 
 	// Root
 	app.GET("/", func(in aifei.Input) aifei.Output {
-		return server.OkMsg("Aifei Go " + aifei.Version)
+		return server.Of("Aifei Go " + aifei.Version)
 	})
 
 	// Tables self-registered via init() in each per-table base.go.
@@ -62,7 +62,7 @@ func main() {
 	// Custom route group with auth (HTTP-level middleware)
 	admin := app.Group("/api/admin")
 	admin.GET("/dashboard", func(in aifei.Input) aifei.Output {
-		return server.OkMsg("admin dashboard")
+		return server.Of("admin dashboard")
 	})
 
 	// Start with HTTP-level middleware
