@@ -1098,3 +1098,199 @@ func TestSetPropsFunc(t *testing.T) {
 		t.Fatal("expected Props to be nil after setProps(nil)")
 	}
 }
+
+// =============================================================================
+// Key normalization tests
+// =============================================================================
+
+func TestNormalizeSegment(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		// Simple
+		{"port", "port"},
+		{"server", "server"},
+		{"", ""},
+
+		// kebab-case
+		{"max-connections", "maxConnections"},
+		{"max-Connections", "maxConnections"},
+		{"MAX-CONNECTIONS", "maxConnections"},
+
+		// snake_case
+		{"max_connections", "maxConnections"},
+		{"MAX_CONNECTIONS", "maxConnections"},
+		{"Max_Connections", "maxConnections"},
+
+		// CamelCase
+		{"maxConnections", "maxConnections"},
+		{"MaxConnections", "maxConnections"},
+		{"MAXConnections", "maxConnections"},
+
+		// Mixed
+		{"max-Connections_Host", "maxConnectionsHost"},
+		{"DB_max-connections", "dbMaxConnections"},
+
+		// Acronym handling
+		{"XMLParser", "xmlParser"},
+		{"parseXML", "parseXml"},
+		{"userID", "userId"},
+		{"getHTTPResponse", "getHttpResponse"},
+	}
+
+	for _, tt := range tests {
+		result := normalizeSegment(tt.input)
+		if result != tt.expected {
+			t.Errorf("normalizeSegment(%q) = %q, want %q", tt.input, result, tt.expected)
+		}
+	}
+}
+
+func TestNormalizeKey(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		// Simple dot-separated
+		{"server.port", "server.port"},
+		{"Server.Port", "server.port"},
+		{"SERVER.PORT", "server.port"},
+
+		// Mixed segments
+		{"db.max-connections", "db.maxConnections"},
+		{"DB.MAX_CONNECTIONS", "db.maxConnections"},
+		{"db.max_connections", "db.maxConnections"},
+		{"Db.MaxConnections", "db.maxConnections"},
+
+		// Deep nesting
+		{"spring.datasource.max-active", "spring.datasource.maxActive"},
+		{"Spring.DataSource.MaxActive", "spring.dataSource.maxActive"},
+
+		// Empty parts are preserved
+		{".", "."},
+		{"a..b", "a..b"},
+	}
+
+	for _, tt := range tests {
+		result := normalizeKey(tt.input)
+		if result != tt.expected {
+			t.Errorf("normalizeKey(%q) = %q, want %q", tt.input, result, tt.expected)
+		}
+	}
+}
+
+func TestPropsNormalizedGetSet(t *testing.T) {
+	p := NewProps()
+
+	// Set with camelCase, get with snake_case
+	p.Set("server.maxConnections", 100)
+	if v := p.GetInt("server.max_connections"); v != 100 {
+		t.Fatalf("expected 100 via snake_case, got %d", v)
+	}
+	if v := p.GetInt("server.max-connections"); v != 100 {
+		t.Fatalf("expected 100 via kebab-case, got %d", v)
+	}
+	if v := p.GetInt("SERVER.MAX_CONNECTIONS"); v != 100 {
+		t.Fatalf("expected 100 via UPPER_CASE, got %d", v)
+	}
+
+	// Set with kebab-case, get with CamelCase
+	p.Set("server.max-connections", 200)
+	if v := p.GetInt("server.MaxConnections"); v != 200 {
+		t.Fatalf("expected 200 via CamelCase, got %d", v)
+	}
+	if v := p.GetInt("server.max_connections"); v != 200 {
+		t.Fatalf("expected 200 via snake_case, got %d", v)
+	}
+
+	// Hash should work with any format
+	p.Set("db.max-idle", 10)
+	if !p.Has("db.max_idle") {
+		t.Fatal("expected Has('db.max_idle') to be true")
+	}
+	if !p.Has("db.maxIdle") {
+		t.Fatal("expected Has('db.maxIdle') to be true")
+	}
+}
+
+func TestPropsNormalizedLoadYAML(t *testing.T) {
+	p := NewProps()
+
+	// YAML with kebab-case keys
+	if err := p.LoadYAMLBytes([]byte(`
+db:
+  max-connections: 50
+  connection-timeout: 30s
+`)); err != nil {
+		t.Fatalf("LoadYAMLBytes: %v", err)
+	}
+
+	// Access via any format
+	if v := p.GetInt("db.max-connections"); v != 50 {
+		t.Fatalf("expected 50 via kebab-case, got %d", v)
+	}
+	if v := p.GetInt("db.maxConnections"); v != 50 {
+		t.Fatalf("expected 50 via camelCase, got %d", v)
+	}
+	if v := p.GetInt("db.max_connections"); v != 50 {
+		t.Fatalf("expected 50 via snake_case, got %d", v)
+	}
+	if v := p.GetStr("db.connection-timeout"); v != "30s" {
+		t.Fatalf("expected 30s, got %s", v)
+	}
+	if v := p.GetStr("db.connectionTimeout"); v != "30s" {
+		t.Fatalf("expected 30s via camelCase, got %s", v)
+	}
+}
+
+func TestPropsNormalizedSubAndSubBind(t *testing.T) {
+	p := NewProps()
+	p.Set("db.maxIdleConnections", 20)
+	p.Set("db.connectionTimeout", "60s")
+
+	// Sub with any key format
+	db := p.Sub("db")
+	if v := db.GetInt("max-idle-connections"); v != 20 {
+		t.Fatalf("Sub: expected 20 via kebab, got %d", v)
+	}
+	if v := db.GetStr("connection_timeout"); v != "60s" {
+		t.Fatalf("Sub: expected 60s via snake, got %s", v)
+	}
+
+	// SubBind with normalized YAML tags
+	type DBConf struct {
+		MaxIdleConnections int    `yaml:"maxIdleConnections"`
+		ConnectionTimeout  string `yaml:"connectionTimeout"`
+	}
+	var conf DBConf
+	if err := p.SubBind("db", &conf); err != nil {
+		t.Fatalf("SubBind: %v", err)
+	}
+	if conf.MaxIdleConnections != 20 {
+		t.Fatalf("SubBind: expected 20, got %d", conf.MaxIdleConnections)
+	}
+	if conf.ConnectionTimeout != "60s" {
+		t.Fatalf("SubBind: expected 60s, got %s", conf.ConnectionTimeout)
+	}
+}
+
+func TestPropsNormalizedMergeYAML(t *testing.T) {
+	p := NewProps()
+
+	// First YAML with snake_case
+	p.MergeYAML([]byte(`
+server:
+  max_connections: 100
+`))
+
+	// Second YAML with kebab-case — should override the same key
+	p.MergeYAML([]byte(`
+server:
+  max-connections: 200
+`))
+
+	if v := p.GetInt("server.maxConnections"); v != 200 {
+		t.Fatalf("expected 200 after merge (kebab overrides snake), got %d", v)
+	}
+}

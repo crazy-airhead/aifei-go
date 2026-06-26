@@ -47,6 +47,7 @@ func (p *Props) Get(key string, def ...interface{}) interface{} {
 
 // get retrieves a value without locking — caller must hold p.mu (read or write).
 func (p *Props) get(key string) interface{} {
+	key = normalizeKey(key)
 	if key == "" {
 		return nil
 	}
@@ -206,6 +207,7 @@ func (p *Props) Set(key string, value interface{}) {
 
 // set stores a value without locking — caller must hold p.mu.
 func (p *Props) set(key string, value interface{}) {
+	key = normalizeKey(key)
 	if key == "" {
 		return
 	}
@@ -477,9 +479,12 @@ func (p *Props) LoadArgs(args []string) {
 
 // deepMerge merges src into dst recursively.
 // Nested maps are merged; scalar values are overwritten.
+// All keys are normalized to lowerCamelCase so that YAML files using
+// snake_case, kebab-case, or CamelCase all resolve to the same key.
 func deepMerge(dst, src map[string]interface{}) {
 	for k, srcVal := range src {
-		if dstVal, ok := dst[k]; ok {
+		nk := normalizeSegment(k)
+		if dstVal, ok := dst[nk]; ok {
 			dstMap, dstOk := dstVal.(map[string]interface{})
 			srcMap, srcOk := srcVal.(map[string]interface{})
 			if dstOk && srcOk {
@@ -487,7 +492,125 @@ func deepMerge(dst, src map[string]interface{}) {
 				continue
 			}
 		}
-		// Overwrite or add new key (deep copy to avoid shared references)
-		dst[k] = copyValue(srcVal)
+		// Normalize keys in nested maps before storing
+		dst[nk] = normalizeNestedKeys(srcVal)
 	}
 }
+
+// normalizeNestedKeys deep-copies v, normalizing all map keys to
+// lowerCamelCase recursively. Non-map values are returned as-is.
+func normalizeNestedKeys(v interface{}) interface{} {
+	m, ok := v.(map[string]interface{})
+	if !ok {
+		return copyValue(v)
+	}
+	result := make(map[string]interface{}, len(m))
+	for k, val := range m {
+		result[normalizeSegment(k)] = normalizeNestedKeys(val)
+	}
+	return result
+}
+
+// normalizeKey normalizes a dot-separated key by normalizing each segment
+// to lowerCamelCase. This allows users to use any convention (snake_case,
+// kebab-case, CamelCase, UPPER_CASE) and still hit the same key.
+//
+// Examples:
+//
+//	"server.port"         → "server.port"
+//	"Server.Port"         → "server.port"
+//	"db.max-connections"  → "db.maxConnections"
+//	"DB.MAX_CONNECTIONS"  → "db.maxConnections"
+//	"db.MaxConnections"   → "db.maxConnections"
+func normalizeKey(key string) string {
+	parts := strings.Split(key, ".")
+	for i, p := range parts {
+		parts[i] = normalizeSegment(p)
+	}
+	return strings.Join(parts, ".")
+}
+
+// normalizeSegment normalizes a single key segment to lowerCamelCase.
+// It splits the segment by underscores, hyphens, and camelCase word
+// boundaries, lowercases every word, then joins them as lowerCamelCase.
+//
+// Examples:
+//
+//	"port"            → "port"
+//	"max-connections" → "maxConnections"
+//	"max_connections" → "maxConnections"
+//	"MaxConnections"  → "maxConnections"
+//	"MAX_CONNECTIONS" → "maxConnections"
+func normalizeSegment(s string) string {
+	if s == "" {
+		return s
+	}
+
+	// Step 1: split by _ and -
+	rawWords := splitBySeparators(s)
+
+	// Step 2: split each word by camelCase boundaries
+	var words []string
+	for _, w := range rawWords {
+		words = append(words, splitCamel(w)...)
+	}
+	if len(words) == 0 {
+		return strings.ToLower(s)
+	}
+
+	// Step 3: lowercase all words, capitalize from index 1 onward
+	for i, w := range words {
+		w = strings.ToLower(w)
+		if i > 0 && len(w) > 0 {
+			w = strings.ToUpper(w[:1]) + w[1:]
+		}
+		words[i] = w
+	}
+	return strings.Join(words, "")
+}
+
+// splitBySeparators splits s by underscore and hyphen separators.
+func splitBySeparators(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool {
+		return r == '_' || r == '-'
+	})
+}
+
+// splitCamel splits a string by camelCase word boundaries.
+// Consecutive uppercase letters are treated as an acronym (single word).
+// When an uppercase sequence is followed by lowercase, the last uppercase
+// letter starts the next word.
+//
+// Examples:
+//
+//	"maxConnections"  → ["max", "Connections"]
+//	"XMLParser"       → ["XML", "Parser"]
+//	"userID"          → ["user", "ID"]
+func splitCamel(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var words []string
+	runes := []rune(s)
+	var start int
+
+	for i := 0; i < len(runes); i++ {
+		// lowercase-to-uppercase transition → word boundary
+		if i > 0 && isUpperRune(runes[i]) && !isUpperRune(runes[i-1]) {
+			words = append(words, string(runes[start:i]))
+			start = i
+			continue
+		}
+		// uppercase-to-lowercase transition within consecutive uppercase:
+		// the last uppercase belongs to the next word
+		if i > 1 && isLowerRune(runes[i]) && isUpperRune(runes[i-1]) && isUpperRune(runes[i-2]) {
+			words = append(words, string(runes[start:i-1]))
+			start = i - 1
+		}
+	}
+	words = append(words, string(runes[start:]))
+	return words
+}
+
+func isUpperRune(r rune) bool { return r >= 'A' && r <= 'Z' }
+func isLowerRune(r rune) bool { return r >= 'a' && r <= 'z' }
