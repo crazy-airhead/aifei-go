@@ -137,3 +137,110 @@ func TestPluginHandlerMiddlewareIntercepts(t *testing.T) {
 		}
 	}
 }
+
+// multiPathSpec is an OpenAPI doc with one admin and one app path, used to
+// verify path-filter grouping. Its top-level tags mirror the operations' tags
+// so tag-trimming can be checked too.
+const multiPathSpec = `{
+  "swagger": "2.0",
+  "info": {"title": "T", "version": "1"},
+  "tags": [{"name": "文件存储"}, {"name": "应用版本"}],
+  "paths": {
+    "/oa/admin-api/file/storage/get": {"get": {"tags": ["文件存储"]}},
+    "/oa/app-api/version": {"get": {"tags": ["应用版本"]}}
+  }
+}`
+
+func TestMultiGroupServicesJSON(t *testing.T) {
+	cfg := &Config{
+		Enabled:  true,
+		BasePath: "/swagger",
+		Groups: []Group{
+			{Name: "AdminApi", Path: "admin", Filter: `^/oa/admin-api`},
+			{Name: "AppApi", Path: "app", Filter: `^/oa/app-api`},
+		},
+	}
+	h := buildHandler(cfg, func(...string) (string, error) { return multiPathSpec, nil })
+
+	rr := do(t, h, "/services.json")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	for _, want := range []string{
+		`"name":"AdminApi"`, `"name":"AppApi"`,
+		`"/swagger/admin/swagger.json"`, `"/swagger/app/swagger.json"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("services.json missing %q: %s", want, body)
+		}
+	}
+}
+
+func TestMultiGroupSwaggerConfig(t *testing.T) {
+	cfg := &Config{
+		Enabled:  true,
+		BasePath: "/swagger",
+		Groups: []Group{
+			{Name: "AdminApi", Path: "admin", Filter: `^/oa/admin-api`},
+			{Name: "AppApi", Path: "app", Filter: `^/oa/app-api`},
+		},
+	}
+	h := buildHandler(cfg, func(...string) (string, error) { return multiPathSpec, nil })
+
+	rr := do(t, h, "/swagger/v3/api-docs/swagger-config")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	body := rr.Body.String()
+	for _, want := range []string{`"configUrl":""`, `"name":"AdminApi"`, `"name":"AppApi"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("swagger-config missing %q: %s", want, body)
+		}
+	}
+}
+
+func TestMultiGroupFiltersByPath(t *testing.T) {
+	cfg := &Config{
+		Enabled:  true,
+		BasePath: "/swagger",
+		Groups: []Group{
+			{Name: "AdminApi", Path: "admin", Filter: `^/oa/admin-api`},
+			{Name: "AppApi", Path: "app", Filter: `^/oa/app-api`},
+		},
+	}
+	h := buildHandler(cfg, func(...string) (string, error) { return multiPathSpec, nil })
+
+	// Admin group keeps only the admin path + tag; drops the app ones.
+	admin := do(t, h, "/swagger/admin/swagger.json").Body.String()
+	if !strings.Contains(admin, "/oa/admin-api/file/storage/get") {
+		t.Errorf("admin spec missing admin path: %s", admin)
+	}
+	if strings.Contains(admin, "/oa/app-api/version") {
+		t.Errorf("admin spec leaked app path: %s", admin)
+	}
+	if strings.Contains(admin, `"应用版本"`) {
+		t.Errorf("admin spec leaked app tag: %s", admin)
+	}
+
+	// App group keeps only the app path + tag; drops the admin ones.
+	app := do(t, h, "/swagger/app/swagger.json").Body.String()
+	if !strings.Contains(app, "/oa/app-api/version") {
+		t.Errorf("app spec missing app path: %s", app)
+	}
+	if strings.Contains(app, "/oa/admin-api/file/storage/get") {
+		t.Errorf("app spec leaked admin path: %s", app)
+	}
+	if strings.Contains(app, `"文件存储"`) {
+		t.Errorf("app spec leaked admin tag: %s", app)
+	}
+}
+
+func TestFilterNilServesVerbatim(t *testing.T) {
+	// No filter (legacy single group) → bytes returned exactly as read.
+	cfg := &Config{Enabled: true, BasePath: "/swagger", GroupName: "Legacy"}
+	h := buildHandler(cfg, func(...string) (string, error) { return multiPathSpec, nil })
+	if got := do(t, h, "/swagger/swagger.json").Body.String(); got != multiPathSpec {
+		t.Errorf("legacy spec not verbatim:\ngot:  %s\nwant: %s", got, multiPathSpec)
+	}
+}
