@@ -114,17 +114,15 @@ func ttlSeconds(sec int) time.Duration {
 	return time.Duration(sec) * time.Second
 }
 
-// LoadConfig reads cache configuration from props under prefix (empty defaults
-// to "cache"). The instances subtree is bound via YAML round-trip.
-func LoadConfig(props *config.Props, prefix string) (*Config, error) {
+// LoadConfig reads cache configuration from the global config under prefix
+// (empty defaults to "cache"). The instances subtree is bound via YAML
+// round-trip.
+func LoadConfig(prefix string) (*Config, error) {
 	if prefix == "" {
 		prefix = "cache"
 	}
-	if props == nil {
-		return &Config{}, nil
-	}
-	cfg := &Config{Default: props.GetStr(prefix + ".default")}
-	if err := props.SubBind(prefix+".instances", &cfg.Instances); err != nil {
+	cfg := &Config{Default: config.GetStr(prefix + ".default")}
+	if err := config.SubBind(prefix+".instances", &cfg.Instances); err != nil {
 		return nil, fmt.Errorf("cache: bind instances: %w", err)
 	}
 	return cfg, nil

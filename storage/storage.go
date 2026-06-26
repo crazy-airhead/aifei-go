@@ -7,9 +7,7 @@
 // SetDefault, or wire it automatically via the Plugin:
 //
 //	if err := config.Init(os.Args); err != nil { ... }
-//	props := config.NewProps()
-//	// ... populate props ...
-//	p, _ := storage.NewPlugin(props, nil)
+//	p, _ := storage.NewPlugin(nil)
 //	app := aifei.New(aifei.WithPlugin(p))
 //	server.Run(app, ":8080")
 //

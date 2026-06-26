@@ -74,7 +74,7 @@ func TestClientConfigMapping(t *testing.T) {
 }
 
 func TestPluginDisabled(t *testing.T) {
-	p := NewPlugin(&Config{Enabled: false}, nil)
+	p := NewPlugin(nil)
 	if err := p.Start(); err != nil {
 		t.Fatalf("disabled Start returned error: %v", err)
 	}

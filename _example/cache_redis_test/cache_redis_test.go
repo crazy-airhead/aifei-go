@@ -273,7 +273,8 @@ cache:
 	if err := props.LoadYAMLBytes(yaml); err != nil {
 		t.Fatalf("LoadYAMLBytes: %v", err)
 	}
-	p, err := cache.NewPlugin(props, nil)
+	config.SetProps(props)
+	p, err := cache.NewPlugin(nil)
 	if err != nil {
 		t.Fatalf("NewPlugin: %v", err)
 	}

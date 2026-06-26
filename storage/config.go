@@ -40,17 +40,15 @@ func (b BucketConfig) resolvedRegion() string {
 	return b.RegionID
 }
 
-// LoadConfig reads storage configuration from props under prefix (empty
-// defaults to "storage"). The buckets subtree is bound via YAML round-trip.
-func LoadConfig(props *config.Props, prefix string) (*Config, error) {
+// LoadConfig reads storage configuration from the global config under prefix
+// (empty defaults to "storage"). The buckets subtree is bound via YAML
+// round-trip.
+func LoadConfig(prefix string) (*Config, error) {
 	if prefix == "" {
 		prefix = "storage"
 	}
-	if props == nil {
-		return &Config{}, nil
-	}
-	cfg := &Config{Default: props.GetStr(prefix + ".default")}
-	if err := props.SubBind(prefix+".buckets", &cfg.Buckets); err != nil {
+	cfg := &Config{Default: config.GetStr(prefix + ".default")}
+	if err := config.SubBind(prefix+".buckets", &cfg.Buckets); err != nil {
 		return nil, fmt.Errorf("storage: bind buckets: %w", err)
 	}
 	return cfg, nil

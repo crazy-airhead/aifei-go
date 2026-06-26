@@ -5,15 +5,15 @@ go 1.26
 require (
 	github.com/alicebob/miniredis/v2 v2.33.0
 	github.com/crazy-airhead/aifei-go/cache v0.0.0
-	github.com/crazy-airhead/aifei-go/config v0.0.9
+	github.com/crazy-airhead/aifei-go/config v0.0.11
 )
 
 require (
 	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/coocood/freecache v1.2.4 // indirect
-	github.com/crazy-airhead/aifei-go/aifei v0.0.9 // indirect
-	github.com/crazy-airhead/aifei-go/log v0.0.9 // indirect
+	github.com/crazy-airhead/aifei-go/aifei v0.0.11 // indirect
+	github.com/crazy-airhead/aifei-go/log v0.0.11 // indirect
 	github.com/dgraph-io/ristretto v1.0.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect

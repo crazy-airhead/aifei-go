@@ -837,12 +837,12 @@ func TestStoreGetFloat64WithDefault(t *testing.T) {
 func TestGlobalGetSet(t *testing.T) {
 	// Save and restore global
 	old := globalProps
-	defer setProps(old)
+	defer SetProps(old)
 
 	p := NewProps()
 	p.Set("name", "test")
 	p.Set("server.port", 8080)
-	setProps(p)
+	SetProps(p)
 
 	// Get
 	if v := Get("name"); v != "test" {
@@ -899,7 +899,7 @@ func TestGlobalGetSet(t *testing.T) {
 func TestGlobalNilProps(t *testing.T) {
 	// Save and restore global
 	old := globalProps
-	defer setProps(old)
+	defer SetProps(old)
 
 	globalProps = nil
 
@@ -971,12 +971,12 @@ func TestGlobalNilProps(t *testing.T) {
 
 func TestGlobalSubAndSubBind(t *testing.T) {
 	old := globalProps
-	defer setProps(old)
+	defer SetProps(old)
 
 	p := NewProps()
 	p.Set("db.driver", "mysql")
 	p.Set("db.port", 3306)
-	setProps(p)
+	SetProps(p)
 
 	// Sub
 	dbProps := Sub("db")
@@ -1006,12 +1006,12 @@ func TestGlobalSubAndSubBind(t *testing.T) {
 
 func TestGlobalBind(t *testing.T) {
 	old := globalProps
-	defer setProps(old)
+	defer SetProps(old)
 
 	p := NewProps()
 	p.Set("server.port", 9090)
 	p.Set("server.name", "myapp")
-	setProps(p)
+	SetProps(p)
 
 	type ServerConf struct {
 		Port int    `yaml:"port"`
@@ -1034,10 +1034,10 @@ func TestGlobalBind(t *testing.T) {
 
 func TestGlobalGetDefaults(t *testing.T) {
 	old := globalProps
-	defer setProps(old)
+	defer SetProps(old)
 
 	p := NewProps()
-	setProps(p)
+	SetProps(p)
 
 	// Get with default
 	if v := Get("missing", "default"); v != "default" {
@@ -1080,22 +1080,22 @@ func TestGlobalGetDefaults(t *testing.T) {
 	}
 }
 
-func TestSetPropsFunc(t *testing.T) {
+func TestSetProps(t *testing.T) {
 	old := globalProps
-	defer setProps(old)
+	defer SetProps(old)
 
 	p := NewProps()
 	p.Set("key", "value")
-	setProps(p)
+	SetProps(p)
 
 	if v := GetStr("key"); v != "value" {
 		t.Fatalf("expected 'value', got '%s'", v)
 	}
 
-	// setProps with nil
-	setProps(nil)
+	// SetProps with nil
+	SetProps(nil)
 	if globalProps != nil {
-		t.Fatal("expected Props to be nil after setProps(nil)")
+		t.Fatal("expected Props to be nil after SetProps(nil)")
 	}
 }
 

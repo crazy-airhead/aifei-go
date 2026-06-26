@@ -193,7 +193,7 @@ func Load(args []string, opts ...Option) error {
 	}
 
 	// Set global Props so package-level functions work.
-	setProps(store)
+	SetProps(store)
 
 	return nil
 }

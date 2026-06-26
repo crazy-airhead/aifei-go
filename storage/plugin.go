@@ -2,7 +2,6 @@ package storage
 
 import (
 	"github.com/crazy-airhead/aifei-go/aifei"
-	"github.com/crazy-airhead/aifei-go/config"
 	"github.com/crazy-airhead/aifei-go/log"
 )
 
@@ -10,28 +9,26 @@ import (
 var _ aifei.Plugin = (*Plugin)(nil)
 
 // Plugin integrates storage with the aifei framework. On Start it reads the
-// "storage" subtree from props, builds a Manager, and installs it as the
-// package-level default so that the top-level storage.Put/Get/... helpers work.
+// "storage" subtree from the global config, builds a Manager, and installs it
+// as the package-level default so that the top-level storage.Put/Get/...
+// helpers work.
 //
 // Usage:
 //
 //	if err := config.Init(os.Args); err != nil { ... }
-//	props := config.NewProps()
-//	// ... populate props ...
-//	p, err := storage.NewPlugin(props, nil)
+//	p, err := storage.NewPlugin(nil)
 //	app := aifei.New(aifei.WithPlugin(p))
 //	server.Run(app, ":8080")
 type Plugin struct {
-	props  *config.Props
 	prefix string
 	log    log.Logger
 	mgr    *Manager
 }
 
-// NewPlugin creates a storage Plugin that reads its configuration from props
-// under the given prefix (empty defaults to "storage"). A nil logger falls back
-// to log.Default().
-func NewPlugin(props *config.Props, logger log.Logger, prefix ...string) (*Plugin, error) {
+// NewPlugin creates a storage Plugin that reads its configuration from the
+// global config under the given prefix (empty defaults to "storage").
+// A nil logger falls back to log.Default().
+func NewPlugin(logger log.Logger, prefix ...string) (*Plugin, error) {
 	p := "storage"
 	if len(prefix) > 0 && prefix[0] != "" {
 		p = prefix[0]
@@ -39,18 +36,13 @@ func NewPlugin(props *config.Props, logger log.Logger, prefix ...string) (*Plugi
 	if logger == nil {
 		logger = log.Default()
 	}
-	return &Plugin{props: props, prefix: p, log: logger}, nil
+	return &Plugin{prefix: p, log: logger}, nil
 }
 
-// Start loads the storage config, builds the Manager, and registers it as the
-// package default. If no props were provided it is a no-op (callers can still
-// call SetDefault with a Manager built directly).
+// Start loads the storage config from the global config, builds the Manager,
+// and registers it as the package default.
 func (p *Plugin) Start() error {
-	if p.props == nil {
-		p.log.Info("storage plugin: no config props, skipping auto-setup")
-		return nil
-	}
-	cfg, err := LoadConfig(p.props, p.prefix)
+	cfg, err := LoadConfig(p.prefix)
 	if err != nil {
 		return err
 	}

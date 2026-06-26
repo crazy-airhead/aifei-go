@@ -11,10 +11,10 @@ github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UF
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/coocood/freecache v1.2.4 h1:UdR6Yz/X1HW4fZOuH0Z94KwG851GWOSknua5VUbb/5M=
 github.com/coocood/freecache v1.2.4/go.mod h1:RBUWa/Cy+OHdfTGFEhEuE1pMCMX51Ncizj7rthiQ3vk=
-github.com/crazy-airhead/aifei-go/aifei v0.0.9 h1:L2pRBG6IeX/qgbCgTxBaYpetaRcVKy4jg0GPuyvj3QU=
-github.com/crazy-airhead/aifei-go/aifei v0.0.9/go.mod h1:jlsT42WBIFogoKNt6kTbPEOHBkr/q1s/pTf2bthvfq4=
-github.com/crazy-airhead/aifei-go/log v0.0.9 h1:m+l8TLYtr7GYRNgr9AWkBic49xau7WBrTotk/DtvT9U=
-github.com/crazy-airhead/aifei-go/log v0.0.9/go.mod h1:AkVwEZUcTuyBaP7fpfky/ltMvbzL+DsqHzYgrN/RhPY=
+github.com/crazy-airhead/aifei-go/aifei v0.0.11 h1:XXjdqPOPMiBlTULOd+5P5I7bMxodQa6oEnLaQAbU3EA=
+github.com/crazy-airhead/aifei-go/aifei v0.0.11/go.mod h1:jlsT42WBIFogoKNt6kTbPEOHBkr/q1s/pTf2bthvfq4=
+github.com/crazy-airhead/aifei-go/log v0.0.11 h1:5cp5XEPbSkNtOm3uXGMvdbJwT36EXoI2cI1AJs1j1G4=
+github.com/crazy-airhead/aifei-go/log v0.0.11/go.mod h1:AkVwEZUcTuyBaP7fpfky/ltMvbzL+DsqHzYgrN/RhPY=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dgraph-io/ristretto v1.0.0 h1:SYG07bONKMlFDUYu5pEu3DGAh8c2OFNzKm6G9J4Si84=

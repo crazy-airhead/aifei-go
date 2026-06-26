@@ -22,7 +22,7 @@ func saveGlobal() *Props {
 
 func TestLoadBasic(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 	writeYAMLFile(t, dir, "app.yml", `
@@ -54,7 +54,7 @@ db:
 
 func TestLoadWithProfile(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 
@@ -95,7 +95,7 @@ db:
 
 func TestLoadWithProfileFromArgs(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 
@@ -124,7 +124,7 @@ server:
 
 func TestLoadWithProfileFromEnv(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 
@@ -152,7 +152,7 @@ server:
 
 func TestLoadExtensions(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 
@@ -197,7 +197,7 @@ email:
 
 func TestLoadExtensionsFromEnv(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 
@@ -230,7 +230,7 @@ logging:
 
 func TestLoadEnvVars(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 
@@ -264,7 +264,7 @@ db:
 
 func TestLoadArgs(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 
@@ -295,7 +295,7 @@ db:
 
 func TestInitFullPipeline(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 
@@ -344,7 +344,7 @@ nacos:
 
 func TestInitCloudLoaderOverrides(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 
@@ -377,7 +377,7 @@ server:
 
 func TestInitCloudLoaderEmptyContent(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 
@@ -407,7 +407,7 @@ server:
 
 func TestWithEnvPrefix(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 
@@ -436,7 +436,7 @@ server:
 
 func TestWithEnv(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 
@@ -465,7 +465,7 @@ server:
 
 func TestWithBaseFiles(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 
@@ -493,7 +493,7 @@ server:
 
 func TestLoadFiles(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 
@@ -536,9 +536,9 @@ cache:
 
 func TestLoadFilesMissingFile(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
-	setProps(NewProps())
+	SetProps(NewProps())
 	err := LoadFiles("/nonexistent/file.yml")
 	if err != nil {
 		t.Fatalf("LoadFiles should not error on missing file: %v", err)
@@ -648,7 +648,7 @@ func TestSplitComma(t *testing.T) {
 
 func TestInitEmpty(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 	// No config files at all
@@ -666,7 +666,7 @@ func TestInitEmpty(t *testing.T) {
 
 func TestYAMLExtensionHandling(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 
@@ -695,7 +695,7 @@ server:
 
 func TestLoadRecheckEnvAfterL3(t *testing.T) {
 	old := saveGlobal()
-	defer setProps(old)
+	defer SetProps(old)
 
 	dir := t.TempDir()
 

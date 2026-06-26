@@ -2,7 +2,7 @@ package config
 
 // globalProps is the package-level configuration instance.
 // It is automatically set by Init(). Callers may also set it explicitly via
-// setProps() before any concurrent reads.
+// SetProps() before any concurrent reads.
 //
 // The package-level functions (Get, GetStr, GetBool, GetInt, GetInt64,
 // GetFloat64, Has, Keys, Set, Sub, SubBind, Bind) operate on this instance.
@@ -10,9 +10,10 @@ package config
 // provided default), and Set is a no-op.
 var globalProps *Props
 
-// setProps sets the global configuration instance.
-// It is safe to call before any concurrent reads.
-func setProps(p *Props) {
+// SetProps sets the global configuration instance.
+// Prefer Init()/Load()/LoadFiles() for normal usage; this is for
+// programmatic setup, e.g. in tests or when constructing Props manually.
+func SetProps(p *Props) {
 	globalProps = p
 }
 

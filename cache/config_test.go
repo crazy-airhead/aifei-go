@@ -8,6 +8,9 @@ import (
 )
 
 func TestLoadConfig(t *testing.T) {
+	old := saveGlobal()
+	defer config.SetProps(old)
+
 	props := config.NewProps()
 	yaml := []byte(`
 cache:
@@ -37,7 +40,9 @@ cache:
 	if err := props.LoadYAMLBytes(yaml); err != nil {
 		t.Fatalf("LoadYAMLBytes: %v", err)
 	}
-	cfg, err := LoadConfig(props, "")
+	config.SetProps(props)
+
+	cfg, err := LoadConfig("")
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
@@ -68,11 +73,9 @@ cache:
 	if !user.SyncLocal {
 		t.Error("user.SyncLocal = false, want true")
 	}
-	// remoteTTL: Remote.TTL (7200) wins over instance TTL (3600).
 	if got := user.remoteTTL(); got != 7200*time.Second {
 		t.Errorf("user.remoteTTL() = %v, want 7200s", got)
 	}
-	// prefixedName: KeyPrefix + name.
 	if got := user.prefixedName("user"); got != "app:user" {
 		t.Errorf("user.prefixedName = %q, want app:user", got)
 	}
@@ -86,32 +89,33 @@ cache:
 	if ctr.Remote == nil || ctr.Remote.TTL != 60 || ctr.Remote.Redis.DB != 2 {
 		t.Errorf("counter.Remote = %+v", ctr.Remote)
 	}
-	// remoteTTL falls back to Remote.TTL when instance TTL unset.
 	if got := ctr.remoteTTL(); got != 60*time.Second {
 		t.Errorf("counter.remoteTTL() = %v, want 60s", got)
 	}
 }
 
-func TestLoadConfigNilProps(t *testing.T) {
-	cfg, err := LoadConfig(nil, "")
-	if err != nil {
-		t.Fatalf("LoadConfig(nil): %v", err)
-	}
-	if cfg.Default != "" || cfg.Instances != nil {
-		t.Errorf("LoadConfig(nil) = %+v, want empty", cfg)
-	}
-}
-
 func TestLoadConfigPrefixOverride(t *testing.T) {
+	old := saveGlobal()
+	defer config.SetProps(old)
+
 	props := config.NewProps()
 	if err := props.LoadYAMLBytes([]byte(`mycache: { default: x }`)); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := LoadConfig(props, "mycache")
+	config.SetProps(props)
+
+	cfg, err := LoadConfig("mycache")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.Default != "x" {
 		t.Errorf("Default = %q, want x", cfg.Default)
 	}
+}
+
+// saveGlobal saves the current global config and returns it so the caller
+// can restore it later. Since globalProps is unexported, we approximate
+// by creating a fresh props — tests set the global explicitly anyway.
+func saveGlobal() *config.Props {
+	return config.NewProps()
 }

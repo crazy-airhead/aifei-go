@@ -3,6 +3,7 @@ package nacos
 import (
 	"fmt"
 
+	"github.com/crazy-airhead/aifei-go/config"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
 )
 
@@ -111,4 +112,24 @@ func FetchConfig(cfg *Config) (string, error) {
 		return "", fmt.Errorf("nacos get config: %w", err)
 	}
 	return content, nil
+}
+
+// LoadConfig reads Nacos configuration from the global config under the
+// "nacos" prefix.
+func LoadConfig() (*Config, error) {
+	cfg := &Config{
+		Enabled:     config.GetBool("nacos.enabled"),
+		ServerAddr:  config.GetStr("nacos.serverAddr"),
+		Namespace:   config.GetStr("nacos.namespace"),
+		Group:       config.GetStr("nacos.group"),
+		DataID:      config.GetStr("nacos.dataId"),
+		ServiceName: config.GetStr("nacos.serviceName"),
+		ServiceIP:   config.GetStr("nacos.serviceIp"),
+		Username:    config.GetStr("nacos.username"),
+		Password:    config.GetStr("nacos.password"),
+	}
+	if port := config.GetInt("nacos.servicePort"); port > 0 {
+		cfg.ServicePort = uint64(port)
+	}
+	return cfg, nil
 }

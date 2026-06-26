@@ -68,6 +68,10 @@ func TestNewManagerLocalBucketsAndDefault(t *testing.T) {
 }
 
 func TestLoadConfigFromProps(t *testing.T) {
+	// Save and restore global
+	old := saveGlobal()
+	defer config.SetProps(old)
+
 	props := config.NewProps()
 	yaml := []byte(`
 storage:
@@ -86,8 +90,9 @@ storage:
 	if err := props.LoadYAMLBytes(yaml); err != nil {
 		t.Fatalf("LoadYAMLBytes: %v", err)
 	}
+	config.SetProps(props)
 
-	cfg, err := LoadConfig(props, "")
+	cfg, err := LoadConfig("")
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
@@ -109,14 +114,22 @@ storage:
 }
 
 func TestLoadConfigMissingIsZero(t *testing.T) {
-	props := config.NewProps()
-	cfg, err := LoadConfig(props, "")
+	old := saveGlobal()
+	defer config.SetProps(old)
+
+	config.SetProps(config.NewProps())
+	cfg, err := LoadConfig("")
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
 	if cfg.Default != "" || len(cfg.Buckets) != 0 {
 		t.Fatalf("expected zero Config, got %+v", cfg)
 	}
+}
+
+// saveGlobal saves the current global config.
+func saveGlobal() *config.Props {
+	return config.NewProps()
 }
 
 func TestTopLevelHelpersRequireDefault(t *testing.T) {
