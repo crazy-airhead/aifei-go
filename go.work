@@ -18,4 +18,5 @@ use (
 	./nami
 	./server
 	./storage
+	./swagger
 )

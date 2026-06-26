@@ -50,6 +50,7 @@ This project uses Go workspace (`go.work`) with independent modules. Each librar
 | `github.com/crazy-airhead/aifei-go/storage` | `./storage` | aifei, config, log, minio-go/v7 |
 | `github.com/crazy-airhead/aifei-go/cache` | `./cache` | aifei, config, log, jetcache-go, go-redis/v9 |
 | `github.com/crazy-airhead/aifei-go/config` | `./config` | `gopkg.in/yaml.v3` |
+| `github.com/crazy-airhead/aifei-go/swagger` | `./swagger` | aifei, config, log, swaggo/swag |
 | `_example/demo` | `./_example/demo` | `modernc.org/sqlite` |
 | `_example/db_sqlite_test` | `./_example/db_sqlite_test` | `modernc.org/sqlite` |
 | `_example/cache_redis_test` | `./_example/cache_redis_test` | `github.com/alicebob/miniredis/v2` |
@@ -62,6 +63,7 @@ Users can import individual modules without pulling unwanted dependencies:
 - `go get github.com/crazy-airhead/aifei-go/nacos` — Nacos plugin (service registry, config center, discovery)
 - `go get github.com/crazy-airhead/aifei-go/storage` — storage plugin (local filesystem + S3-compatible backends)
 - `go get github.com/crazy-airhead/aifei-go/cache` — cache plugin (local FreeCache/TinyLFU + Redis two-level cache)
+- `go get github.com/crazy-airhead/aifei-go/swagger` — knife4j-vue3 OpenAPI docs plugin (embedded UI, serves spec via swaggo/swag)
 
 Requires Go 1.26. All library code uses only the Go standard library.
 
@@ -141,6 +143,7 @@ Generates type-safe per-table packages from database schema:
 - **`./nacos`** — Nacos integration plugin built on nacos-sdk-go/v2. Implements `aifei.Plugin` for service registration (ephemeral instances with SDK heartbeats), config center (watch DataID, push changes via callback), and discovery (`NewNamiUpstream` converts Nacos discovery into `nami.Upstream`). Auto-registers a `config.CloudLoader` via `init()` so `config.Init()` automatically fetches config from Nacos at L5 when `nacos.server_addr` + `nacos.data_id` are set. `BindStore(store)` method chains `ConfigChangeCallback` to auto-update the Store on runtime config changes from Nacos.
 - **`./config`** — Layered configuration loading with generic `Store` (key-value map). Supports L1-L5 loading order: `app.yml` + `app-{env}.yml` → extension configs → env vars + CLI args → programmatic `LoadInto()` → cloud loaders (e.g., Nacos). Provides `Get`/`GetStr`/`GetBool`/`GetInt` accessors, `Sub(prefix)` for scoped sub-props, `Bind(v)` for YAML round-trip to user-defined structs, and functional options (`WithEnvPrefix`, `WithEnv`, `WithConfigDir`, `WithBaseFiles`). Thread-safe (`sync.RWMutex`) — safe for concurrent reads and dynamic updates from cloud config watchers. Does NOT define application-level config structs — each app defines its own.
 - **`./storage`** — Unified file-storage abstraction (ported from ficus `ficus-starter-storage`) with local filesystem and S3-compatible backends (AWS S3/Minio/OSS/COS) via minio-go. `Client` interface (`Exists`/`TempURL`/`Get`/`Put`/`Delete`/`DeleteBatch`, bucket-scoped) + `Media` model (`io.Reader` + content type/size, stdlib `mime` inference). `Manager` routes by bucket name with a default; `Plugin` (`aifei.Plugin`) reads `storage.*` from `config.Props` (`storage.default` + `storage.buckets.<name>.{driver,endpoint,regionId,accessKey,secretKey,autoCreateBucket}`) and installs the package-level default so top-level `storage.Put/Get/...` and `storage.Use(bucket)` work. Driver inferred from `driver` (`local`/`s3`) or endpoint scheme.
+- **`./swagger`** — Knife4j-vue3 OpenAPI docs plugin. Implements `aifei.Plugin` to serve the compiled knife4j-vue3 UI (`web/` is embedded via `//go:embed`) plus a generated `services.json` group config and the OpenAPI spec at a configurable base path (default `/swagger`). The UI is pure static frontend (no springboot) compiled with `VITE_RELEASE_APP_TYPE=Knife4jFront`; it requests `/services.json` from the server root (hardcoded), which points it to `{basePath}/swagger.json` served via `swag.ReadDoc()`. Provides `Handler() func(http.Handler) http.Handler` middleware that intercepts matching requests to serve raw HTML/JSON/CSS/JS outside the aifei `{code, msg, data}` envelope; users wire it via `server.WithHTTPHandler(swagPlugin.Handler())`. Configured via `swagger.*` in the global config (`enabled`, `basePath`, `groupName`). Users run `swag init` to generate docs from Go comments, import the generated `docs` package (which registers the spec), and add `swagger.NewPlugin(nil)` to the app. Dependencies: `github.com/swaggo/swag`.
 - **`./cache`** — Two-level (local + Redis) cache abstraction built on jetcache-go (inspired by ficus `CacheService`). `Cache` interface (`Get` returning a `found bool` distinct from miss, `Set`/`Delete`/`Exists`, and `GetOrStore` doing singleflight + cache-penetration protection) wraps jetcache-go, exposing FreeCache/TinyLFU L1 and go-redis L2; per-instance key prefixing isolates instances sharing one Redis. `Manager` routes by instance name with a default; `Plugin` (`aifei.Plugin`) reads `cache.*` from `config.Props` (`cache.default` + `cache.instances.<name>.{type,ttl,codec,keyPrefix,local,remote,refresh,syncLocal}`) and installs the package-level default so top-level `cache.Get/Set/Delete/Exists/GetOrStore` and `cache.Use(instance)` work. `Stop()` closes every instance (unlike storage, caches may run refresh goroutines). Type inferred from `type` (`local`/`remote`/`both`) or which of `local`/`remote` is configured; L1 driver `freecache`/`tinylfu`, L2 redis `addr` (single node) or `addrs` (ring). Advanced jetcache features (SetNX/Refresh/SyncLocal/...) are reachable via `Cache.JetCache()`.
 
 ### Examples
@@ -160,7 +163,7 @@ Generates type-safe per-table packages from database schema:
 
 ## Project State
 
-The framework is functionally complete (~8,350 lines of library code + ~2,057 lines of tests across 74 Go files). Design docs are in `docs/` with detailed specs per phase (`00-overview.md` through `06-phase6-example.md`).
+The framework is functionally complete (~8,700 lines of library code + ~2,100 lines of tests across 78 Go files). Design docs are in `docs/` with detailed specs per phase (`00-overview.md` through `06-phase6-example.md`).
 
 ## Naming Conventions
 
