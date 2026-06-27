@@ -5,6 +5,7 @@ use (
 	./_example/db_sqlite_test
 	./_example/demo
 	./_example/enjoy_test
+	./_example/kafka_test
 	./aifei
 	./cache
 	./config
@@ -13,6 +14,7 @@ use (
 	./generator
 	./go-http
 	./json
+	./kafka
 	./log
 	./nacos
 	./nami
