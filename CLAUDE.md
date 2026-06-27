@@ -79,11 +79,11 @@ Aifei-Go is a lightweight Go web framework ported from [Aifei Java](https://gith
 
 ### Core (`./aifei`)
 
-- **`aifei.go`** — `Aifei` struct: entry point with `New()`, `Use()`, route methods (`GET`/`POST`/etc.), `Register()` for struct-based routing. Implements `http.Handler` via `ServeHTTP`.
+- **`aifei.go`** — `Aifei` struct: entry point with `New()`, `Use()`, route methods (`GET`/`POST`/`PUT`/`DELETE`/`PATCH`/`Any`), `Handle()`, `Group()`. Implements `http.Handler` via `ServeHTTP`. (Struct-method → route registration is `server.Register()`, NOT a method on `Aifei`.)
 - **`input.go`** — `Input` interface: request parameter abstraction. Methods: `Has()`, `PathPara()`, `GetStr()`, `GetInt()`, `GetInt64()`, `GetFloat64()`, `GetBool()`, `GetBean()`, `Body()`, `Method()`, `Path()`, `RemoteIP()`, `Query()`.
 - **`output.go`** — `Output` interface: response abstraction. Methods: `Code()`, `Msg()`, `Data()`. The `server` package provides the `Out` struct implementing this.
 - **`handler.go`** — `HandlerFunc func(in Input) Output`. `ChainHandlers()` composes handler chains from `Handler` wrappers.
-- **`router.go`** — Radix tree router per HTTP method. Supports `:param` and `*catchAll`. `RouterGroup` for grouped routes with prefix + handler wrappers. `Register()` uses reflection to auto-map struct methods by naming convention (e.g., `Get*` → GET, `List*` → GET, `Save*` → POST, method name `ById` → `/:id`).
+- **`router.go`** — Radix tree router per HTTP method. Supports `:param` and `*catchAll`. `RouterGroup` for grouped routes with prefix + handler wrappers. (Reflection-based struct-method routing lives in `server/register.go` — see server bootstrap & Naming Conventions.)
 - **`interceptor.go`** — `Interceptor` interface for method-level AOP. `InterceptorFunc` adapter. `MethodInterceptors` interface for services with per-method interceptors.
 - **`config.go`** — `Config` with functional options pattern (`WithHandlers`, `WithPlugin`, `WithOnStart`, `WithOnStop`). `WithHandlers` accepts `Handler` wrappers.
 - **`plugin.go`** — `Plugin` interface (`Start()`/`Stop()` lifecycle).
@@ -102,7 +102,8 @@ Convenience layer for production use:
 - **`out.go`** — `Out` struct: fluent `aifei.Output` builder (`Ok()`, `Fail()`, `Of()`, `OfField()`, `SetMsg()`, `SetData()`, `IsOk()`, `ShouldRollback()`).
 - **`middleware.go`** — Built-in `Handler` wrappers: `Logger()`, `Recover()`, `Timeout()`, and HTTP-level wrappers: `CORS()`, `BasicAuth()`, `RequestID()`, `StaticFile()`.
 - **`run.go`** — `Run(app, addr, opts...)` — starts server with graceful shutdown, plugin lifecycle, signal handling.
-- **`service.go`** — `RegisterService()`, `AutoRegisterServices()` for centralized service registration.
+- **`register.go`** — `Register(router, prefix, service, handlers...)`: reflects over a service struct's exported methods and maps each to a route via `resolveRoute()` (two rules — see Naming Conventions). This powers struct-based "Just Service" routing.
+- **`service.go`** — `RegisterService()` + `AutoRegisterServices(app)`: generated `service.go` files self-register in `init()`; `AutoRegisterServices` calls `Register` for each.
 - **`tx_interceptor.go`** — `TxInterceptor()` for automatic transaction wrapping.
 
 ### Enjoy Template Engine (`./enjoy`)
@@ -175,5 +176,8 @@ The framework is functionally complete (~8,700 lines of library code + ~2,100 li
 ## Naming Conventions
 
 - API methods follow Java Aifei naming: `GetStr`, `GetInt`, `GetBean`, `FindByID`, etc.
-- The `Register()` method maps Go struct methods to routes using naming conventions: `List*`/`Get*` → GET, `Post*`/`Save*`/`Create*` → POST, `Put*`/`Update*` → PUT, `Delete*`/`Remove*` → DELETE
-- `ById` suffix in method names becomes `/:id` path parameter
+- `server.Register()` (in `register.go`) maps a service struct's exported methods to routes via two rules in `resolveRoute()`:
+  - **Default actions (exact match)**, registered at the service prefix directly: `Paginate` → GET `/prefix`, `Create` → POST `/prefix`, `List` → GET `/prefix/list`.
+  - **Verb prefixes**: method name must start with (and be longer than) one of `Get`/`Post`/`Put`/`Delete`/`Update`. The verb picks the HTTP method (`Get`→GET, `Post`→POST, `Put`→PUT, `Update`→PUT, `Delete`→DELETE); the remainder becomes the path suffix via camelCase→kebab-case (e.g. `GetProfile` → GET `/prefix/profile`, `PostApprove` → POST `/prefix/approve`).
+  - Methods matching **neither** rule are skipped (not routed) — safe for private helpers. Note: there is NO prefix rule for `Save`/`Remove`/`Find`; `Create` is an exact-match default action only.
+- `ById` in a method name becomes `:id`: `ById` → kebab `by-id` → path param `:id`, so `GetById` = GET `/prefix/:id`.

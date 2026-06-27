@@ -1,20 +1,24 @@
 # Aifei-Go
 
-轻量级 Go Web 框架，从 [Aifei Java](https://github.com/jfinal/aifei) 移植。遵循"Just Service"理念——扁平架构，无 Controller/Service/DAO 分层。
+轻量级 Go Web 框架，从 [Aifei](https://github.com/jfinal/aifei)（Java 版）移植。遵循"Just Service"理念——扁平架构，无 Controller/Service/DAO 分层。
 
 ## 特性
 
-- **零外部依赖（核心）** — 核心库模块（aifei/enjoy/db/json/log/nami）仅使用 Go 标准库；可选插件（config/nacos/storage）按需引入第三方库
+- **Just Service** — 方法名即路由：`Register()` 按命名约定（动词前缀 + 默认动作）自动映射 struct 方法为 RESTful 端点
+- **零外部依赖（核心）** — 核心库模块（aifei/enjoy/db/json/log/nami）仅用 Go 标准库；可选插件（config/cache/storage/kafka/nacos/swagger）按需引入第三方库
 - **模块化设计** — 各模块可独立 `go get`，按需组合，不拉入多余依赖
-- **Enjoy 模板引擎** — 自研模板语言，支持表达式、条件、循环、宏定义
+- **Enjoy 模板引擎** — 自研模板语言（~2800 行），支持表达式、条件、循环、宏定义、空安全
 - **Active Record ORM** — Row + Dao 链式操作，变更追踪
-- **代码生成器** — 从数据库 Schema 自动生成类型安全的 CRUD 代码
-- **Enjoy SQL** — 模板 SQL 引擎，支持动态 WHERE/ORDER BY/参数占位（18 种操作符）
+- **代码生成器** — 从数据库 Schema 自动生成类型安全的 CRUD 代码（每表一个独立包）
+- **Enjoy SQL** — 模板 SQL 引擎，`#where`/`#and`/`#orderBy` + 18 种操作符，条件为空自动省略
 - **基数树路由** — 高性能路由匹配，支持参数和通配符
 - **Handler 包装链 + 拦截器** — Logger/Recover/CORS/Auth 等内置 Handler，方法级 AOP 拦截器
 - **分层配置** — `app.yml` + 环境变量 + 命令行参数 + 云配置分层加载，支持运行时热更新
-- **Nacos 集成** — 服务注册与发现、配置中心，自动桥接到 nami RPC 客户端
+- **两级缓存** — 本地（FreeCache/TinyLFU）+ Redis 两级缓存，`GetOrStore` 自带 singleflight 与缓存穿透防护
 - **文件存储** — 统一本地文件系统与 S3 兼容后端（AWS S3 / Minio / OSS / COS），按 bucket 路由
+- **Kafka** — 基于 franz-go 的生产/消费，多集群，`Subscribe` 至少一次投递
+- **Nacos 集成** — 服务注册与发现、配置中心，自动桥接到 nami RPC 客户端
+- **Swagger 文档** — 内嵌 knife4j-vue3 UI 的 OpenAPI 文档插件
 - **Nami RPC 客户端** — 轻量 HTTP RPC 客户端框架，Filter 链 + 服务发现
 
 ## 模块结构
@@ -33,6 +37,9 @@
 | `aifei-go/server` | 服务启动、内置 Handler 包装器、响应构建器 | aifei, go-http |
 | `aifei-go/nacos` | Nacos 插件（服务注册、配置中心、发现） | aifei, nami, log, nacos-sdk-go/v2 |
 | `aifei-go/storage` | 文件存储插件（本地 + S3 兼容后端） | aifei, config, log, minio-go/v7 |
+| `aifei-go/cache` | 两级缓存插件（本地 + Redis） | aifei, config, log, jetcache-go, go-redis/v9 |
+| `aifei-go/kafka` | Kafka 插件（franz-go 生产/消费） | aifei, config, log, twmb/franz-go |
+| `aifei-go/swagger` | OpenAPI 文档插件（knife4j-vue3 UI） | aifei, config, log, swaggo/swag |
 
 Requires Go 1.26.
 
@@ -91,7 +98,7 @@ func main() {
     found, _ := db.FindByID("user", result.GetID())
 
     // 分页查询
-    page, _ := db.SQL("SELECT * FROM user ORDER BY id DESC").Paginate(1, 10)
+    page, _ := db.RawSql("SELECT * FROM user ORDER BY id DESC").Paginate(1, 10)
 
     // Enjoy SQL 模板 — 动态条件
     data := map[string]interface{}{"minAge": 18, "status": 1}
@@ -122,7 +129,7 @@ import (
 )
 
 gen := generator.New(pool, dialect, "./myapp/db", "myapp/db")
-gen.Generate() // 生成 user/、order/ 等包，每个包含 base.go + dao.go + service.go
+gen.Generate() // 一次扫描所有表：user/、loginlog/ …，每张表生成独立包（base/model/dao/service）
 
 // 使用生成的类型安全 API
 u, _ := user.FindById(123)
@@ -145,8 +152,8 @@ import (
 )
 
 func main() {
-    props, _ := config.Init(os.Args)
-    p, _ := storage.NewPlugin(props, nil) // 读 storage.* 配置，自动装配多 bucket
+    config.Init(os.Args)                 // 读 app.yml，填充全局配置
+    p, _ := storage.NewPlugin(nil)       // 自动读 config 的 storage.*，装配多 bucket（nil 用默认日志）
     app := aifei.New(aifei.WithPlugin(p))
     server.Run(app, ":8080")
 
@@ -192,7 +199,7 @@ func (s *UserService) GetById(in aifei.Input) aifei.Output    { /* GET /api/user
 func (s *UserService) UpdateById(in aifei.Input) aifei.Output { /* PUT /api/user/:id */ }
 func (s *UserService) DeleteById(in aifei.Input) aifei.Output { /* DELETE /api/user/:id */ }
 
-app.Register("/api/user", &UserService{})
+server.Register(app.Router(), "/api/user", &UserService{})
 ```
 
 ### 路由映射规则
@@ -234,19 +241,22 @@ const ServicePrefix = "/api/v1/loginLogs"   // 手动改为复数
 | 包 | 代码行数 | 测试行数 | 文件数 |
 |---|---|---|---|
 | enjoy | ~2,800 | — | 16 |
-| db + db/sql | ~3,800 | 281 | 22 |
-| nami | ~1,700 | ~1,600 | 17 |
-| generator | ~1,290 | 371 | 13 |
-| storage | ~880 | 419 | 9 |
-| config | ~780 | ~1,490 | 2 |
-| server | ~630 | — | 7 |
+| db + db/sql | ~3,800 | 281 | 24 |
+| server | ~1,540 | 334 | 13 |
+| nami | ~1,700 | ~1,600 | 22 |
+| generator | ~1,290 | 371 | 14 |
+| config | ~1,060 | ~2,020 | 5 |
+| _example | ~1,020 | ~2,020 | 16 |
+| kafka | ~970 | 378 | 13 |
+| storage | ~870 | 432 | 13 |
+| cache | ~780 | 384 | 15 |
+| nacos | ~650 | 95 | 7 |
 | aifei | ~620 | — | 8 |
-| nacos | ~620 | 95 | 6 |
+| swagger | ~510 | 341 | 5 |
 | go-http | ~430 | — | 3 |
-| _example | ~760 | ~1,400 | 14 |
-| log | ~110 | 114 | 1 |
-| json | ~40 | 45 | 1 |
-| **总计** | **~14,500** | **~5,800** | **119** |
+| log | ~110 | 114 | 2 |
+| json | ~40 | 45 | 2 |
+| **总计** | **~18,200** | **~8,400** | **178** |
 
 ## 协议
 
