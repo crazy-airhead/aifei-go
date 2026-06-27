@@ -7,60 +7,189 @@ import (
 	"github.com/crazy-airhead/aifei-go/db"
 )
 
+// Dao is a typed query builder for User (table "user").
+// Chain a Sql/Select/RawSql setup method (they return *Dao), then call a
+// terminal method (Find/FindFirst/Paginate/Count/...) which returns typed
+// results. The table is already bound, so unlike db.Dao no table name is
+// passed on every call. Create a fresh one per query via NewDao().
 type Dao struct {
 	*db.Dao
 }
 
+// NewDao returns a fresh typed Dao bound to the default db config.
 func NewDao() *Dao {
 	return &Dao{Dao: db.Use()}
 }
 
-func FindById(id int) (*User, error) {
-	row, err := db.FindByID(Table.Name, id)
-	if err != nil {
-		return nil, err
-	}
+// toRow wraps a *db.Row as a typed User (nil-safe).
+func toRow(row *db.Row) *User {
 	if row == nil {
-		return nil, nil
+		return nil
 	}
-	return &User{BaseUser: NewWithRow(initRow(row))}, nil
+	return &User{BaseUser: NewWithRow(initRow(row))}
 }
 
-func DeleteById(id int) (bool, error) {
-	return db.DeleteByID(Table.Name, id)
-}
-
-func FindBy(whereOrField string, args ...interface{}) ([]*User, error) {
-	rows, err := db.FindBy(Table.Name, whereOrField, args...)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]*User, len(rows))
+// toRows wraps a slice of *db.Row as typed User values.
+func toRows(rows []*db.Row) []*User {
+	out := make([]*User, len(rows))
 	for i, row := range rows {
-		result[i] = &User{BaseUser: NewWithRow(initRow(row))}
+		out[i] = toRow(row)
 	}
-	return result, nil
+	return out
 }
 
-func FindFirstBy(whereOrField string, args ...interface{}) (*User, error) {
-	row, err := db.FindFirstBy(Table.Name, whereOrField, args...)
+// Sql sets an Enjoy SQL template and its named parameters.
+func (d *Dao) Sql(sqlStr string, data map[string]interface{}) *Dao {
+	d.Dao.Sql(sqlStr, data)
+	return d
+}
+
+// SqlWithArgs sets an Enjoy SQL template with positional arguments.
+func (d *Dao) SqlWithArgs(sqlStr string, args ...interface{}) *Dao {
+	d.Dao.SqlWithArgs(sqlStr, args...)
+	return d
+}
+
+// SqlById sets a cached Enjoy SQL template (by id) and its named parameters.
+func (d *Dao) SqlById(sqlID string, data map[string]interface{}) *Dao {
+	d.Dao.SqlById(sqlID, data)
+	return d
+}
+
+// SqlByIdWithArgs sets a cached Enjoy SQL template (by id) with positional arguments.
+func (d *Dao) SqlByIdWithArgs(sqlID string, args ...interface{}) *Dao {
+	d.Dao.SqlByIdWithArgs(sqlID, args...)
+	return d
+}
+
+// RawSql sets a raw SQL string with positional arguments.
+func (d *Dao) RawSql(query string, args ...interface{}) *Dao {
+	d.Dao.RawSql(query, args...)
+	return d
+}
+
+// Select restricts the selected columns.
+func (d *Dao) Select(fields string) *Dao {
+	d.Dao.Select(fields)
+	return d
+}
+
+// Find executes the query and returns all matching rows as typed models.
+func (d *Dao) Find() ([]*User, error) {
+	rows, err := d.Dao.Find()
 	if err != nil {
 		return nil, err
 	}
-	if row == nil {
-		return nil, nil
+	return toRows(rows), nil
+}
+
+// FindFirst executes the query and returns the first matching row as a typed model.
+func (d *Dao) FindFirst() (*User, error) {
+	row, err := d.Dao.FindFirst()
+	if err != nil {
+		return nil, err
 	}
-	return &User{BaseUser: NewWithRow(initRow(row))}, nil
+	return toRow(row), nil
 }
 
+// FindOne executes the query and returns the single matching row as a typed model.
+func (d *Dao) FindOne() (*User, error) {
+	row, err := d.Dao.FindOne()
+	if err != nil {
+		return nil, err
+	}
+	return toRow(row), nil
+}
+
+// FindExists reports whether the query matches any row.
+func (d *Dao) FindExists() (bool, error) {
+	return d.Dao.FindExists()
+}
+
+// Paginate executes the query and returns a page of rows.
+// The page carries []*db.Row; use Find for fully typed results.
+func (d *Dao) Paginate(pageNum, pageSize int) (*db.Page, error) {
+	return d.Dao.Paginate(pageNum, pageSize)
+}
+
+// FindBy queries by a where clause or a single field with arguments.
+func (d *Dao) FindBy(whereOrField string, args ...interface{}) ([]*User, error) {
+	rows, err := d.Dao.FindBy(Table.Name, whereOrField, args...)
+	if err != nil {
+		return nil, err
+	}
+	return toRows(rows), nil
+}
+
+// FindFirstBy queries the first row by a where clause or a single field with arguments.
+func (d *Dao) FindFirstBy(whereOrField string, args ...interface{}) (*User, error) {
+	row, err := d.Dao.FindFirstBy(Table.Name, whereOrField, args...)
+	if err != nil {
+		return nil, err
+	}
+	return toRow(row), nil
+}
+
+// FindByID loads a single row by its primary key.
+func (d *Dao) FindByID(id int) (*User, error) {
+	row, err := d.Dao.FindByID(Table.Name, id)
+	if err != nil {
+		return nil, err
+	}
+	return toRow(row), nil
+}
+
+// DeleteByID deletes a single row by its primary key.
+func (d *Dao) DeleteByID(id int) (bool, error) {
+	return d.Dao.DeleteByID(Table.Name, id)
+}
+
+// Count returns the total number of rows.
+func (d *Dao) Count() (int64, error) {
+	return d.Dao.Count(Table.Name)
+}
+
+// CountBy counts rows matching a where clause or a single field with arguments.
+func (d *Dao) CountBy(whereOrField string, args ...interface{}) (int64, error) {
+	return d.Dao.CountBy(Table.Name, whereOrField, args...)
+}
+
+// DeleteBy deletes rows matching a where clause or a single field with arguments.
+func (d *Dao) DeleteBy(whereOrField string, args ...interface{}) (int64, error) {
+	return d.Dao.DeleteBy(Table.Name, whereOrField, args...)
+}
+
+// FindById loads a single row by its primary key.
+func FindById(id int) (*User, error) {
+	return NewDao().FindByID(id)
+}
+
+// DeleteById deletes a single row by its primary key.
+func DeleteById(id int) (bool, error) {
+	return NewDao().DeleteByID(id)
+}
+
+// FindBy queries by a where clause or a single field with arguments.
+func FindBy(whereOrField string, args ...interface{}) ([]*User, error) {
+	return NewDao().FindBy(whereOrField, args...)
+}
+
+// FindFirstBy queries the first row by a where clause or a single field with arguments.
+func FindFirstBy(whereOrField string, args ...interface{}) (*User, error) {
+	return NewDao().FindFirstBy(whereOrField, args...)
+}
+
+// DeleteBy deletes rows matching a where clause or a single field with arguments.
 func DeleteBy(whereOrField string, args ...interface{}) (int64, error) {
-	return db.DeleteBy(Table.Name, whereOrField, args...)
+	return NewDao().DeleteBy(whereOrField, args...)
 }
 
+// Count returns the total number of rows.
 func Count() (int64, error) {
-	return db.Count(Table.Name)
+	return NewDao().Count()
 }
 
+// CountBy counts rows matching a where clause or a single field with arguments.
 func CountBy(whereOrField string, args ...interface{}) (int64, error) {
-	return db.CountBy(Table.Name, whereOrField, args...)
+	return NewDao().CountBy(whereOrField, args...)
 }

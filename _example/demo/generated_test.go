@@ -149,3 +149,76 @@ func TestGeneratedShortSetters(t *testing.T) {
 		t.Errorf("Expected 'grace@test.com', got '%s'", found.Email())
 	}
 }
+
+// TestGeneratedTypedDao exercises the typed Dao returned by NewDao() directly —
+// the Sql().Find() chain yields []*User (not []*db.Row), and the table is bound
+// so no table name is passed. This is the aifei-vip `Vip.sql(...).paginate()`
+// idiom, now available in generated code.
+func TestGeneratedTypedDao(t *testing.T) {
+	setupTest(t)
+
+	user.New().Name_("tyler").Age_(40).Insert()
+	user.New().Name_("tyler").Age_(22).Insert()
+	user.New().Name_("uma").Age_(33).Insert()
+
+	byName := `SELECT * FROM user
+#where(name, '=', name)
+ORDER BY id DESC`
+
+	// typed Sql().Find() -> []*User
+	users, err := user.NewDao().Sql(byName, map[string]interface{}{"name": "tyler"}).Find()
+	if err != nil {
+		t.Fatalf("typed Find failed: %v", err)
+	}
+	if len(users) != 2 {
+		t.Fatalf("expected 2 tylers, got %d", len(users))
+	}
+	if users[0].Name() != "tyler" { // typed getter works on *User
+		t.Errorf("expected name 'tyler', got '%s'", users[0].Name())
+	}
+
+	// typed FindFirst -> *User
+	first, err := user.NewDao().Sql(`SELECT * FROM user ORDER BY id ASC`, map[string]interface{}{}).FindFirst()
+	if err != nil || first == nil {
+		t.Fatalf("typed FindFirst failed: %v", err)
+	}
+	if first.Name() != "tyler" {
+		t.Errorf("expected first name 'tyler', got '%s'", first.Name())
+	}
+
+	// typed FindByID (method, not the package func) -> *User
+	got, err := user.NewDao().FindByID(1)
+	if err != nil || got == nil {
+		t.Fatalf("typed FindByID failed: %v", got)
+	}
+
+	// typed Paginate -> *db.Page
+	page, err := user.NewDao().Sql(`SELECT * FROM user`, map[string]interface{}{}).Paginate(1, 2)
+	if err != nil {
+		t.Fatalf("typed Paginate failed: %v", err)
+	}
+	if page.TotalRows != 3 {
+		t.Errorf("expected total 3, got %d", page.TotalRows)
+	}
+	if len(page.Rows) != 2 {
+		t.Errorf("expected 2 rows on page 1, got %d", len(page.Rows))
+	}
+
+	// typed Count (method, no table arg)
+	c, err := user.NewDao().Count()
+	if err != nil {
+		t.Fatalf("typed Count failed: %v", err)
+	}
+	if c != 3 {
+		t.Errorf("expected count 3, got %d", c)
+	}
+
+	// typed FindBy -> []*User
+	matched, err := user.NewDao().FindBy("age > ?", 30)
+	if err != nil {
+		t.Fatalf("typed FindBy failed: %v", err)
+	}
+	if len(matched) != 2 { // tyler(40) + uma(33)
+		t.Errorf("expected 2 matched, got %d", len(matched))
+	}
+}

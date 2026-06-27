@@ -1,5 +1,5 @@
-github.com/crazy-airhead/aifei-go/go-http v0.0.11 h1:rboHq6x5eK1dhXAdjcfTc2hqcgPfKBKdj3T4XKGr40s=
-github.com/crazy-airhead/aifei-go/go-http v0.0.11/go.mod h1:O8ws1Pck/CDqVAj0EqTBIUptGyFlpS30ABd9LcMrGzQ=
+github.com/crazy-airhead/aifei-go/go-http v0.0.12 h1:E/3FS85jYsV2du7Aga1m65n3nvCK7ipwEKvknuIzupc=
+github.com/crazy-airhead/aifei-go/go-http v0.0.12/go.mod h1:Yu7Okb2VMUneu5tEZxOYT259nIRi0mgyxUcFDSqD8oI=
 github.com/crazy-airhead/aifei-go/log v0.0.11 h1:5cp5XEPbSkNtOm3uXGMvdbJwT36EXoI2cI1AJs1j1G4=
 github.com/crazy-airhead/aifei-go/log v0.0.11/go.mod h1:AkVwEZUcTuyBaP7fpfky/ltMvbzL+DsqHzYgrN/RhPY=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
