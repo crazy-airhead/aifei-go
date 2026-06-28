@@ -9,6 +9,7 @@ use (
 	./aifei
 	./config
 	./db
+	./dami
 	./enjoy
 	./generator
 	./go-http

@@ -12,7 +12,7 @@
 - **能忠实迁移约 85%**：事件分发 `send`、请求-响应 `call`、响应式流 `stream`、路由器（hash/path/tag）、拦截器、监听者排序、附件、可插拔的 router/dispatcher/coder、泛型、fallback、handled——这些都能在 Go 中以**等价语义**实现。
 - **唯一无法 1:1 的是 `lpc` 的消费者代理**：Go 语言层面无法在运行时动态实现接口（[golang/go#41897](https://github.com/golang/go/issues/41897)），采用 **code-gen stub（默认）+ 泛型 `Call[R]` 助手（兜底）** 双轨替代；**provider 侧反射注册完全可行**（`aifei-go` 的 `server.Register` 已验证此模式）。
 - **定位**：作为 `aifei-go` 生态的新模块 **`./dami`**（`github.com/crazy-airhead/aifei-go/dami`），**零外部依赖**，与现有 `nami`（远程 RPC）、`kafka`（跨进程消息）互补，填补「**进程内多模块解耦 / 事件总线**」的空白。
-- **关键设计原则**：①Bus 用**具体 struct**（非 interface）以支持泛型方法；②call 用自造 `Future[R]`，stream 用 `chan` + `context`；③拦截器链复用 `aifei.Handler` 的 wrapper 风格；④异常用 `error` 返回 + 可选 `panic/recover` 透传。
+- **关键设计原则**：①Bus 用**具体 struct**（非 interface）；泛型 `Send/Listen` 为**包级函数**（Go 方法不能带类型参数，`SendOn/ListenOn` 取实例、`Send/Listen` 取默认总线）；②call 用自造 `Future[R]`，stream 用 `chan` + `context`；③拦截器链复用 `aifei.Handler` 的 wrapper 风格；④异常用 `error` 返回 + 可选 `panic/recover` 透传。
 
 ---
 
@@ -42,7 +42,7 @@
 
 | 维度 | DamiBus (Java) | dami-go (Go) | 影响 / 取舍 |
 |------|----------------|--------------|------------|
-| 接口 + 泛型方法 | `interface DamiBus { <P> void listen(...) }` | ❌ Go 接口方法**不能带类型参数** | **Bus 用具体 struct**，方法带泛型参数（Go 允许 struct 方法有类型参数） |
+| 接口 + 泛型方法 | `interface DamiBus { <P> void listen(...) }` | ❌ Go **方法（带接收者）也不能带类型参数** | **Bus 用具体 struct**；泛型 `Send/Listen` 为**包级函数**（`SendOn/ListenOn` 操作指定总线，`Send/Listen` 操作默认总线） |
 | 动态代理 | `Proxy.newProxyInstance` 实现 lpc consumer | ❌ Go 无法运行时实现接口 | consumer 改 **code-gen** / 泛型助手；provider 用 reflect（可行） |
 | CompletableFuture | `call` 返回 `CompletableFuture<R>` | 自造 `Future[R]`（`chan` + `context`） | 等价语义，支持 `Get(ctx)` 阻塞与 `Then` 回调 |
 | Reactive Streams | `stream` 用 `Publisher/Subscriber` | `chan R` + `context`（背压 = 有界 buffer + select） | 拥抱 channel，不引入 rxgo |
@@ -141,21 +141,19 @@ type sink interface {
 
 ### 4.2 Bus（核心，**具体 struct 而非 interface**）
 
-> 设计决策：Go 接口方法不能带类型参数，因此 `Bus` 必须是**具体 struct**（其方法可带类型参数）。这与 `aifei-go` 的 `Aifei` struct 风格一致。需要 mock 时，定义一个**非泛型**的窄接口 `BusCore`（仅 Send(any)/Listen(any)）即可。
+> 设计决策：Go 既不允许接口方法带类型参数，**也不允许 struct 方法带类型参数**（这是与 Java 的关键差异 —— 设计稿初版误以为"struct 方法可带泛型"，实现时被编译器否决）。因此 `Bus` 是具体 struct，只承载**非泛型**方法（`Router / Intercept / UnlistenAll`）；泛型的 `Send/Listen` 落在**包级函数**上：`SendOn[P](b *Bus, …)` / `ListenOn[P](b *Bus, …)` 操作指定总线，`Send[P](…)` / `Listen[P](…)` 操作包级默认总线（对应 Java `Dami.bus().send()`）。这与 `aifei-go` 的 `Aifei` struct 风格一致。需要 mock 时，定义一个**非泛型**的窄接口 `BusCore`（仅暴露非泛型操作）即可。
 
 ```go
 // Bus 是 DamiBus 的 Go 对应物。零值不可用，请用 New(opts...)。
 type Bus struct {
 	router     Router
 	dispatcher Dispatcher
-	factory    EventFactory
 }
 
 func New(opts ...Option) *Bus {
 	b := &Bus{
 		router:     NewHashRouter(),   // 默认 hash（最快）
 		dispatcher: NewDispatcher(),    // 默认调度器（拦截链 + 分发）
-		factory:    defaultEventFactory,
 	}
 	for _, o := range opts {
 		o(b)
@@ -163,12 +161,17 @@ func New(opts ...Option) *Bus {
 	return b
 }
 
-// Send 发送事件（事件分发/广播）。fallback 在【无任何订阅者】时执行。
+func (b *Bus) Router() Router                              { return b.router }
+func (b *Bus) Intercept(index int, it Interceptor)         { b.dispatcher.AddInterceptor(index, it) }
+func (b *Bus) UnlistenAll(topic string)                    { b.router.RemoveAll(topic) }
+
+// SendOn 发送事件（事件分发/广播）到指定总线 b。fallback 在【无任何订阅者】时执行。
 // 对应 Java DamiBus.send(topic, payload, fallback)。
-func (b *Bus) Send[P any](topic string, payload P, fallback ...func(P)) Result[P] {
+// 包级泛型函数 —— Go 方法不能带类型参数，故泛型 API 落在函数上。
+func SendOn[P any](b *Bus, topic string, payload P, fallback ...func(P)) (*Event[P], error) {
 	assertTopic(topic)
-	ev := b.factory.create(topic, payload)
-	b.dispatcher.Dispatch(ev, b.router) // 同步分发；listener 的 error 透传出来
+	ev := &Event[P]{Topic: topic, Payload: payload}
+	err := b.dispatcher.Dispatch(ev, b.router) // 同步分发；listener 的 error 透传出来
 	if !ev.handled {
 		for _, fb := range fallback {
 			if fb != nil {
@@ -176,29 +179,27 @@ func (b *Bus) Send[P any](topic string, payload P, fallback ...func(P)) Result[P
 			}
 		}
 	}
-	return ev
+	return ev, err
 }
 
-// Listen 监听事件，返回【取消监听】函数。index 控制顺序（升序）。
+// ListenOn 监听事件（指定总线），返回【取消监听】函数。index 控制顺序（升序）。
 // 对应 Java DamiBus.listen(topic, index, listener)。
-func (b *Bus) Listen[P any](topic string, listener Listener[P], index ...int) (unlisten func()) {
+func ListenOn[P any](b *Bus, topic string, listener Listener[P], index ...int) (unlisten func()) {
 	idx := 0
 	if len(index) > 0 {
 		idx = index[0]
 	}
-	holder := newHolder(idx, func(evAny any) error {
-		return listener(evAny.(*Event[P])) // 类型擦除桥接
-	})
-	b.router.Add(topic, holder)
-	return func() { b.router.Remove(topic, holder) }
+	h := newHolder(idx, listener) // 内部做 ev.(*Event[P]) 类型擦除桥接
+	b.router.Add(topic, h)
+	return func() { b.router.Remove(topic, h) }
 }
 
-// Intercept 注册拦截器（AOP）。对齐 aifei.Handler 的 wrapper 风格。
-func (b *Bus) Intercept(index int, it Interceptor) {
-	b.dispatcher.AddInterceptor(index, it)
-}
-
-func (b *Bus) Router() Router { return b.router }
+// 包级默认总线的便捷函数（对应 Java Dami.bus()）：
+//
+//	func Send[P any](topic string, payload P, fallback ...func(P)) (*Event[P], error)
+//	func Listen[P any](topic string, listener Listener[P], index ...int) (unlisten func())
+//
+// 二者等价于 SendOn[P](Default(), …) / ListenOn[P](Default(), …)。
 ```
 
 ### 4.3 Listener / 拦截器 / Dispatcher（拦截链）
@@ -447,7 +448,7 @@ n, sum, err := lpc.Call2[int, float64](ctx, "stat.Compute", Args{"x": x})
 
 ## 6. 关键难点与取舍
 
-1. **Bus 不能是 interface**（Go 泛型方法限制）→ 用具体 struct；mock 时定义窄的非泛型 `BusCore` 接口。**这是与 Java 版最大的 API 形态差异**，需在文档/示例中讲清。
+1. **Bus 不能是 interface，且泛型 `Send/Listen` 不能是方法**（Go 既禁止接口方法带类型参数，也禁止 struct 方法带类型参数）→ `Bus` 用具体 struct 承载非泛型方法，泛型 `Send/Listen` 落在**包级函数**（`SendOn/ListenOn` 取实例、`Send/Listen` 取默认总线）。mock 时定义窄的非泛型 `BusCore` 接口。**这是与 Java 版最大的 API 形态差异**。
 2. **lpc consumer 无动态代理** → code-gen + 泛型助手双轨；provider 反射注册沿用 `server.Register` 模式。
 3. **形参名缺失** → Coder 默认下标对齐；code-gen 路径下名字由生成器注入。
 4. **异常模型**：DamiBus 强调「异常透传/事务传导」（同步栈内）。Go 版策略——
@@ -508,7 +509,7 @@ n, sum, err := lpc.Call2[int, float64](ctx, "stat.Compute", Args{"x": x})
 
 ```java
 // Java                                                 // Go (dami-go)
-Dami.bus().listen(topic, e -> {...});                   b.Listen(topic, func(e *Event[Msg]) error {...})
+Dami.bus().listen(topic, e -> {...});                   dami.Listen(topic, func(e *Event[Msg]) error {...})  // 默认总线；实例用 dami.ListenOn(b, …)
 Dami.bus().send(topic, payload);                        dami.Send(topic, payload)
 Dami.bus().<String,String>call(topic, data).get();      r, err := dami.Call[Resp](ctx, topic, data).Get(ctx)
 Dami.bus().<String,String>stream(topic, data);          for it := range dami.Stream[Resp](ctx, topic, data) {...}
