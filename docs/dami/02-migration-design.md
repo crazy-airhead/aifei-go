@@ -26,7 +26,7 @@
 
 1. **P0 核心**：`Bus` 的 `send`（事件分发）+ `call`（请求-响应）+ 路由器（hash/path/tag）+ 拦截器 + 监听者排序 + attach。
 2. **P1 进阶**：`stream`（响应式流，基于 channel）+ `lpc` provider 反射注册。
-3. **P2 增强**：`lpc` consumer（code-gen stub）+ `Plugin` 生命周期。
+3. **P2 增强**（已完成）：`lpc` consumer（code-gen stub）+ `Plugin` 生命周期。
 4. **非目标**：跨进程 / 跨网络（那是 `nami` / `kafka` 的职责）；分布式事务。
 
 ### 1.3 非功能约束
@@ -59,24 +59,36 @@
 ## 3. 总体架构
 
 ```
-dami/                         # 新模块，零外部依赖
+dami/                         # 核心模块，零外部依赖
 ├── go.mod                    # module github.com/crazy-airhead/aifei-go/dami
-├── bus.go                    # Bus struct（核心，泛型方法：Send/Listen/Call/Stream/Intercept）
-├── event.go                  # Event[P]、Result[P]、Sink、attach、handled
-├── future.go                 # Future[R]（call 的接收器）
-├── stream.go                 # Stream[R]（基于 chan，stream 的接收器）
-├── listener.go               # Listener[P] func 类型、监听者 holder、排序
-├── router.go                 # Router 接口
+├── doc.go                    # 包文档
+├── event.go                  # Event[P]、Sink、eventView、attach、handled
+├── listener.go               # Listener[P]、holder（类型擦除）、pipeline（index 排序）
+├── payload.go                # RequestPayload[D]（call/stream 共用荷载）
+├── router.go                 # Router 接口（Add/Remove/Match/Count/ClearAll）
 ├── router_hash.go            # HashRouter（默认，map 直查）
 ├── router_path.go            # PathRouter（* / ** 正则）
-├── router_tag.go             # TagRouter（: 分隔 topic 与 tag）
-├── dispatcher.go             # Dispatcher（拦截链 + 预检 + 分发）
-├── intercept.go              # Interceptor（对齐 aifei.Handler wrapper 风格）
-├── coder.go                  # Coder（参数下标对齐 / name 对齐）
-├── lpc.go                    # Lpc（provider 反射注册 + 泛型 Call 助手）
-├── lpc_gen.go                # (P2) code-gen consumer 的运行时支撑
-├── plugin.go                 # (P2) 实现 aifei.Plugin（生命周期、Stop 注销 listener）
+├── router_tag.go             # TagRouter（: + , tag 交集）
+├── intercept.go              # Interceptor + chain（对齐 aifei.Handler wrapper）
+├── dispatcher.go             # Dispatcher（拦截链→预检→分发→handled）
+├── bus.go                    # Bus struct + Option + 包级泛型 SendOn/ListenOn + Stop
+├── dami.go                   # 包级默认总线 + Send/Listen 便捷 + SetDefaultBus
+├── future.go                 # Future[R]（call 答复）、futureSink
+├── call.go                   # 包级泛型 CallOn/Call + ListenCallOn/ListenCall
+├── stream.go                 # 包级泛型 StreamOn/Stream + ListenStreamOn/ListenStream
+├── coder.go                  # Coder + CoderForIndex
+├── lpc.go                    # Lpc.RegisterProvider（反射注册）+ invoke
+├── lpc_call.go               # Call0/Call1 泛型助手（无 code-gen consumer 路径）
 └── *_test.go                 # 单测 + 基准（对标 dami 的 benchmark/SendTest）
+
+tools/                        # 代码生成工具（独立模块）
+├── generator/                # db 代码生成（读 schema → dao/model/service；依赖 db+enjoy）
+└── damigen/                  # P2：dami consumer 代码生成（go/ast 解析接口 + enjoy 模板）
+    ├── gen.go / parser.go / template.go
+    └── cmd/damigen/          # dami-gen CLI（go:generate / go run）
+
+plugins/dami/                 # P2：aifei.Plugin 适配（独立模块，依赖 aifei+dami+log）
+└── plugin.go                 # Plugin：Start 设默认总线 / Stop 经 Bus.Stop() 清理 listener
 ```
 
 分层（自底向上）：
@@ -227,38 +239,56 @@ type Dispatcher interface {
 
 ```go
 // Call 发送调用事件，返回 Future。对应 Java bus.call(topic, data)。
-// 内部：构造 CallPayload{data, sink=Future} 走 Send；listener 用 sink.next(r).complete(nil) 答复。
-func (b *Bus) Call[D, R any](ctx context.Context, topic string, data D, fallback ...func(*Future[R])) *Future[R] {
+// CallOn 发送调用事件到指定总线 b，返回 Future 答复。对应 Java bus.call(topic, data)。
+// 包级泛型函数（Go 方法不能带类型参数）；dispatch 同步执行 handler 并答复。
+// 内部：构造 RequestPayload{Data, Sink: futureSink[R]} 走 dispatch。
+func CallOn[D, R any](b *Bus, topic string, data D, fallback ...func(*Future[R])) *Future[R] {
 	fut := NewFuture[R]()
-	ev := newCallEvent(topic, data, fut) // payload 自带 sink=fut
-	res := b.sendWithSink(ev)
-	if !res.Handled() {
+	ev := &Event[*RequestPayload[D]]{
+		Topic:   topic,
+		Payload: &RequestPayload[D]{Data: data, Sink: &futureSink[R]{fut: fut}},
+	}
+	_ = b.dispatcher.Dispatch(ev, b.router)
+	if !ev.handled {
 		for _, fb := range fallback {
-			if fb != nil {
-				fb(fut)
-			}
+			if fb != nil { fb(fut) }
 		}
 	}
 	return fut
 }
 
-// Future[R] 对应 Java CompletableFuture<R>。
-type Future[R any] struct {
-	done chan result[R] // buffered=1，保证不丢
+// Call 发送调用事件到默认总线。
+func Call[D, R any](topic string, data D, fallback ...func(*Future[R])) *Future[R] {
+	return CallOn[D, R](Default(), topic, data, fallback...)
 }
-type result[R any] struct {
+
+// ListenCallOn 注册强类型请求-响应 handler（指定总线）：handler 返回 (R, error)，
+// 框架把结果经 payload 的 Sink 答复。对应 Java CallEventListener。
+func ListenCallOn[D, R any](b *Bus, topic string, handler func(D) (R, error), index ...int) (unlisten func()) {
+	return ListenOn(b, topic, func(ev *Event[*RequestPayload[D]]) error {
+		r, err := handler(ev.Payload.Data)
+		if err != nil { ev.Payload.Sink.Complete(err); return nil }
+		ev.Payload.Sink.Next(r)
+		return nil
+	}, index...)
+}
+
+// Future[R] 对应 Java CompletableFuture<R>。首个答复生效（幂等 settle）。
+type Future[R any] struct {
+	done chan futureResult[R] // buffered=1
+}
+type futureResult[R any] struct {
 	val R
 	err error
 }
 
 func NewFuture[R any]() *Future[R] {
-	return &Future[R]{done: make(chan result[R], 1)}
+	return &Future[R]{done: make(chan futureResult[R], 1)}
 }
-func (f *Future[R]) next(v R)        { f.complete(result[R]{val: v}) } // call：只取第一个
-func (f *Future[R]) completeErr(e error) { f.complete(result[R]{err: e}) }
-func (f *Future[R]) complete(r result[R]) {
-	select { case f.done <- r: default: } // 幂等，首个答复生效
+func (f *Future[R]) settle(r futureResult[R]) {
+	select { case f.done <- r: default: } // 首个答复生效
 }
+// Get 阻塞到答复或 ctx 取消。
 func (f *Future[R]) Get(ctx context.Context) (R, error) {
 	select {
 	case r := <-f.done:
@@ -269,39 +299,40 @@ func (f *Future[R]) Get(ctx context.Context) (R, error) {
 	}
 }
 func (f *Future[R]) Then(fn func(R, error)) { go func() { r := <-f.done; fn(r.val, r.err) }() }
+
+// futureSink[R] 把 *Future[R] 适配为 Sink（call 的答复通道）。
+type futureSink[R any] struct{ fut *Future[R] }
 ```
 
 ### 4.5 Stream（响应式流）— `chan` + `context`
 
 ```go
-// Stream 发送流事件，返回只读 channel。对应 Java bus.stream(topic, data)。
-// 背压：channel 有界 buffer；消费者慢时 Next 阻塞（等同 Reactive Streams 的有限缓冲）。
-func (b *Bus) Stream[D, R any](ctx context.Context, topic string, data D, fallback ...func(<-chan StreamItem[R])) <-chan StreamItem[R] {
+// StreamOn 发送流事件到指定总线 b，返回只读 item channel。对应 Java bus.stream(topic, data)。
+// 背压：channel 有界 buffer（消费者慢时生产者阻塞或丢弃）；ctx 取消时关闭 channel。
+func StreamOn[D, R any](b *Bus, ctx context.Context, topic string, data D, fallback ...func(<-chan StreamItem[R])) <-chan StreamItem[R] {
 	ch := make(chan StreamItem[R], 16)
-	sink := &streamSink[R]{ch: ch, ctx: ctx}
-	ev := newStreamEvent(topic, data, sink)
-	res := b.sendWithSink(ev)
-	if !res.Handled() {
+	sink := &streamSink[R]{ch: ch, ctx: ctx, done: make(chan struct{})}
+	ev := &Event[*RequestPayload[D]]{
+		Topic:   topic,
+		Payload: &RequestPayload[D]{Data: data, Sink: sink},
+	}
+	_ = b.dispatcher.Dispatch(ev, b.router)
+	if !ev.handled {
 		for _, fb := range fallback {
-			if fb != nil {
-				fb(ch)
-			}
+			if fb != nil { fb(ch) }
 		}
-	} else {
-		// 生产者完成后关闭 channel（dispatch 同步返回时，listener 已把全部 item 推完）
-		// 若 listener 异步生产，由 listener 自己负责 close。
 	}
 	go func() {
 		<-ctx.Done()
-		sink.complete(ctx.Err())
+		sink.terminate(ctx.Err())
 	}()
 	return ch
 }
 
-// StreamItem 携带一个值或最终错误。
+// StreamItem 携带一个值或最终错误（Err 非 nil 时为流的最后一项）。
 type StreamItem[R any] struct {
 	Val R
-	Err error // 非 nil 表示流结束且出错
+	Err error
 }
 ```
 
@@ -349,36 +380,34 @@ type Lpc struct {
 	providers map[reflect.Type][]topicListen // 注销用
 }
 
-// RegisterProvider 反射 struct 的所有导出方法，逐个注册为 call listener。
-// 对应 Java DamiLpcImpl.registerProvider（用 getMethods() + getMethodTopic）。
-// 模式与 aifei-go 的 server.Register 一致，已被该工程验证可行。
+// RegisterProvider 反射 provider（非 nil 指针）的所有导出方法，逐个注册为 call
+// listener，topic = topicMapping + "." + MethodName。对应 Java
+// DamiLpcImpl.registerProvider；模式与 aifei-go 的 server.Register 一致。
 func (l *Lpc) RegisterProvider(topicMapping string, provider any) error {
 	v := reflect.ValueOf(provider)
 	t := v.Type()
+	// ... 非 nil 指针校验、防重复注册 ...
 	var records []topicListen
 	for i := 0; i < t.NumMethod(); i++ {
 		m := t.Method(i)
+		if m.PkgPath != "" { continue } // 跳过未导出方法
 		topic := topicMapping + "." + m.Name
-		listener := l.wrapMethod(v, m) // 返回 func(*Event[*CallPayload]) error
-		unlisten := l.bus.Listen(topic, listener, 0)
+		unlisten := l.registerMethod(topic, v, m)
 		records = append(records, topicListen{topic, unlisten})
 	}
-	l.mu.Lock(); l.providers[t] = records; l.mu.Unlock()
+	l.providers[t] = records
 	return nil
 }
 
-// wrapMethod：解码参数 → m.Call → 把返回值 sink.next(r)。
-func (l *Lpc) wrapMethod(v reflect.Value, m reflect.Method) Listener[*CallPayload] {
-	return func(ev *Event[*CallPayload]) error {
-		args, err := l.coder.Decode(m, ev.Payload.data)
-		if err != nil { return err }
-		out := m.Func.Call(append([]reflect.Value{v}, toValues(args)...))
-		// out[0..n-2] = 返回值, out[n-1] = error（Go 惯例）
-		r, err := parseOut(out)
-		if err != nil { ev.Payload.sink.completeErr(err); return nil }
-		ev.Payload.sink.next(r)
-		return nil
+// registerMethod：把一个方法包成 ListenCallOn[map[string]any, any] handler ——
+// coder.Decode 还原参数 → m.Func.Call 反射调用 → 首个返回值 + 尾随 error 答复。
+func (l *Lpc) registerMethod(topic string, v reflect.Value, m reflect.Method) func() {
+	handler := func(data map[string]any) (any, error) {
+		args, err := l.coder.Decode(m, data)
+		if err != nil { return nil, err }
+		return l.invoke(v, m, args)
 	}
+	return ListenCallOn(l.bus, topic, handler)
 }
 ```
 
@@ -395,11 +424,13 @@ type UserService interface {
 	GetUserID(ctx context.Context, name string) (int64, error)
 }
 
-// 由 dami-gen 生成（类似 grpc/protoc stub，可复用 aifei-go generator + enjoy 模板）：
-type UserServiceClient struct{ c *Caller }
+// 由 tools/damigen 生成（go/ast 解析接口 + enjoy 模板；tools/damigen/cmd/damigen 是 CLI）：
+type UserServiceClient struct{ Bus *dami.Bus }
+
+func NewUserServiceClient(bus *dami.Bus) *UserServiceClient { return &UserServiceClient{Bus: bus} }
 
 func (c *UserServiceClient) GetUserID(ctx context.Context, name string) (int64, error) {
-	return Call1[int64](ctx, c.c, "user.GetUserID", map[string]any{"name": name})
+	return dami.Call1[int64](c.Bus, ctx, "user.GetUserID", name)
 }
 ```
 
@@ -469,7 +500,7 @@ n, sum, err := lpc.Call2[int, float64](ctx, "stat.Compute", Args{"x": x})
   - `nami` = **跨进程** HTTP RPC client；
   - `kafka` = **跨进程**异步消息。
   三者覆盖「进程内 → 本地调用 → 远程 → 异步消息」的完整解耦光谱。
-- **Plugin 集成**：`dami.NewPlugin()` 实现 `aifei.Plugin`，`Stop()` 时注销所有 listener、关闭 stream channel，挂到 `server.Run` 的生命周期上（P2）。
+- **Plugin 集成**（P2 已实现）：独立模块 `plugins/dami` 的 `dami.NewPlugin()` 实现 `aifei.Plugin`——`Start()` 把自有 Bus 经 `dami.SetDefaultBus` 设为包级默认，`Stop()` 经 `Bus.Stop()`（`Router.ClearAll`）清理全部 listener，挂到 `server.Run` 生命周期。dami 核心零依赖，Plugin 单独成模块以引入 `aifei`/`log` 依赖。
 - **可选与 server 联动**：service 方法可通过 dami 的 lpc 暴露给「非 HTTP 调用方」（如定时任务、其他模块），实现同一 service 既能被 HTTP 路由、又能被进程内事件总线调用。
 - **零依赖保证**：`dami` 仅用标准库，不引入 rxgo 或任何响应式框架。
 
@@ -484,7 +515,7 @@ n, sum, err := lpc.Call2[int, float64](ctx, "stat.Compute", Args{"x": x})
 | **P1** | `Future` + `Bus.Call[D,R]` + `CallPayload` | 请求-响应可用（对标 `Demo12`） | P0 |
 | **P1** | `Stream` + `Bus.Stream[D,R]`（chan 化） | 响应式流可用（对标 `Demo13`） | P1 |
 | **P1** | `Lpc.RegisterProvider`（反射）+ 泛型 `Call[R]` 助手 | provider 注册 + 无生成 consumer 可用（对标 `Demo31`） | P1 |
-| **P2** | code-gen consumer（`dami-gen`，复用 generator+enjoy） + `@DamiTopic` 的 Go 等价（tag/`init()`） | 强类型 client stub（对标 `Demo81`） | P1 |
+| **P2** ✅ | code-gen consumer（`tools/damigen`，go/ast+enjoy 模板）+ `plugins/dami`（`aifei.Plugin` 生命周期） | 强类型 client stub + server 集成 | P1 |
 | **P2** | `Plugin`（`aifei.Plugin` 生命周期） | 与 server 集成，`Stop()` 注销 listener / 关闭 stream | P1 |
 
 每阶段配单测；P0/P1 配基准测试，目标吞吐对标 Java 版（Go 进程内 channel 调度应能达到同量级，5000 万/秒量级取决于 dispatch 路径开销，需实测）。

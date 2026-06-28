@@ -16,4 +16,6 @@ type Router interface {
 	Match(topic string) []*holder
 	// Count returns the number of matching holders for a topic.
 	Count(topic string) int
+	// ClearAll removes every listener from every topic (for shutdown).
+	ClearAll()
 }

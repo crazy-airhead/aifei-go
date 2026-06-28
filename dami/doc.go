@@ -5,11 +5,13 @@
 // interceptors, ordered listeners, attachment passing, fallbacks and pluggable
 // routers (hash / path / tag) and dispatchers — the "bus" half of DamiBus.
 //
-// P0 (this package) implements event broadcasting (Send/Listen), the three
-// routers, the interceptor chain, listener ordering, attachments, the handled
-// flag and fallbacks. Request-response (Call), streaming (Stream) and local
-// procedure call (Lpc) arrive in later phases; Event already reserves the sink
-// field their payloads will carry.
+// P0 implements event broadcasting (Send/Listen), the three routers, the
+// interceptor chain, listener ordering, attachments, the handled flag and
+// fallbacks. P1 adds request-response (Call), streaming (Stream) and local
+// procedure call (Lpc), all building on the same pipeline via RequestPayload +
+// Sink. The codegen tool (tools/damigen, Enjoy templates) and the aifei.Plugin
+// adapter (plugins/dami) live in separate modules; this package itself stays
+// zero-dependency.
 //
 // Quick start:
 //

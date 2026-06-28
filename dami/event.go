@@ -9,13 +9,15 @@ package dami
 // across independent Send/Listen calls is a runtime convention (as in Java),
 // enforced by a type assertion on dispatch — a mismatch panics, just as Java
 // throws a ClassCastException.
+//
+// For call/stream, P is *RequestPayload[D] and the reply channel lives on that
+// payload (Payload.Sink), not on the event.
 type Event[P any] struct {
 	Topic   string
 	Payload P
 	Attach  map[string]any
 
 	handled bool
-	sink    sink // reserved for P1 call/stream; nil in P0
 }
 
 // AttachMap returns the attachment map, lazily allocating it. Use it when a
@@ -53,12 +55,16 @@ func (e *Event[P]) viewAttach() map[string]any {
 	return e.Attach
 }
 
-// sink is the result receiver reserved for P1 call/stream. It is unused in P0
-// (Event.sink stays nil) but defined here so the Event shape is stable for later
-// phases without an API break.
-type sink interface {
-	next(v any)
-	complete(err error)
+// Sink is the reply channel carried by call/stream payloads. A listener pushes
+// results via Next and signals completion (with an optional terminal error) via
+// Complete. It corresponds to Java's CompletableFuture (call) / Subscriber
+// (stream) sink, unified behind one interface.
+type Sink interface {
+	// Next pushes one result value. For a call the first value is the reply; for
+	// a stream each value is one element.
+	Next(v any)
+	// Complete ends the exchange; a non-nil error marks it failed.
+	Complete(err error)
 }
 
 // assertTopic panics on an empty topic, mirroring Java's AssertUtil.assertTopic.

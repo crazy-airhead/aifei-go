@@ -1,4 +1,4 @@
-module github.com/crazy-airhead/aifei-go/generator
+module github.com/crazy-airhead/aifei-go/tools/generator
 
 go 1.26
 
@@ -21,6 +21,6 @@ require (
 )
 
 replace (
-	github.com/crazy-airhead/aifei-go/db => ../db
-	github.com/crazy-airhead/aifei-go/enjoy => ../enjoy
+	github.com/crazy-airhead/aifei-go/db => ../../db
+	github.com/crazy-airhead/aifei-go/enjoy => ../../enjoy
 )

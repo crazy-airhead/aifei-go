@@ -11,13 +11,15 @@ use (
 	./db
 	./dami
 	./enjoy
-	./generator
+	./tools/generator
+	./tools/damigen
 	./go-http
 	./json
 	./log
 	./nami
 	./server
 	./plugins/cache
+	./plugins/dami
 	./plugins/kafka
 	./plugins/nacos
 	./plugins/storage

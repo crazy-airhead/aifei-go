@@ -56,3 +56,10 @@ func (r *HashRouter) Match(topic string) []*holder {
 
 // Count implements Router.
 func (r *HashRouter) Count(topic string) int { return len(r.Match(topic)) }
+
+// ClearAll implements Router.
+func (r *HashRouter) ClearAll() {
+	r.mu.Lock()
+	clear(r.pipelines)
+	r.mu.Unlock()
+}

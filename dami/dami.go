@@ -14,6 +14,15 @@ func Configure(opts ...Option) {
 	defaultBus = New(opts...)
 }
 
+// SetDefaultBus replaces the package-level default bus with b. Intended for
+// plugins (plugins/dami) that own a bus and want dami.Send/Listen/... to target
+// it. A nil b is ignored.
+func SetDefaultBus(b *Bus) {
+	if b != nil {
+		defaultBus = b
+	}
+}
+
 // Send broadcasts on the default bus — the common case, mirroring
 // Dami.bus().send(topic, payload, fallback).
 func Send[P any](topic string, payload P, fallback ...func(P)) (*Event[P], error) {

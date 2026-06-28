@@ -58,6 +58,10 @@ func (b *Bus) Intercept(index int, it Interceptor) {
 // DamiBus.unlisten(topic).
 func (b *Bus) UnlistenAll(topic string) { b.router.RemoveAll(topic) }
 
+// Stop removes all listeners from the bus, releasing it for shutdown. Intended
+// to be called from an aifei.Plugin's Stop (see plugins/dami).
+func (b *Bus) Stop() { b.router.ClearAll() }
+
 // SendOn broadcasts an event on b to every matching listener in index order.
 // (A top-level generic function — Go methods cannot carry type parameters.) It
 // returns the event (Handled set when a listener matched) and the first

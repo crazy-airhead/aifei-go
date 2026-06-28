@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/crazy-airhead/aifei-go/db"
-	"github.com/crazy-airhead/aifei-go/generator"
+	"github.com/crazy-airhead/aifei-go/tools/generator"
 
 	_ "modernc.org/sqlite"
 )

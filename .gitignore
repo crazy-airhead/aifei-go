@@ -3,3 +3,4 @@
 /_example/demo/demo.db
 /demo
 *.db
+/gen

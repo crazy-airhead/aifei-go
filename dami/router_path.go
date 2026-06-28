@@ -121,6 +121,14 @@ func (r *PathRouter) Match(topic string) []*holder {
 // Count implements Router.
 func (r *PathRouter) Count(topic string) int { return len(r.Match(topic)) }
 
+// ClearAll implements Router.
+func (r *PathRouter) ClearAll() {
+	r.mu.Lock()
+	clear(r.exact)
+	r.patterns = nil
+	r.mu.Unlock()
+}
+
 func (r *PathRouter) exactLookup(topic string) *pipeline {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
