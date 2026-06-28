@@ -3,7 +3,7 @@ module github.com/crazy-airhead/aifei-go/_example/kafka_test
 go 1.26
 
 require (
-	github.com/crazy-airhead/aifei-go/kafka v0.0.0
+	github.com/crazy-airhead/aifei-go/plugins/kafka v0.0.0
 	github.com/twmb/franz-go/pkg/kfake v0.0.0-20260625163649-cec2eb18edeb
 )
 
@@ -19,4 +19,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/crazy-airhead/aifei-go/kafka => ../../kafka
+replace github.com/crazy-airhead/aifei-go/plugins/kafka => ../../plugins/kafka

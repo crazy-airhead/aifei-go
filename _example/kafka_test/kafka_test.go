@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crazy-airhead/aifei-go/kafka"
+	"github.com/crazy-airhead/aifei-go/plugins/kafka"
 	"github.com/twmb/franz-go/pkg/kfake"
 )
 

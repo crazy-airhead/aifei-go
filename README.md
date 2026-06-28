@@ -35,11 +35,11 @@
 | `aifei-go/generator` | 代码生成器（Schema → 类型安全代码） | db, enjoy |
 | `aifei-go/go-http` | net/http 适配器 | aifei |
 | `aifei-go/server` | 服务启动、内置 Handler 包装器、响应构建器 | aifei, go-http |
-| `aifei-go/nacos` | Nacos 插件（服务注册、配置中心、发现） | aifei, nami, log, nacos-sdk-go/v2 |
-| `aifei-go/storage` | 文件存储插件（本地 + S3 兼容后端） | aifei, config, log, minio-go/v7 |
-| `aifei-go/cache` | 两级缓存插件（本地 + Redis） | aifei, config, log, jetcache-go, go-redis/v9 |
-| `aifei-go/kafka` | Kafka 插件（franz-go 生产/消费） | aifei, config, log, twmb/franz-go |
-| `aifei-go/swagger` | OpenAPI 文档插件（knife4j-vue3 UI） | aifei, config, log, swaggo/swag |
+| `aifei-go/plugins/nacos` | Nacos 插件（服务注册、配置中心、发现） | aifei, nami, log, nacos-sdk-go/v2 |
+| `aifei-go/plugins/storage` | 文件存储插件（本地 + S3 兼容后端） | aifei, config, log, minio-go/v7 |
+| `aifei-go/plugins/cache` | 两级缓存插件（本地 + Redis） | aifei, config, log, jetcache-go, go-redis/v9 |
+| `aifei-go/plugins/kafka` | Kafka 插件（franz-go 生产/消费） | aifei, config, log, twmb/franz-go |
+| `aifei-go/plugins/swagger` | OpenAPI 文档插件（knife4j-vue3 UI） | aifei, config, log, swaggo/swag |
 
 Requires Go 1.26.
 
@@ -148,7 +148,7 @@ import (
     "github.com/crazy-airhead/aifei-go/aifei"
     "github.com/crazy-airhead/aifei-go/config"
     "github.com/crazy-airhead/aifei-go/server"
-    "github.com/crazy-airhead/aifei-go/storage"
+    "github.com/crazy-airhead/aifei-go/plugins/storage"
 )
 
 func main() {

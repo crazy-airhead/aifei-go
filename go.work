@@ -7,18 +7,18 @@ use (
 	./_example/enjoy_test
 	./_example/kafka_test
 	./aifei
-	./cache
 	./config
 	./db
 	./enjoy
 	./generator
 	./go-http
 	./json
-	./kafka
 	./log
-	./nacos
 	./nami
 	./server
-	./storage
-	./swagger
+	./plugins/cache
+	./plugins/kafka
+	./plugins/nacos
+	./plugins/storage
+	./plugins/swagger
 )

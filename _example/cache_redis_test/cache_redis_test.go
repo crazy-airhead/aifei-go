@@ -14,7 +14,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 
-	"github.com/crazy-airhead/aifei-go/cache"
+	"github.com/crazy-airhead/aifei-go/plugins/cache"
 	"github.com/crazy-airhead/aifei-go/config"
 )
 

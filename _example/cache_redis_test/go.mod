@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/alicebob/miniredis/v2 v2.33.0
-	github.com/crazy-airhead/aifei-go/cache v0.0.0
+	github.com/crazy-airhead/aifei-go/plugins/cache v0.0.0
 	github.com/crazy-airhead/aifei-go/config v0.0.11
 )
 
@@ -31,6 +31,6 @@ require (
 )
 
 replace (
-	github.com/crazy-airhead/aifei-go/cache => ../../cache
+	github.com/crazy-airhead/aifei-go/plugins/cache => ../../plugins/cache
 	github.com/crazy-airhead/aifei-go/config => ../../config
 )

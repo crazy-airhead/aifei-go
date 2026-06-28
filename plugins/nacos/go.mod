@@ -1,4 +1,4 @@
-module github.com/crazy-airhead/aifei-go/nacos
+module github.com/crazy-airhead/aifei-go/plugins/nacos
 
 go 1.26
 
@@ -69,9 +69,9 @@ require (
 )
 
 replace (
-	github.com/crazy-airhead/aifei-go/aifei => ../aifei
-	github.com/crazy-airhead/aifei-go/config => ../config
-	github.com/crazy-airhead/aifei-go/log => ../log
-	github.com/crazy-airhead/aifei-go/nami => ../nami
+	github.com/crazy-airhead/aifei-go/aifei => ../../aifei
+	github.com/crazy-airhead/aifei-go/config => ../../config
+	github.com/crazy-airhead/aifei-go/log => ../../log
+	github.com/crazy-airhead/aifei-go/nami => ../../nami
 	google.golang.org/genproto => google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142
 )

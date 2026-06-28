@@ -1,11 +1,11 @@
-module github.com/crazy-airhead/aifei-go/swagger
+module github.com/crazy-airhead/aifei-go/plugins/swagger
 
 go 1.26
 
 replace (
-	github.com/crazy-airhead/aifei-go/aifei => ../aifei
-	github.com/crazy-airhead/aifei-go/config => ../config
-	github.com/crazy-airhead/aifei-go/log => ../log
+	github.com/crazy-airhead/aifei-go/aifei => ../../aifei
+	github.com/crazy-airhead/aifei-go/config => ../../config
+	github.com/crazy-airhead/aifei-go/log => ../../log
 )
 
 require (

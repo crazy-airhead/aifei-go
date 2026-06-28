@@ -1,4 +1,4 @@
-module github.com/crazy-airhead/aifei-go/cache
+module github.com/crazy-airhead/aifei-go/plugins/cache
 
 go 1.26
 
@@ -28,7 +28,7 @@ require (
 )
 
 replace (
-	github.com/crazy-airhead/aifei-go/aifei => ../aifei
-	github.com/crazy-airhead/aifei-go/config => ../config
-	github.com/crazy-airhead/aifei-go/log => ../log
+	github.com/crazy-airhead/aifei-go/aifei => ../../aifei
+	github.com/crazy-airhead/aifei-go/config => ../../config
+	github.com/crazy-airhead/aifei-go/log => ../../log
 )

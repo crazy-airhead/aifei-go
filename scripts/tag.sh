@@ -56,10 +56,11 @@ MODULES=(
   go-http       # github.com/crazy-airhead/aifei-go/go-http  (./go-http/go.mod)   → aifei
   generator     # github.com/crazy-airhead/aifei-go/generator (./generator/go.mod) → db, enjoy
   server        # github.com/crazy-airhead/aifei-go/server   (./server/go.mod)     → aifei, go-http
-  nacos         # github.com/crazy-airhead/aifei-go/nacos    (./nacos/go.mod)      → aifei, config, log, nami
-  storage       # github.com/crazy-airhead/aifei-go/storage  (./storage/go.mod)    → aifei, config, log
-  cache         # github.com/crazy-airhead/aifei-go/cache    (./cache/go.mod)      → aifei, config, log
-  swagger       # github.com/crazy-airhead/aifei-go/swagger  (./swagger/go.mod)    → aifei, config, log
+  plugins/nacos   # github.com/crazy-airhead/aifei-go/plugins/nacos   (./plugins/nacos/go.mod)   → aifei, config, log, nami
+  plugins/storage # github.com/crazy-airhead/aifei-go/plugins/storage (./plugins/storage/go.mod) → aifei, config, log
+  plugins/cache   # github.com/crazy-airhead/aifei-go/plugins/cache   (./plugins/cache/go.mod)   → aifei, config, log
+  plugins/kafka   # github.com/crazy-airhead/aifei-go/plugins/kafka   (./plugins/kafka/go.mod)   → aifei, config, log
+  plugins/swagger # github.com/crazy-airhead/aifei-go/plugins/swagger (./plugins/swagger/go.mod) → aifei, config, log
 )
 
 # Internal dependency map: "module:deps" pairs (compatible with bash 3.2).
@@ -69,10 +70,11 @@ MODULE_DEPS=(
   "go-http:aifei"
   "generator:db enjoy"
   "server:aifei go-http"
-  "nacos:aifei config log nami"
-  "storage:aifei config log"
-  "cache:aifei config log"
-  "swagger:aifei config log"
+  "plugins/nacos:aifei config log nami"
+  "plugins/storage:aifei config log"
+  "plugins/cache:aifei config log"
+  "plugins/kafka:aifei config log"
+  "plugins/swagger:aifei config log"
 )
 
 # Remotes to push to (github publishes to the Go module proxy).
