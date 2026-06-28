@@ -53,14 +53,17 @@ MODULES=(
   json          # github.com/crazy-airhead/aifei-go/json     (./json/go.mod)
   log           # github.com/crazy-airhead/aifei-go/log      (./log/go.mod)
   nami          # github.com/crazy-airhead/aifei-go/nami     (./nami/go.mod)
-  go-http       # github.com/crazy-airhead/aifei-go/go-http  (./go-http/go.mod)   → aifei
-  generator     # github.com/crazy-airhead/aifei-go/generator (./generator/go.mod) → db, enjoy
-  server        # github.com/crazy-airhead/aifei-go/server   (./server/go.mod)     → aifei, go-http
+  dami          # github.com/crazy-airhead/aifei-go/dami     (./dami/go.mod)
+  go-http       # github.com/crazy-airhead/aifei-go/go-http  (./go-http/go.mod)        → aifei
+  tools/generator # github.com/crazy-airhead/aifei-go/tools/generator (./tools/generator/go.mod) → db, enjoy
+  tools/damigen  # github.com/crazy-airhead/aifei-go/tools/damigen  (./tools/damigen/go.mod)  → enjoy
+  server        # github.com/crazy-airhead/aifei-go/server   (./server/go.mod)          → aifei, go-http
   plugins/nacos   # github.com/crazy-airhead/aifei-go/plugins/nacos   (./plugins/nacos/go.mod)   → aifei, config, log, nami
   plugins/storage # github.com/crazy-airhead/aifei-go/plugins/storage (./plugins/storage/go.mod) → aifei, config, log
   plugins/cache   # github.com/crazy-airhead/aifei-go/plugins/cache   (./plugins/cache/go.mod)   → aifei, config, log
   plugins/kafka   # github.com/crazy-airhead/aifei-go/plugins/kafka   (./plugins/kafka/go.mod)   → aifei, config, log
   plugins/swagger # github.com/crazy-airhead/aifei-go/plugins/swagger (./plugins/swagger/go.mod) → aifei, config, log
+  plugins/dami    # github.com/crazy-airhead/aifei-go/plugins/dami    (./plugins/dami/go.mod)    → aifei, dami, log
 )
 
 # Internal dependency map: "module:deps" pairs (compatible with bash 3.2).
@@ -68,13 +71,15 @@ MODULES=(
 # Only modules that depend on other modules in this repo need entries here.
 MODULE_DEPS=(
   "go-http:aifei"
-  "generator:db enjoy"
+  "tools/generator:db enjoy"
+  "tools/damigen:enjoy"
   "server:aifei go-http"
   "plugins/nacos:aifei config log nami"
   "plugins/storage:aifei config log"
   "plugins/cache:aifei config log"
   "plugins/kafka:aifei config log"
   "plugins/swagger:aifei config log"
+  "plugins/dami:aifei dami log"
 )
 
 # Remotes to push to (github publishes to the Go module proxy).
