@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Run all tests (workspace mode)
-go test ./aifei ./enjoy ./db ./json ./log ./generator ./nacos ./config ./cache ./_example/db_sqlite_test ./_example/cache_redis_test
+go test ./aifei ./config ./dami ./db ./enjoy ./http ./json ./log ./nami ./server ./tools/... ./plugins/... ./_example/...
 
 # Run tests for a single module
 go test ./aifei
@@ -14,9 +14,10 @@ go test ./enjoy
 go test ./db
 go test ./json
 go test ./log
-go test ./nacos
-go test ./generator
+go test ./plugins/nacos
+go test ./tools/generator
 go test ./config
+go test ./dami
 
 # Run db integration tests (requires sqlite)
 go test ./_example/db_sqlite_test
@@ -36,29 +37,35 @@ go run ./_example/demo
 
 ## Module Structure (Go Workspace)
 
-This project uses Go workspace (`go.work`) with independent modules. Each library module has zero external dependencies.
+This project uses a Go workspace (`go.work`) of independent modules, layered by role: **Core** (the `aifei` framework itself), **Core library** (zero-external-dep primitives usable standalone), **Runtime** (the default `net/http` adapter + production bootstrap for aifei), **Standalone framework** (sibling frameworks with no dependency on aifei), **Code generation** (`tools/`), **Plugin** (optional integrations that pull in third-party libraries), and **Example** (demos/integration tests under `_example/`, not published).
 
-| Module | Path | External Dependencies |
-|--------|------|-----------------------|
-| `github.com/crazy-airhead/aifei-go` | `./aifei` | None |
-| `github.com/crazy-airhead/aifei-go/enjoy` | `./enjoy` | None |
-| `github.com/crazy-airhead/aifei-go/db` | `./db` | None |
-| `github.com/crazy-airhead/aifei-go/json` | `./json` | None |
-| `github.com/crazy-airhead/aifei-go/log` | `./log` | None |
-| `github.com/crazy-airhead/aifei-go/generator` | `./generator` | db, enjoy (both zero external deps) |
-| `github.com/crazy-airhead/aifei-go/http` | `./http` | aifei (zero external deps) |
-| `github.com/crazy-airhead/aifei-go/server` | `./server` | aifei, http (zero external deps) |
-| `github.com/crazy-airhead/aifei-go/nami` | `./nami` | None (HTTP RPC client framework) |
-| `github.com/crazy-airhead/aifei-go/plugins/nacos` | `./plugins/nacos` | aifei, nami, log, nacos-sdk-go/v2 |
-| `github.com/crazy-airhead/aifei-go/plugins/storage` | `./plugins/storage` | aifei, config, log, minio-go/v7 |
-| `github.com/crazy-airhead/aifei-go/plugins/cache` | `./plugins/cache` | aifei, config, log, jetcache-go, go-redis/v9 |
-| `github.com/crazy-airhead/aifei-go/config` | `./config` | `gopkg.in/yaml.v3` |
-| `github.com/crazy-airhead/aifei-go/plugins/swagger` | `./plugins/swagger` | aifei, config, log, swaggo/swag |
-| `github.com/crazy-airhead/aifei-go/plugins/kafka` | `./plugins/kafka` | aifei, config, log, twmb/franz-go |
-| `_example/demo` | `./_example/demo` | `modernc.org/sqlite` |
-| `_example/db_sqlite_test` | `./_example/db_sqlite_test` | `modernc.org/sqlite` |
-| `_example/cache_redis_test` | `./_example/cache_redis_test` | `github.com/alicebob/miniredis/v2` |
-| `_example/kafka_test` | `./_example/kafka_test` | `github.com/twmb/franz-go/pkg/kfake` |
+| Layer | Module | Path | Dependencies |
+|-------|--------|------|--------------|
+| Core | `github.com/crazy-airhead/aifei-go` | `./aifei` | — |
+| Core library | `…/aifei-go/enjoy` | `./enjoy` | — |
+| Core library | `…/aifei-go/db` | `./db` | — |
+| Core library | `…/aifei-go/json` | `./json` | — |
+| Core library | `…/aifei-go/log` | `./log` | — |
+| Core library | `…/aifei-go/config` | `./config` | `yaml.v3` |
+| Runtime | `…/aifei-go/http` | `./http` | aifei |
+| Runtime | `…/aifei-go/server` | `./server` | aifei, http, db, enjoy, log |
+| Standalone framework | `…/aifei-go/nami` | `./nami` | — |
+| Standalone framework | `…/aifei-go/dami` | `./dami` | — |
+| Code generation | `…/aifei-go/tools/generator` | `./tools/generator` | db, enjoy + `modernc.org/sqlite` |
+| Code generation | `…/aifei-go/tools/damigen` | `./tools/damigen` | enjoy |
+| Plugin | `…/aifei-go/plugins/cache` | `./plugins/cache` | aifei, config, log + `jetcache-go`, `go-redis` |
+| Plugin | `…/aifei-go/plugins/dami` | `./plugins/dami` | aifei, dami, log |
+| Plugin | `…/aifei-go/plugins/kafka` | `./plugins/kafka` | aifei, config, log + `franz-go` |
+| Plugin | `…/aifei-go/plugins/nacos` | `./plugins/nacos` | aifei, nami, log + `nacos-sdk-go` |
+| Plugin | `…/aifei-go/plugins/storage` | `./plugins/storage` | aifei, config, log + `minio-go` |
+| Plugin | `…/aifei-go/plugins/swagger` | `./plugins/swagger` | aifei, config, log + `swaggo/swag` |
+| Example | `_example/demo` | `./_example/demo` | core + db + generator + `modernc.org/sqlite` |
+| Example | `_example/db_sqlite_test` | `./_example/db_sqlite_test` | db + `modernc.org/sqlite` |
+| Example | `_example/cache_redis_test` | `./_example/cache_redis_test` | `miniredis` |
+| Example | `_example/kafka_test` | `./_example/kafka_test` | `franz-go/kfake` |
+| Example | `_example/enjoy_test` | `./_example/enjoy_test` | enjoy |
+
+`…` = `github.com/crazy-airhead`. In the Dependencies column, bare names are internal modules; backticked names are external libraries; `—` means no dependencies.
 
 Users can import individual modules without pulling unwanted dependencies:
 - `go get github.com/crazy-airhead/aifei-go/enjoy` — template engine only, zero external deps
@@ -128,7 +135,7 @@ Convenience layer for production use:
 - **`table.go`** — `Table`: runtime table metadata for code generation.
 - **`db/sql/`** — Enjoy SQL: `SqlKit` wrapping Enjoy engine with `#sql`, `#para`, `#where`, `#and`, `#orderBy` directives supporting 18 operators.
 
-### Code Generator (`./generator`)
+### Code Generator (`./tools/generator`)
 
 Generates type-safe per-table packages from database schema:
 - **`generator.go`** — Main entry point: `New(pool, dialect, outputDir, importRoot)`.

@@ -5,7 +5,7 @@
 ## 特性
 
 - **Just Service** — 方法名即路由：`Register()` 按命名约定（动词前缀 + 默认动作）自动映射 struct 方法为 RESTful 端点
-- **零外部依赖（核心）** — 核心库模块（aifei/enjoy/db/json/log/nami）仅用 Go 标准库；可选插件（config/cache/storage/kafka/nacos/swagger）按需引入第三方库
+- **零外部依赖（核心）** — 核心库与独立框架（aifei/enjoy/db/json/log/nami/dami）仅用 Go 标准库；config 仅依赖 yaml.v3；插件（plugins/）按需引入第三方库
 - **模块化设计** — 各模块可独立 `go get`，按需组合，不拉入多余依赖
 - **Enjoy 模板引擎** — 自研模板语言（~2800 行），支持表达式、条件、循环、宏定义、空安全
 - **Active Record ORM** — Row + Dao 链式操作，变更追踪
@@ -20,26 +20,37 @@
 - **Nacos 集成** — 服务注册与发现、配置中心，自动桥接到 nami RPC 客户端
 - **Swagger 文档** — 内嵌 knife4j-vue3 UI 的 OpenAPI 文档插件
 - **Nami RPC 客户端** — 轻量 HTTP RPC 客户端框架，Filter 链 + 服务发现
+- **Dami 事件总线** — 进程内事件总线（send/call/stream/lpc），发布订阅 + 同步调用
 
 ## 模块结构
 
-| 模块 | 说明 | 依赖 |
-|------|------|------|
-| `aifei-go` | 核心框架（Input/Output 接口、Router、Handler wrapper、Interceptor） | 无 |
-| `aifei-go/enjoy` | Enjoy 模板引擎 | 无 |
-| `aifei-go/db` | 数据库访问（Row/Dao/Dialect/Enjoy SQL） | 无 |
-| `aifei-go/json` | JSON 工具 | 无 |
-| `aifei-go/log` | 日志接口 | 无 |
-| `aifei-go/nami` | HTTP RPC 客户端框架（channel/coder/Filter/Discovery） | 无 |
-| `aifei-go/config` | 分层配置加载（yml + 环境变量 + 命令行 + 云配置） | yaml.v3 |
-| `aifei-go/generator` | 代码生成器（Schema → 类型安全代码） | db, enjoy |
-| `aifei-go/http` | net/http 适配器 | aifei |
-| `aifei-go/server` | 服务启动、内置 Handler 包装器、响应构建器 | aifei, http |
-| `aifei-go/plugins/nacos` | Nacos 插件（服务注册、配置中心、发现） | aifei, nami, log, nacos-sdk-go/v2 |
-| `aifei-go/plugins/storage` | 文件存储插件（本地 + S3 兼容后端） | aifei, config, log, minio-go/v7 |
-| `aifei-go/plugins/cache` | 两级缓存插件（本地 + Redis） | aifei, config, log, jetcache-go, go-redis/v9 |
-| `aifei-go/plugins/kafka` | Kafka 插件（franz-go 生产/消费） | aifei, config, log, twmb/franz-go |
-| `aifei-go/plugins/swagger` | OpenAPI 文档插件（knife4j-vue3 UI） | aifei, config, log, swaggo/swag |
+模块按角色分层：**核心框架**（aifei 本体）、**核心库**（零外部依赖原语，可独立使用）、**默认运行时**（aifei 的 net/http 适配 + 生产引导）、**独立框架**（不依赖 aifei 的兄弟框架）、**代码生成**（`tools/`）、**插件**（按需引入第三方库的集成）、**示例**（`_example/`，不发布）。
+
+| 层 | 模块 | 说明 | 依赖 |
+|----|------|------|------|
+| 核心框架 | `aifei-go` | Input/Output 接口、Router、Handler wrapper、Interceptor | — |
+| 核心库 | `aifei-go/enjoy` | 模板/SQL 引擎 | — |
+| 核心库 | `aifei-go/db` | 数据库访问（Row/Dao/Dialect/Enjoy SQL） | — |
+| 核心库 | `aifei-go/json` | JSON 工具 | — |
+| 核心库 | `aifei-go/log` | 日志接口 | — |
+| 核心库 | `aifei-go/config` | 分层配置（yml + 环境变量 + 命令行 + 云配置） | yaml.v3 |
+| 默认运行时 | `aifei-go/http` | net/http 适配器 | aifei |
+| 默认运行时 | `aifei-go/server` | 启动引导、内置 Handler、响应构建器、Register | aifei, http, db, enjoy, log |
+| 独立框架 | `aifei-go/nami` | HTTP RPC 客户端框架（channel/coder/Filter/Discovery） | — |
+| 独立框架 | `aifei-go/dami` | 进程内事件总线（send/call/stream/lpc） | — |
+| 代码生成 | `aifei-go/tools/generator` | Schema → 类型安全 CRUD 代码 | db, enjoy + sqlite |
+| 代码生成 | `aifei-go/tools/damigen` | dami 相关代码生成 | enjoy |
+| 插件 | `aifei-go/plugins/cache` | 两级缓存（本地 + Redis） | aifei, config, log + jetcache-go, go-redis |
+| 插件 | `aifei-go/plugins/dami` | dami 事件总线接入 aifei | aifei, dami, log |
+| 插件 | `aifei-go/plugins/kafka` | Kafka 生产/消费（franz-go） | aifei, config, log + franz-go |
+| 插件 | `aifei-go/plugins/nacos` | 服务注册、配置中心、发现 | aifei, nami, log + nacos-sdk-go |
+| 插件 | `aifei-go/plugins/storage` | 文件存储（本地 + S3 兼容） | aifei, config, log + minio-go |
+| 插件 | `aifei-go/plugins/swagger` | OpenAPI 文档（knife4j-vue3） | aifei, config, log + swaggo/swag |
+| 示例 | `_example/demo` | 完整 Web 应用 Demo | core + db + generator + sqlite |
+| 示例 | `_example/db_sqlite_test` | 数据库集成测试 | db + sqlite |
+| 示例 | `_example/cache_redis_test` | 缓存集成测试 | miniredis |
+| 示例 | `_example/kafka_test` | Kafka 集成测试 | franz-go/kfake |
+| 示例 | `_example/enjoy_test` | Enjoy 引擎测试 | enjoy |
 
 Requires Go 1.26.
 
@@ -125,7 +136,7 @@ output := tpl.RenderToString(map[string]interface{}{"name": "james", "age": 18})
 
 ```go
 import (
-    "github.com/crazy-airhead/aifei-go/generator"
+    "github.com/crazy-airhead/aifei-go/tools/generator"
 )
 
 gen := generator.New(pool, dialect, "./myapp/db", "myapp/db")
