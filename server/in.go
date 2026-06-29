@@ -5,20 +5,20 @@ import (
 	"net/http"
 
 	"github.com/crazy-airhead/aifei-go/aifei"
-	gohttp "github.com/crazy-airhead/aifei-go/go-http"
+	aifeihttp "github.com/crazy-airhead/aifei-go/http"
 )
 
-// In implements aifei.Input by embedding go-http.HttpContext.
+// In implements aifei.Input by embedding aifeihttp.HttpContext.
 //
 // It reuses HttpContext's proven request-reading implementation instead of
-// duplicating it, keeping server a thin convenience layer over go-http. The
+// duplicating it, keeping server a thin convenience layer over http. The
 // core aifei.Input contract (Param: GetStr/GetBean/...; Meta: Path/Header/
 // Context/Body), the HTTP-specific HttpContext methods (Method/RemoteIP/
-// Cookie, via gohttp.HTTPMeta), and SetParams are all promoted from the
+// Cookie, via aifeihttp.HTTPMeta), and SetParams are all promoted from the
 // embedded HttpContext. The HTTP adapter (NewIoHandler) builds *In for every
 // request, so *In methods like GetFile/GetFiles are reachable from services.
 type In struct {
-	*gohttp.HttpContext
+	*aifeihttp.HttpContext
 }
 
 // Compile-time guarantee that *In satisfies aifei.Input.
@@ -26,7 +26,7 @@ var _ aifei.Input = (*In)(nil)
 
 // NewIn creates an In from an http.Request.
 func NewIn(r *http.Request) *In {
-	return &In{HttpContext: gohttp.NewInput(r)}
+	return &In{HttpContext: aifeihttp.NewInput(r)}
 }
 
 // ---- Upload retrieval (mirror Java aifei In.getUploadedFiles) ----

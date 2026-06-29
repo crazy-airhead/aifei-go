@@ -1,7 +1,7 @@
 package aifei
 
 // HandlerFunc is the handler function type. It receives input and returns output.
-// The go-http module is responsible for writing the Output to the HTTP response.
+// The http module is responsible for writing the Output to the HTTP response.
 type HandlerFunc func(in Input) Output
 
 // Handler wraps a HandlerFunc, used to build handler chains (replaces Java's Interceptor AOP).

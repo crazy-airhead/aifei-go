@@ -29,8 +29,8 @@ const maxForwards = 8
 // IoHandler is the HTTP adapter that connects net/http to aifei, porting Java
 // aifei-vip-arch's IoHandler in full: it looks up routes, invokes handlers,
 // follows forward chains, and dispatches the resulting Out according to its
-// rendering intent (redirect → view → file → raw → JSON). Unlike gohttp.
-// HttpHandler (which builds requests as *gohttp.HttpContext), IoHandler builds
+// rendering intent (redirect → view → file → raw → JSON). Unlike http.
+// HttpHandler (which builds requests as *http.HttpContext), IoHandler builds
 // *In so that *In methods (GetFile, GetFiles) are reachable from services.
 //
 // Dispatch precedence in Handle (mirrors Java handleOutput):
@@ -240,7 +240,7 @@ func (h *IoHandler) Handle(w http.ResponseWriter, in aifei.Input, out aifei.Outp
 	writeJSON(w, o)
 }
 
-// writeJSON serializes an Output as {"code","msg","data"}, matching gohttp's
+// writeJSON serializes an Output as {"code","msg","data"}, matching http's
 // wire format. The HTTP status is derived from the business code: negative codes
 // → 404, client-error codes (4xx) pass through, server-error codes (≥500) →
 // 500, success codes (0–399) → 200.

@@ -13,7 +13,7 @@ use (
 	./enjoy
 	./tools/generator
 	./tools/damigen
-	./go-http
+	./http
 	./json
 	./log
 	./nami

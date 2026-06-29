@@ -1,4 +1,4 @@
-module github.com/crazy-airhead/aifei-go/go-http
+module github.com/crazy-airhead/aifei-go/http
 
 go 1.26
 

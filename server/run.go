@@ -9,7 +9,7 @@ import (
 	"syscall"
 
 	"github.com/crazy-airhead/aifei-go/aifei"
-	gohttp "github.com/crazy-airhead/aifei-go/go-http"
+	aifeihttp "github.com/crazy-airhead/aifei-go/http"
 )
 
 // Option configures the Run function.
@@ -81,7 +81,7 @@ func Run(app *aifei.Aifei, addr string, opts ...Option) {
 		h = o.httpHandlers[i](h)
 	}
 
-	srv := gohttp.NewDefaultServer(addr)
+	srv := aifeihttp.NewDefaultServer(addr)
 
 	for _, p := range app.Plugins() {
 		if err := p.Start(); err != nil {

@@ -64,7 +64,7 @@ func (a *Aifei) OnStartFunc() func()
 func (a *Aifei) OnStopFunc() func()
 ```
 
-> 注：`Run()` 方法不在 `Aifei` 上，而是 `server.Run(app, addr, opts...)` 包级函数。这样核心包保持零依赖，HTTP 服务器细节由 `server` 和 `go-http` 包处理。
+> 注：`Run()` 方法不在 `Aifei` 上，而是 `server.Run(app, addr, opts...)` 包级函数。这样核心包保持零依赖，HTTP 服务器细节由 `server` 和 `http` 包处理。
 
 ---
 
@@ -136,7 +136,7 @@ func NewResult(code int, msg string, data interface{}) Output
 
 ### 实现类
 
-- **`go-http.HttpContext`** — 实现 `aifei.Input`，包装 `*http.Request`
+- **`http.HttpContext`** — 实现 `aifei.Input`，包装 `*http.Request`
 - **`server.In`** — 完整 `aifei.Input` 实现（用于 server 包）
 - **`server.Out`** — 流式 `aifei.Output` 构建器
 
@@ -367,12 +367,12 @@ type Plugin interface {
 
 ## 8. HTTP 适配层
 
-### go-http（`go-http/`）
+### http（`http/`）
 
 桥接 `net/http` 和 aifei 框架：
 
 ```go
-package gohttp
+package http
 
 // HttpContext 实现 aifei.Input，包装 *http.Request
 type HttpContext struct { ... }
@@ -424,7 +424,7 @@ aifei.go
   ├── interceptor.go  (Interceptor, InterceptorFunc, MethodInterceptors)
   └── plugin.go       (Plugin)
 
-go-http/
+http/
   ├── context.go      (HttpContext implements Input)
   ├── handler.go      (HttpHandler implements http.Handler)
   └── server.go       (Server interface, DefaultServer)

@@ -4,7 +4,7 @@ package aifei
 const Version = "1.0.0"
 
 // Aifei is the core framework instance.
-// Server startup is handled by the go-http module (or other server adapters).
+// Server startup is handled by the http module (or other server adapters).
 type Aifei struct {
 	config   *Config
 	router   *Router

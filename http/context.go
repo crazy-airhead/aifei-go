@@ -1,4 +1,4 @@
-package gohttp
+package http
 
 import (
 	"context"

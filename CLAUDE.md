@@ -46,8 +46,8 @@ This project uses Go workspace (`go.work`) with independent modules. Each librar
 | `github.com/crazy-airhead/aifei-go/json` | `./json` | None |
 | `github.com/crazy-airhead/aifei-go/log` | `./log` | None |
 | `github.com/crazy-airhead/aifei-go/generator` | `./generator` | db, enjoy (both zero external deps) |
-| `github.com/crazy-airhead/aifei-go/go-http` | `./go-http` | aifei (zero external deps) |
-| `github.com/crazy-airhead/aifei-go/server` | `./server` | aifei, go-http (zero external deps) |
+| `github.com/crazy-airhead/aifei-go/http` | `./http` | aifei (zero external deps) |
+| `github.com/crazy-airhead/aifei-go/server` | `./server` | aifei, http (zero external deps) |
 | `github.com/crazy-airhead/aifei-go/nami` | `./nami` | None (HTTP RPC client framework) |
 | `github.com/crazy-airhead/aifei-go/plugins/nacos` | `./plugins/nacos` | aifei, nami, log, nacos-sdk-go/v2 |
 | `github.com/crazy-airhead/aifei-go/plugins/storage` | `./plugins/storage` | aifei, config, log, minio-go/v7 |
@@ -88,7 +88,7 @@ Aifei-Go is a lightweight Go web framework ported from [Aifei Java](https://gith
 - **`config.go`** — `Config` with functional options pattern (`WithHandlers`, `WithPlugin`, `WithOnStart`, `WithOnStop`). `WithHandlers` accepts `Handler` wrappers.
 - **`plugin.go`** — `Plugin` interface (`Start()`/`Stop()` lifecycle).
 
-### HTTP Adapter (`./go-http`)
+### HTTP Adapter (`./http`)
 
 Bridges `net/http` to the aifei framework:
 - **`context.go`** — `HttpContext` implements `aifei.Input` by wrapping `*http.Request`.
@@ -166,7 +166,7 @@ Generates type-safe per-table packages from database schema:
 | Input + Output interfaces | `Input` / `Output` interfaces (preserved) |
 | CGLIB/Javassist AOP proxy | `Handler` wrapper chain + `Interceptor` for method-level AOP |
 | `@Path` annotation + reflection scanning | Code registration / `Register()` struct reflection |
-| Undertow HTTP server | `net/http` via `go-http` adapter + `server` bootstrap |
+| Undertow HTTP server | `net/http` via `http` adapter + `server` bootstrap |
 | Functional options for config | Same pattern preserved |
 
 ## Project State

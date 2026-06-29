@@ -33,7 +33,7 @@
 | 废弃模块 | 原因 | Go 替代 |
 |----------|------|---------|
 | aifei-proxy | Go 无 JVM 动态代理机制 | Handler wrapper 链 + Interceptor 接口 |
-| aifei-undertow | Go 有 net/http | go-http 适配器 + server 启动层 |
+| aifei-undertow | Go 有 net/http | http 适配器 + server 启动层 |
 | aifei-all | Go 的 import 机制天然按需引入 | 不需要 |
 
 ---
@@ -54,7 +54,7 @@ aifei-go/
 │   ├── config.go                 # Config + Option (函数式选项)
 │   └── plugin.go                 # Plugin 接口
 │
-├── go-http/                      # net/http 适配器
+├── http/                      # net/http 适配器
 │   ├── context.go                # HttpContext 实现 aifei.Input
 │   ├── handler.go                # HttpHandler 实现 http.Handler
 │   └── server.go                 # Server 接口 + DefaultServer
@@ -153,7 +153,7 @@ aifei-go/
 
 | 阶段 | 文档 | 内容 | 实际代码量 |
 |------|------|------|-----------|
-| P1 | `01-phase1-core.md` | 核心框架 (Input/Output, Router, Handler, Interceptor) | ~1,100 行 (aifei + go-http) |
+| P1 | `01-phase1-core.md` | 核心框架 (Input/Output, Router, Handler, Interceptor) | ~1,100 行 (aifei + http) |
 | P2 | `02-phase2-enjoy.md` | **Enjoy 模板引擎** (Lexer, Parser, Expr, Directive, Scope) | ~2,500 行 |
 | P3 | `03-phase3-db.md` | 数据库模块 (Db, Row, Dao, Page, Dialect, Enjoy SQL) + Generator | ~3,900 行 (db + db/sql + generator) |
 | P4 | `04-phase4-utils.md` | JSON/日志模块 | ~150 行 |
@@ -179,7 +179,7 @@ aifei-go/
 | 依赖注入 | @Inject + 反射 | 构造函数注入 | Go 惯例 |
 | 配置 | AifeiConfig 接口 + 多个 config() 方法 | Functional Options 模式 | Go 惯用的配置模式 |
 | 包扫描 | ClassLoader + 文件系统/JAR 扫描 | 不需要 (Go 静态编译) | Go 编译时确定所有代码 |
-| HTTP 服务器 | Undertow 嵌入式 | net/http (go-http 适配 + server 启动) | Go 标准库，零依赖 |
+| HTTP 服务器 | Undertow 嵌入式 | net/http (http 适配 + server 启动) | Go 标准库，零依赖 |
 | 代码生成 | Java Generator (同仓库) | Go Generator 独立模块 | 每表一包策略，编译期类型安全 |
 
 ---

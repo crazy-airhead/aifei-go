@@ -54,10 +54,10 @@ MODULES=(
   log           # github.com/crazy-airhead/aifei-go/log      (./log/go.mod)
   nami          # github.com/crazy-airhead/aifei-go/nami     (./nami/go.mod)
   dami          # github.com/crazy-airhead/aifei-go/dami     (./dami/go.mod)
-  go-http       # github.com/crazy-airhead/aifei-go/go-http  (./go-http/go.mod)        → aifei
+  http       # github.com/crazy-airhead/aifei-go/http  (./http/go.mod)        → aifei
   tools/generator # github.com/crazy-airhead/aifei-go/tools/generator (./tools/generator/go.mod) → db, enjoy
   tools/damigen  # github.com/crazy-airhead/aifei-go/tools/damigen  (./tools/damigen/go.mod)  → enjoy
-  server        # github.com/crazy-airhead/aifei-go/server   (./server/go.mod)          → aifei, go-http
+  server        # github.com/crazy-airhead/aifei-go/server   (./server/go.mod)          → aifei, http
   plugins/nacos   # github.com/crazy-airhead/aifei-go/plugins/nacos   (./plugins/nacos/go.mod)   → aifei, config, log, nami
   plugins/storage # github.com/crazy-airhead/aifei-go/plugins/storage (./plugins/storage/go.mod) → aifei, config, log
   plugins/cache   # github.com/crazy-airhead/aifei-go/plugins/cache   (./plugins/cache/go.mod)   → aifei, config, log
@@ -70,10 +70,10 @@ MODULES=(
 # Format: "<module>:<space-separated list of repo modules it depends on>"
 # Only modules that depend on other modules in this repo need entries here.
 MODULE_DEPS=(
-  "go-http:aifei"
+  "http:aifei"
   "tools/generator:db enjoy"
   "tools/damigen:enjoy"
-  "server:aifei go-http"
+  "server:aifei http"
   "plugins/nacos:aifei config log nami"
   "plugins/storage:aifei config log"
   "plugins/cache:aifei config log"
