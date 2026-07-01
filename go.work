@@ -8,20 +8,21 @@ use (
 	./_example/kafka_test
 	./aifei
 	./config
-	./db
 	./dami
+	./db
 	./enjoy
-	./tools/generator
-	./tools/damigen
 	./http
 	./json
 	./log
 	./nami
-	./server
 	./plugins/cache
 	./plugins/dami
 	./plugins/kafka
 	./plugins/nacos
 	./plugins/storage
 	./plugins/swagger
+	./plugins/xxljob
+	./server
+	./tools/damigen
+	./tools/generator
 )

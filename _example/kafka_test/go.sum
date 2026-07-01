@@ -1,9 +1,7 @@
-github.com/crazy-airhead/aifei-go/aifei v0.0.12 h1:hoK1TlYytlg0ipAZRc2Av678LBbC0L2oxXraRMvgjww=
-github.com/crazy-airhead/aifei-go/aifei v0.0.12/go.mod h1:jlsT42WBIFogoKNt6kTbPEOHBkr/q1s/pTf2bthvfq4=
-github.com/crazy-airhead/aifei-go/config v0.0.12 h1:7Ch9B3K60TiySvh7JKsOu7SlTuL7EDDX8wI6DeGfehg=
-github.com/crazy-airhead/aifei-go/config v0.0.12/go.mod h1:8pU3wOwyHhIdUqDfX5bGHiolrFDhNyvkgD6Pmj68B4I=
-github.com/crazy-airhead/aifei-go/log v0.0.12 h1:eObTlQZCwNQupA0skSGBhwlaywInBT3nGrhnbYx4+KY=
-github.com/crazy-airhead/aifei-go/log v0.0.12/go.mod h1:AkVwEZUcTuyBaP7fpfky/ltMvbzL+DsqHzYgrN/RhPY=
+github.com/crazy-airhead/aifei-go/aifei v0.0.14 h1:AXIdHGArJ82I65irT8MXuZbSw1uwKuVIyl+eVlXW9ZU=
+github.com/crazy-airhead/aifei-go/config v0.0.14 h1:7Z0ivzc8ynj/2vWPqAUe6iNnsym5BkM719+1vIRWCuI=
+github.com/crazy-airhead/aifei-go/config v0.0.14/go.mod h1:8pU3wOwyHhIdUqDfX5bGHiolrFDhNyvkgD6Pmj68B4I=
+github.com/crazy-airhead/aifei-go/log v0.0.14 h1:0MRxLWkYawvSb5NEwZDre2k/eVbLIGDePQRMQsW3IOE=
 github.com/klauspost/compress v1.18.6 h1:2jupLlAwFm95+YDR+NwD2MEfFO9d4z4Prjl1XXDjuao=
 github.com/klauspost/compress v1.18.6/go.mod h1:cwPg85FWrGar70rWktvGQj8/hthj3wpl0PGDogxkrSQ=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
