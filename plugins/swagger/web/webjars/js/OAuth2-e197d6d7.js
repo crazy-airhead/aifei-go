@@ -1,0 +1,1 @@
+import{_ as t}from"./doc-e9f5be16.js";import"./vue-4c460f3b.js";import"./antd-759a8e95.js";import"./utils-15add43a.js";const r={name:"OAuth2"};function o(e,n,p,s,c,_){return null}const f=t(r,[["render",o]]);export{f as default};
