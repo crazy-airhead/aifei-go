@@ -17,6 +17,7 @@ use (
 	./nami
 	./plugins/cache
 	./plugins/dami
+	./plugins/elasticsearch
 	./plugins/kafka
 	./plugins/nacos
 	./plugins/storage

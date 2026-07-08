@@ -64,6 +64,7 @@ MODULES=(
   plugins/kafka   # github.com/crazy-airhead/aifei-go/plugins/kafka   (./plugins/kafka/go.mod)   → aifei, config, log
   plugins/swagger # github.com/crazy-airhead/aifei-go/plugins/swagger (./plugins/swagger/go.mod) → aifei, config, log
   plugins/dami    # github.com/crazy-airhead/aifei-go/plugins/dami    (./plugins/dami/go.mod)    → aifei, dami, log
+  plugins/elasticsearch # github.com/crazy-airhead/aifei-go/plugins/elasticsearch (./plugins/elasticsearch/go.mod) → aifei, config, log
   plugins/xxljob  # github.com/crazy-airhead/aifei-go/plugins/xxljob  (./plugins/xxljob/go.mod)  → aifei, config, log
 )
 
@@ -81,6 +82,7 @@ MODULE_DEPS=(
   "plugins/kafka:aifei config log"
   "plugins/swagger:aifei config log"
   "plugins/dami:aifei dami log"
+  "plugins/elasticsearch:aifei config log"
   "plugins/xxljob:aifei config log"
 )
 
