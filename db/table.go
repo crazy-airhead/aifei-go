@@ -22,3 +22,13 @@ func RegisterTable(t *Table) {
 func Tables() []*Table {
 	return tableRegistry
 }
+
+// GetTableByName returns the registered Table with the given name, or nil.
+func GetTableByName(name string) *Table {
+	for _, t := range tableRegistry {
+		if t.Name == name {
+			return t
+		}
+	}
+	return nil
+}

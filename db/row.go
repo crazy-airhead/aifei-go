@@ -2,6 +2,7 @@ package db
 
 import (
 	"encoding/json"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -401,19 +402,54 @@ func formatTimeValue(v interface{}) interface{} {
 // internally, regardless of the configured KeyFormat.
 // String values matching TimeFormat (and common fallback layouts) are parsed
 // back to time.Time so that time fields survive a JSON round-trip.
+// Slice and map values (from JSON arrays/objects) are serialized back to
+// JSON strings only when the corresponding column is typed as string.
 func (r *Row) UnmarshalJSON(data []byte) error {
 	r.ensureData()
 	var raw map[string]interface{}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
+
+	var fieldTypes map[string]reflect.Type
+	if t := GetTableByName(r.table); t != nil {
+		fieldTypes = t.FieldTypes
+	}
+
 	r.ensureChange()
 	for k, v := range raw {
 		snakeKey := camelToSnake(k)
-		r.data[snakeKey] = parseTimeValue(v)
+		r.data[snakeKey] = normalizeJSONValue(snakeKey, v, fieldTypes)
 		r.change[snakeKey] = struct{}{}
 	}
 	return nil
+}
+
+// normalizeJSONValue converts complex JSON values (slices, maps) to their
+// JSON string representation only when the target field is declared as string.
+// Non-string fields preserve the original value so the SQL driver can reject
+// it with a clear type-mismatch error.
+// When fieldTypes is nil (no table metadata), falls back to converting to
+// string as the safe default.
+func normalizeJSONValue(key string, v interface{}, fieldTypes map[string]reflect.Type) interface{} {
+	switch val := v.(type) {
+	case []interface{}:
+		if fieldTypes == nil || fieldTypes[key] == reflect.TypeFor[string]() {
+			if b, err := json.Marshal(val); err == nil {
+				return string(b)
+			}
+		}
+		return v
+	case map[string]interface{}:
+		if fieldTypes == nil || fieldTypes[key] == reflect.TypeFor[string]() {
+			if b, err := json.Marshal(val); err == nil {
+				return string(b)
+			}
+		}
+		return v
+	default:
+		return parseTimeValue(v)
+	}
 }
 
 // parseTimeValue tries to parse a string value as time.Time using TimeFormat
