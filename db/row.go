@@ -3,8 +3,21 @@ package db
 import (
 	"encoding/json"
 	"sort"
+	"strings"
 	"time"
 )
+
+// KeyFormat controls the JSON key format used by MarshalJSON.
+type KeyFormat int
+
+const (
+	KeyFormatSnake KeyFormat = iota // snake_case (default, backward compatible)
+	KeyFormatCamel                  // camelCase
+)
+
+// DefaultKeyFormat is the package-level default key format for new Rows.
+// Set it to KeyFormatCamel to output camelCase JSON globally.
+var DefaultKeyFormat = KeyFormatSnake
 
 // Row represents a data row with Active Record capabilities.
 type Row struct {
@@ -12,6 +25,7 @@ type Row struct {
 	primaryKeys []string
 	data        map[string]interface{}
 	change      map[string]struct{}
+	keyFormat   *KeyFormat // per-row override; nil means use DefaultKeyFormat
 }
 
 // NewRow creates a Row for the given table with default PK "id".
@@ -349,22 +363,87 @@ func (r *Row) ChangedFields() []string {
 
 // ---- JSON ----
 
-// MarshalJSON implements json.Marshaler.
+// MarshalJSON implements json.Marshaler. Key format is controlled by
+// the row's KeyFormat (or DefaultKeyFormat if not set). When KeyFormatCamel
+// is active, database column names (snake_case) are converted to camelCase.
 func (r *Row) MarshalJSON() ([]byte, error) {
+	if r.data == nil {
+		return []byte("null"), nil
+	}
+	kf := r.resolveKeyFormat()
+	if kf == KeyFormatCamel {
+		converted := make(map[string]interface{}, len(r.data))
+		for k, v := range r.data {
+			converted[snakeToCamel(k)] = v
+		}
+		return json.Marshal(converted)
+	}
 	return json.Marshal(r.data)
 }
 
-// UnmarshalJSON implements json.Unmarshaler.
+// UnmarshalJSON implements json.Unmarshaler. Input keys are always normalized
+// from camelCase to snake_case so that database column names stay consistent
+// internally, regardless of the configured KeyFormat.
 func (r *Row) UnmarshalJSON(data []byte) error {
 	r.ensureData()
-	if err := json.Unmarshal(data, &r.data); err != nil {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
 	r.ensureChange()
-	for k := range r.data {
-		r.change[k] = struct{}{}
+	for k, v := range raw {
+		snakeKey := camelToSnake(k)
+		r.data[snakeKey] = v
+		r.change[snakeKey] = struct{}{}
 	}
 	return nil
+}
+
+// SetKeyFormat overrides the key format for this row. Pass nil to revert to
+// the package-level DefaultKeyFormat.
+func (r *Row) SetKeyFormat(f KeyFormat) *Row {
+	r.keyFormat = &f
+	return r
+}
+
+// resolveKeyFormat returns the effective key format: row-level override first,
+// then package-level DefaultKeyFormat.
+func (r *Row) resolveKeyFormat() KeyFormat {
+	if r.keyFormat != nil {
+		return *r.keyFormat
+	}
+	return DefaultKeyFormat
+}
+
+// snakeToCamel converts a snake_case string to camelCase.
+func snakeToCamel(s string) string {
+	parts := strings.Split(s, "_")
+	for i := 1; i < len(parts); i++ {
+		if len(parts[i]) > 0 {
+			parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+		}
+	}
+	return strings.Join(parts, "")
+}
+
+// camelToSnake converts a camelCase string to snake_case.
+// Returns s unchanged if it is already snake_case (no uppercase letters).
+func camelToSnake(s string) string {
+	if s == "" {
+		return s
+	}
+	var b strings.Builder
+	for i, c := range s {
+		if c >= 'A' && c <= 'Z' {
+			if i > 0 {
+				b.WriteByte('_')
+			}
+			b.WriteByte(byte(c) + 32)
+		} else {
+			b.WriteByte(byte(c))
+		}
+	}
+	return b.String()
 }
 
 // ---- Active Record ----
