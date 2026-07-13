@@ -32,3 +32,34 @@ func GetTableByName(name string) *Table {
 	}
 	return nil
 }
+
+// getTableFieldSet returns a set of valid column names for the given table.
+// Returns nil if no table metadata is registered.
+func getTableFieldSet(tableName string) map[string]bool {
+	t := GetTableByName(tableName)
+	if t == nil || t.FieldTypes == nil {
+		return nil
+	}
+	set := make(map[string]bool, len(t.FieldTypes))
+	for k := range t.FieldTypes {
+		set[k] = true
+	}
+	return set
+}
+
+// filterTableFields returns the subset of field names that are present in
+// the registered table schema. If no table metadata is found, all fields
+// are returned unchanged.
+func filterTableFields(tableName string, fields []string) []string {
+	set := getTableFieldSet(tableName)
+	if set == nil {
+		return fields
+	}
+	filtered := make([]string, 0, len(fields))
+	for _, f := range fields {
+		if set[f] {
+			filtered = append(filtered, f)
+		}
+	}
+	return filtered
+}

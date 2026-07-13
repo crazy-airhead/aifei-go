@@ -452,6 +452,40 @@ func normalizeJSONValue(key string, v interface{}, fieldTypes map[string]reflect
 	}
 }
 
+// normalizeSQLValue converts complex Go types (maps, slices, structs) to
+// JSON string representations suitable for SQL parameter binding.
+// []byte values are returned unchanged so that BLOB columns work correctly.
+func normalizeSQLValue(v interface{}) interface{} {
+	if v == nil {
+		return nil
+	}
+
+	// []byte is used for BLOB columns — never convert to string.
+	if _, ok := v.([]byte); ok {
+		return v
+	}
+
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Map, reflect.Slice:
+		if b, err := json.Marshal(v); err == nil {
+			return string(b)
+		}
+	case reflect.Struct:
+		if b, err := json.Marshal(v); err == nil {
+			return string(b)
+		}
+	case reflect.Ptr:
+		if !rv.IsNil() && rv.Elem().Kind() == reflect.Struct {
+			if b, err := json.Marshal(v); err == nil {
+				return string(b)
+			}
+		}
+	}
+
+	return v
+}
+
 // parseTimeValue tries to parse a string value as time.Time using TimeFormat
 // and common fallback layouts. Non-string values are returned unchanged.
 func parseTimeValue(v interface{}) interface{} {

@@ -16,8 +16,11 @@ func execInsertRow(dao *Dao, row *Row) (*Row, error) {
 	dialect := config.Dialect
 	hk := config.GetDbHookKit()
 
-	fields := row.FieldNames()
-	values := row.FieldValues()
+	fields := filterTableFields(row.table, row.FieldNames())
+	values := make([]interface{}, len(fields))
+	for i, f := range fields {
+		values[i] = normalizeSQLValue(row.data[f])
+	}
 	sqlStr := dialect.ForInsert(row.table, fields)
 	dao.setSqlPara(&dbsql.SqlPara{Sql: sqlStr, Paras: values})
 
@@ -67,7 +70,7 @@ func execUpdateRow(dao *Dao, row *Row) (bool, error) {
 	dialect := config.Dialect
 	hk := config.GetDbHookKit()
 
-	changedFields := row.ChangedFields()
+	changedFields := filterTableFields(row.table, row.ChangedFields())
 	if len(changedFields) == 0 {
 		return false, nil
 	}
@@ -80,7 +83,7 @@ func execUpdateRow(dao *Dao, row *Row) (bool, error) {
 
 	args := make([]interface{}, 0, len(changedFields)+len(row.primaryKeys))
 	for _, f := range changedFields {
-		args = append(args, row.data[f])
+		args = append(args, normalizeSQLValue(row.data[f]))
 	}
 	for _, pk := range row.primaryKeys {
 		args = append(args, row.data[pk])
@@ -497,8 +500,11 @@ func execInsertOrUpdateRow(dao *Dao, row *Row) (*Row, error) {
 	config := dao.config
 	hk := config.GetDbHookKit()
 
-	fields := row.FieldNames()
-	values := row.FieldValues()
+	fields := filterTableFields(row.table, row.FieldNames())
+	values := make([]interface{}, len(fields))
+	for i, f := range fields {
+		values[i] = normalizeSQLValue(row.data[f])
+	}
 	sqlStr := config.Dialect.ForInsertOrUpdate(row.table, fields, row.primaryKeys)
 	dao.setSqlPara(&dbsql.SqlPara{Sql: sqlStr, Paras: values})
 

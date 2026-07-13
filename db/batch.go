@@ -33,7 +33,7 @@ func (b *Batch) InsertWithTable(table string, rows []*Row) (*BatchResult, error)
 		return nil, err
 	}
 
-	fields := rows[0].FieldNames()
+	fields := filterTableFields(table, rows[0].FieldNames())
 	sqlStr := b.config.Dialect.ForInsert(table, fields)
 
 	stmt, err := pool.Prepare(sqlStr)
@@ -44,7 +44,10 @@ func (b *Batch) InsertWithTable(table string, rows []*Row) (*BatchResult, error)
 
 	var total int64
 	for _, row := range rows {
-		args := row.FieldValues()
+		args := make([]interface{}, len(fields))
+		for i, f := range fields {
+			args[i] = normalizeSQLValue(row.data[f])
+		}
 		result, err := stmt.Exec(args...)
 		if err != nil {
 			return &BatchResult{RowsAffected: total, Error: err}, err
@@ -72,13 +75,13 @@ func (b *Batch) UpdateWithTable(table string, rows []*Row) (*BatchResult, error)
 
 	var total int64
 	for _, row := range rows {
-		changedFields := row.ChangedFields()
+		changedFields := filterTableFields(table, row.ChangedFields())
 		if len(changedFields) == 0 {
 			continue
 		}
 		args := make([]interface{}, 0, len(changedFields)+len(row.primaryKeys))
 		for _, f := range changedFields {
-			args = append(args, row.data[f])
+			args = append(args, normalizeSQLValue(row.data[f]))
 		}
 		for _, pk := range row.primaryKeys {
 			args = append(args, row.data[pk])
