@@ -465,6 +465,14 @@ func normalizeSQLValue(v interface{}) interface{} {
 		return v
 	}
 
+	// time.Time must be passed as-is so the SQL driver formats it natively.
+	// json.Marshal would produce a quoted RFC 3339 string like
+	// `"2026-07-13T17:13:55Z"` (with literal double-quotes), which MySQL
+	// rejects as an invalid datetime value.
+	if _, ok := v.(time.Time); ok {
+		return v
+	}
+
 	rv := reflect.ValueOf(v)
 	switch rv.Kind() {
 	case reflect.Map, reflect.Slice:
