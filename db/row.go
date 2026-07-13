@@ -19,6 +19,10 @@ const (
 // Set it to KeyFormatCamel to output camelCase JSON globally.
 var DefaultKeyFormat = KeyFormatSnake
 
+// TimeFormat is the layout used to marshal/unmarshal time.Time fields in JSON.
+// Default is "2006-01-02 15:04:05" (yyyy-MM-dd HH:mm:ss).
+var TimeFormat = time.DateTime
+
 // Row represents a data row with Active Record capabilities.
 type Row struct {
 	table       string
@@ -366,24 +370,37 @@ func (r *Row) ChangedFields() []string {
 // MarshalJSON implements json.Marshaler. Key format is controlled by
 // the row's KeyFormat (or DefaultKeyFormat if not set). When KeyFormatCamel
 // is active, database column names (snake_case) are converted to camelCase.
+// time.Time values are formatted using the package-level TimeFormat.
 func (r *Row) MarshalJSON() ([]byte, error) {
 	if r.data == nil {
 		return []byte("null"), nil
 	}
 	kf := r.resolveKeyFormat()
-	if kf == KeyFormatCamel {
-		converted := make(map[string]interface{}, len(r.data))
-		for k, v := range r.data {
-			converted[snakeToCamel(k)] = v
+	converted := make(map[string]interface{}, len(r.data))
+	for k, v := range r.data {
+		key := k
+		if kf == KeyFormatCamel {
+			key = snakeToCamel(k)
 		}
-		return json.Marshal(converted)
+		converted[key] = formatTimeValue(v)
 	}
-	return json.Marshal(r.data)
+	return json.Marshal(converted)
+}
+
+// formatTimeValue converts time.Time values to formatted strings.
+// Other types are returned unchanged.
+func formatTimeValue(v interface{}) interface{} {
+	if t, ok := v.(time.Time); ok {
+		return t.Format(TimeFormat)
+	}
+	return v
 }
 
 // UnmarshalJSON implements json.Unmarshaler. Input keys are always normalized
 // from camelCase to snake_case so that database column names stay consistent
 // internally, regardless of the configured KeyFormat.
+// String values matching TimeFormat (and common fallback layouts) are parsed
+// back to time.Time so that time fields survive a JSON round-trip.
 func (r *Row) UnmarshalJSON(data []byte) error {
 	r.ensureData()
 	var raw map[string]interface{}
@@ -393,10 +410,31 @@ func (r *Row) UnmarshalJSON(data []byte) error {
 	r.ensureChange()
 	for k, v := range raw {
 		snakeKey := camelToSnake(k)
-		r.data[snakeKey] = v
+		r.data[snakeKey] = parseTimeValue(v)
 		r.change[snakeKey] = struct{}{}
 	}
 	return nil
+}
+
+// parseTimeValue tries to parse a string value as time.Time using TimeFormat
+// and common fallback layouts. Non-string values are returned unchanged.
+func parseTimeValue(v interface{}) interface{} {
+	s, ok := v.(string)
+	if !ok {
+		return v
+	}
+	for _, layout := range []string{
+		TimeFormat,
+		"2006-01-02T15:04:05Z07:00",
+		"2006-01-02",
+		time.RFC3339,
+		time.RFC3339Nano,
+	} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t
+		}
+	}
+	return v
 }
 
 // SetKeyFormat overrides the key format for this row. Pass nil to revert to
