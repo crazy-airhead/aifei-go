@@ -74,7 +74,7 @@ func (r *#(baseName)) Delete() (bool, error) {
 
 ### initRow sets table and primary key metadata on a Row returned from queries.
 func initRow(row *db.Row) *db.Row {
-	return row.SetTable(Table.Name).SetPrimaryKeys(Table.PrimaryKeys...)
+	return db.DecodeJSONFields(row.SetTable(Table.Name).SetPrimaryKeys(Table.PrimaryKeys...))
 }
 
 func init() {

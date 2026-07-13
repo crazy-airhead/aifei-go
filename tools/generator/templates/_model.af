@@ -12,3 +12,26 @@ type #(structName) struct {
 func New() *#(structName) {
 	return &#(structName){#(baseName): NewBase()}
 }
+
+### --- JSON columns: default typed as string. Edit to expose a struct. ---
+#for (f : jsonFields)
+// #(f.Name) is a JSON column. It defaults to string. To expose it as a struct:
+//   1. define the struct type in this file (e.g. type XxxProfile struct{...})
+//   2. in an init() here, register it: Table.FieldTypes["#(f.Name)"] = reflect.TypeOf(XxxProfile{})
+//      (db.Row.DecodeJSONFields will then auto-decode it on read)
+//   3. replace these two methods with typed versions:
+//        func (m *#(structName)) #(f.AttrName)() XxxProfile {
+//            if v, ok := m.Get("#(f.Name)").(XxxProfile); ok { return v }
+//            return XxxProfile{}
+//        }
+//        func (m *#(structName)) Set#(f.AttrName)(v XxxProfile) *#(structName) {
+//            m.Set("#(f.Name)", v)
+//            return m
+//        }
+func (m *#(structName)) #(f.AttrName)() string { return m.GetStr("#(f.Name)") }
+func (m *#(structName)) Set#(f.AttrName)(v string) *#(structName) {
+	m.Set("#(f.Name)", v)
+	return m
+}
+
+#end

@@ -98,9 +98,14 @@ func (g *BaseGenerator) buildData(info *TableInfo) map[string]interface{} {
 		})
 	}
 
-	// Build field data
+	// Build field data. JSON columns are skipped here: their getters/setters are
+	// generated into model.go instead, freeing the method name for a typed
+	// (struct) override. FieldTypes and the INSERT column list still include them.
 	var fields []FieldEntry
 	for _, f := range info.Fields {
+		if f.IsJSON {
+			continue
+		}
 		shortName := f.AttrName
 		if IsGoKeyword(shortName) {
 			shortName += "_"

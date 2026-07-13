@@ -283,6 +283,7 @@ func (mr *MetaReader) readFieldInfo(pool *sql.DB, dialect MetaDialect, tableInfo
 			GoType:          goType,
 			AttrName:        attrName,
 			IsAutoIncrement: isAutoIncrement,
+			IsJSON:          dbType == "JSON" || dbType == "JSONB",
 		}
 		tableInfo.Fields = append(tableInfo.Fields, fieldInfo)
 	}

@@ -7,6 +7,7 @@ type FieldInfo struct {
 	AttrName        string // Go exported field name (CamelCase)
 	Remarks         string // column comment
 	IsAutoIncrement bool   // whether the column is auto-increment
+	IsJSON          bool   // whether the column is a JSON/JSONB type
 }
 
 // TableInfo holds metadata for a database table.

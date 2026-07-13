@@ -20,12 +20,7 @@ func NewModelGenerator() *ModelGenerator {
 
 // Generate generates the model struct file. Skips if the file already exists.
 func (g *ModelGenerator) Generate(engine *Engine, info *TableInfo, outputDir string) error {
-	data := map[string]interface{}{
-		"pkgName":    info.PkgName,
-		"tableName":  info.Name,
-		"structName": info.StructName,
-		"baseName":   info.BaseName,
-	}
+	data := g.buildData(info)
 	content := engine.RenderTemplate(modelTemplateContent, data)
 
 	pkgDir := filepath.Join(outputDir, info.PkgName)
@@ -47,4 +42,29 @@ func (g *ModelGenerator) Generate(engine *Engine, info *TableInfo, outputDir str
 	}
 	fmt.Printf("[aifei-gen] Generated %s\n", target)
 	return nil
+}
+
+// buildData builds the template data map for model.go.
+//
+// jsonFields carries the table's JSON/JSONB columns so the model template can
+// emit default string getters/setters as scaffolding. A user upgrades a column
+// to a struct type by defining the type, registering it in Table.FieldTypes,
+// and editing the scaffolded methods (see the template comments).
+func (g *ModelGenerator) buildData(info *TableInfo) map[string]interface{} {
+	jsonFields := []FieldEntry{}
+	for _, f := range info.Fields {
+		if f.IsJSON {
+			jsonFields = append(jsonFields, FieldEntry{
+				Name:     f.Name,
+				AttrName: f.AttrName,
+			})
+		}
+	}
+	return map[string]interface{}{
+		"pkgName":    info.PkgName,
+		"tableName":  info.Name,
+		"structName": info.StructName,
+		"baseName":   info.BaseName,
+		"jsonFields": jsonFields,
+	}
 }

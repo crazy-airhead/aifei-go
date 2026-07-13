@@ -139,14 +139,8 @@ func TestTemplateRendering(t *testing.T) {
 		t.Error("base.go should contain Insert() method")
 	}
 
-	// Test model template
-	modelData := map[string]interface{}{
-		"pkgName":    info.PkgName,
-		"tableName":  info.Name,
-		"structName": info.StructName,
-		"baseName":   info.BaseName,
-	}
-	modelContent := engine.RenderTemplate(modelTemplateContent, modelData)
+	// Test model template (uses buildData so jsonFields is always present)
+	modelContent := engine.RenderTemplate(modelTemplateContent, NewModelGenerator().buildData(info))
 	if !strings.Contains(modelContent, "type User struct") {
 		t.Error("model.go should contain User struct, got:", modelContent)
 	}
@@ -259,6 +253,48 @@ func TestGenerator_Generate(t *testing.T) {
 	}
 	if !strings.Contains(string(loginlogService), "ServicePrefix = \"/loginLog\"") {
 		t.Error("loginlog/service.go should have camelCase ServicePrefix, got:", string(loginlogService))
+	}
+}
+
+func TestJsonFieldGeneration(t *testing.T) {
+	baseGen := NewBaseGenerator()
+	info := &TableInfo{
+		Name:       "user",
+		PkgName:    "user",
+		StructName: "User",
+		BaseName:   "BaseUser",
+		PrimaryKey: []string{"id"},
+		Fields: []*FieldInfo{
+			{Name: "id", GoType: "int", AttrName: "Id"},
+			{Name: "profile", GoType: "string", AttrName: "Profile", IsJSON: true},
+		},
+	}
+	engine := NewEngine()
+
+	// base.go: JSON column getter/setter must be absent (moved to model.go).
+	baseContent := engine.RenderTemplate(baseTemplateContent, baseGen.buildData(info))
+	if strings.Contains(baseContent, "func (r *BaseUser) Profile()") {
+		t.Error("base.go must NOT generate a getter for the JSON column 'profile'")
+	}
+	if strings.Contains(baseContent, "SetProfile(") {
+		t.Error("base.go must NOT generate a setter for the JSON column 'profile'")
+	}
+	// initRow must wire up DecodeJSONFields.
+	if !strings.Contains(baseContent, "db.DecodeJSONFields(") {
+		t.Error("base.go initRow must call db.DecodeJSONFields(...)")
+	}
+	// FieldTypes and the Fields column list still include the JSON column.
+	if !strings.Contains(baseContent, `"profile"`) {
+		t.Error("base.go FieldTypes/Fields should still register the JSON column")
+	}
+
+	// model.go: default string scaffold + upgrade hint present.
+	modelContent := engine.RenderTemplate(modelTemplateContent, NewModelGenerator().buildData(info))
+	if !strings.Contains(modelContent, "func (m *User) Profile() string") {
+		t.Error("model.go should contain the default string scaffold for the JSON column")
+	}
+	if !strings.Contains(modelContent, `Table.FieldTypes["profile"]`) {
+		t.Error("model.go scaffold should show the FieldTypes registration hint")
 	}
 }
 
