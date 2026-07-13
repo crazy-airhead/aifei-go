@@ -15,6 +15,15 @@ import (
 	"github.com/crazy-airhead/aifei-go/aifei"
 )
 
+// bodyType describes what kind of request body was detected.
+type bodyType int
+
+const (
+	bodyNone bodyType = iota // no body — parse from query string
+	bodyJSON                 // raw body (JSON or other Content-Type)
+	bodyForm                 // form-encoded — Request.Form populated by ParseForm (includes merged query params)
+)
+
 // HTTPMeta is the HTTP-specific request metadata that goes beyond the
 // transport-agnostic aifei.Meta: the HTTP method verb, the client address,
 // and cookies. HttpContext satisfies it; HTTP-aware code obtains it via a
@@ -96,8 +105,8 @@ func (c *HttpContext) Context() context.Context {
 }
 
 func (c *HttpContext) Has(name string) bool {
-	_ = c.ensureBody()
-	if c.Request.Form != nil {
+	bt, _ := c.ensureBody()
+	if bt == bodyForm && c.Request.Form != nil {
 		if _, ok := c.Request.Form[name]; ok {
 			return true
 		}
@@ -208,18 +217,59 @@ func (c *HttpContext) GetBool(key string, def ...bool) bool {
 	return b
 }
 
-// GetBean binds the JSON request body (or a nested subtree) to obj.
-// With no keys the entire body is used; each key walks one level deeper:
+// GetBean binds request parameters to obj. It reads from the request body
+// (form-encoded or raw JSON), falling back to query parameters when the body is
+// empty. All three sources go through the same JSON unmarshal path so callers
+// can pass id via query, form, or JSON body transparently.
+//
+// With no keys the entire parameter set is used; each key walks one level deeper:
 //
 //	GetBean(&user)                  → whole body
 //	GetBean(&user, "data")          → body["data"]
 //	GetBean(&city, "data", "addr")  → body["data"]["addr"]
 func (c *HttpContext) GetBean(obj interface{}, keys ...string) error {
-	body := c.Body()
-	if len(body) == 0 {
+	bt, err := c.ensureBody()
+	if err != nil {
+		return err
+	}
+
+	var data []byte
+	switch bt {
+	case bodyForm:
+		if c.Request.Form != nil && len(c.Request.Form) > 0 {
+			formMap := make(map[string]interface{}, len(c.Request.Form))
+			for key, values := range c.Request.Form {
+				if len(values) > 0 {
+					formMap[key] = values[0]
+				}
+			}
+			data, err = json.Marshal(formMap)
+			if err != nil {
+				return err
+			}
+		}
+	case bodyJSON:
+		data = c.Body()
+	case bodyNone:
+		query := c.Request.URL.Query()
+		if len(query) > 0 {
+			queryMap := make(map[string]interface{}, len(query))
+			for key, values := range query {
+				if len(values) > 0 {
+					queryMap[key] = values[0]
+				}
+			}
+			data, err = json.Marshal(queryMap)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	if len(data) == 0 {
 		return io.EOF
 	}
-	data := body
+
 	for _, key := range keys {
 		var m map[string]json.RawMessage
 		if err := json.Unmarshal(data, &m); err != nil {
@@ -231,6 +281,7 @@ func (c *HttpContext) GetBean(obj interface{}, keys ...string) error {
 		}
 		data = raw
 	}
+
 	initEmbeddedPointers(reflect.ValueOf(obj))
 	return json.Unmarshal(data, obj)
 }
@@ -281,8 +332,8 @@ func (c *HttpContext) getVal(key string) string {
 	if v := c.Request.URL.Query().Get(key); v != "" {
 		return v
 	}
-	_ = c.ensureBody()
-	if c.Request.Form != nil {
+	bt, _ := c.ensureBody()
+	if bt == bodyForm && c.Request.Form != nil {
 		if v := c.Request.Form.Get(key); v != "" {
 			return v
 		}
@@ -290,15 +341,25 @@ func (c *HttpContext) getVal(key string) string {
 	return ""
 }
 
-func (c *HttpContext) ensureBody() error {
-	if c.Request.Form == nil {
-		contentType := c.Request.Header.Get("Content-Type")
-		if strings.HasPrefix(contentType, "application/x-www-form-urlencoded") ||
-			strings.HasPrefix(contentType, "multipart/form-data") {
-			return c.Request.ParseForm()
-		}
+// ensureBody detects the request body type and parses form-encoded bodies.
+// It returns the bodyType so callers can branch on the data source directly
+// instead of re-inspecting Content-Type or c.Request.Form.
+func (c *HttpContext) ensureBody() (bodyType, error) {
+	if c.Request.Form != nil {
+		return bodyForm, nil
 	}
-	return nil
+	contentType := c.Request.Header.Get("Content-Type")
+	if strings.HasPrefix(contentType, "application/x-www-form-urlencoded") ||
+		strings.HasPrefix(contentType, "multipart/form-data") {
+		if err := c.Request.ParseForm(); err != nil {
+			return bodyNone, err
+		}
+		return bodyForm, nil
+	}
+	if contentType != "" || c.Request.ContentLength > 0 {
+		return bodyJSON, nil
+	}
+	return bodyNone, nil
 }
 
 func initEmbeddedPointers(v reflect.Value) {
