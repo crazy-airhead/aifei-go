@@ -80,6 +80,10 @@ func (r *Result) AssertSuccess() error {
 //	var item MyStruct
 //	if err := result.Bind(&item); err != nil { ... }
 func (r *Result) Bind(val any) error {
+	if val == nil {
+		return nil
+	}
+
 	if err := r.AssertSuccess(); err != nil {
 		return err
 	}
@@ -87,6 +91,7 @@ func (r *Result) Bind(val any) error {
 	if str == "" || str == "null" {
 		return nil
 	}
+
 	return json.Unmarshal([]byte(str), val)
 }
 
