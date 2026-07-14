@@ -291,6 +291,7 @@ func execFind(dao *Dao, isRawSQL bool) ([]*Row, error) {
 	if hk != nil && hk.QueryHook != nil && isRawSQL {
 		hk.QueryHook.AfterQuery(dao, result, toAfterQuery)
 	}
+	decodeRows(result, dao.table)
 	return result, nil
 }
 
@@ -331,6 +332,7 @@ func execFindBy(dao *Dao) ([]*Row, error) {
 	if hk != nil && hk.FindHook != nil {
 		hk.FindHook.AfterFind(dao, result, toAfter)
 	}
+	decodeRows(result, dao.table)
 	return result, nil
 }
 
@@ -402,6 +404,7 @@ func execPaginate(dao *Dao, pageNum, pageSize int) (*Page, error) {
 	if err != nil {
 		return nil, err
 	}
+	decodeRows(result, dao.table)
 
 	page := NewPage(pageNum, pageSize, totalRows, result)
 	if hk != nil && hk.PaginateHook != nil {
@@ -485,6 +488,7 @@ func execPaginateWithTotalRows(dao *Dao, pageNum, pageSize int, totalRowsFn func
 	if err != nil {
 		return nil, err
 	}
+	decodeRows(result, dao.table)
 
 	page := NewPage(pageNum, pageSize, totalRows, result)
 	if hk != nil && hk.PaginateHook != nil {
@@ -555,6 +559,7 @@ func execDeleteIn(dao *Dao, table, field string, values []interface{}) (int64, e
 
 // execFindById finds a row by table and primary key value.
 func execFindById(dao *Dao, table, pk string, id interface{}) (*Row, error) {
+	dao.table = table
 	sqlStr := dao.config.Dialect.ForFindByID(table, []string{pk})
 	dao.setSqlPara(&dbsql.SqlPara{Sql: sqlStr, Paras: []interface{}{id}})
 	rows, err := execFindBy(dao)
@@ -569,6 +574,7 @@ func execFindById(dao *Dao, table, pk string, id interface{}) (*Row, error) {
 
 // execFindByCondition finds rows by table and condition.
 func execFindByCondition(dao *Dao, table, whereOrField string, args []interface{}) ([]*Row, error) {
+	dao.table = table
 	dao.setSqlPara(&dbsql.SqlPara{Sql: dao.config.Dialect.ForFindBy(table, whereOrField), Paras: args})
 	return execFindBy(dao)
 }
@@ -580,6 +586,7 @@ func execFindAll(dao *Dao, table string) ([]*Row, error) {
 
 // execFindIn finds rows where field IN values.
 func execFindIn(dao *Dao, table, field string, values []interface{}) ([]*Row, error) {
+	dao.table = table
 	dao.setSqlPara(&dbsql.SqlPara{Sql: dao.config.Dialect.ForFindIn(table, field, len(values)), Paras: values})
 	return execFindBy(dao)
 }
@@ -720,6 +727,7 @@ func execForEach(dao *Dao, fn func(*Row) bool) error {
 	for i, ct := range colTypes {
 		isBinary[i] = isBinaryColumnType(ct.DatabaseTypeName())
 	}
+	decodeTable := tableFor(dao.table)
 	var rowList []*Row
 	for rows.Next() {
 		values := make([]interface{}, len(cols))
@@ -743,6 +751,9 @@ func execForEach(dao *Dao, fn func(*Row) bool) error {
 			}
 		}
 		row := &Row{data: data}
+		if decodeTable != nil {
+			decodeRow(row, decodeTable)
+		}
 		rowList = append(rowList, row)
 		if !fn(row) {
 			break
@@ -928,6 +939,7 @@ func execDeleteByCompositeId(dao *Dao, table string, pks []string, idValues []in
 
 // execFindByCompositeId finds by composite primary keys.
 func execFindByCompositeId(dao *Dao, table string, pks []string, idValues []interface{}) (*Row, error) {
+	dao.table = table
 	sqlStr := dao.config.Dialect.ForFindByID(table, pks)
 	dao.setSqlPara(&dbsql.SqlPara{Sql: sqlStr, Paras: idValues})
 	rows, err := execFindBy(dao)
@@ -1010,6 +1022,38 @@ func scanRows(rows *sql.Rows) ([]*Row, error) {
 		results = append(results, row)
 	}
 	return results, nil
+}
+
+// decodeRows binds table/primary-key metadata to result rows and decodes declared
+// JSON columns into their Go types. It is a no-op when table is empty or not
+// registered, so raw queries without a Table() hint (and unregistered tables)
+// stay exactly as before. Idempotent: re-decoding an already-typed row is a no-op.
+func decodeRows(rows []*Row, table string) {
+	t := tableFor(table)
+	if t == nil {
+		return
+	}
+	for _, r := range rows {
+		decodeRow(r, t)
+	}
+}
+
+// tableFor returns the registered Table for name, or nil when name is empty or
+// unregistered.
+func tableFor(table string) *Table {
+	if table == "" {
+		return nil
+	}
+	return GetTableByName(table)
+}
+
+// decodeRow binds table/primary-key metadata to r and decodes its JSON columns.
+func decodeRow(r *Row, t *Table) {
+	r.SetTable(t.Name)
+	if len(t.PrimaryKeys) > 0 {
+		r.SetPrimaryKeys(t.PrimaryKeys...)
+	}
+	DecodeJSONFields(r)
 }
 
 // bytesToStr converts []byte to string to avoid Base64 encoding in JSON serialization.

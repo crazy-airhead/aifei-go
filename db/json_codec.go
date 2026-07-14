@@ -104,8 +104,10 @@ func normalizeSQLValue(v interface{}) interface{} {
 // unmarshalRow parses JSON into r. Input keys are normalized from camelCase to
 // snake_case so database column names stay consistent internally regardless of
 // the configured key format. String values matching TimeFormat (and common
-// fallback layouts) are parsed back to time.Time. Slice/map values are
-// serialized back to JSON strings only when the column is typed as string.
+// fallback layouts) are parsed back to time.Time. Values for columns declared
+// as composite types (struct/slice/map/array) are materialized into those types
+// via normalizeJSONValue; arrays/objects for string-typed columns are serialized
+// back to JSON strings.
 func unmarshalRow(r *Row, data []byte) error {
 	r.ensureData()
 	var raw map[string]interface{}
@@ -127,22 +129,26 @@ func unmarshalRow(r *Row, data []byte) error {
 	return nil
 }
 
-// normalizeJSONValue converts complex JSON values (slices, maps) to their
-// JSON string representation only when the target field is declared as string.
-// Non-string fields preserve the original value so the SQL driver can reject
-// it with a clear type-mismatch error.
-// When fieldTypes is nil (no table metadata), falls back to converting to
-// string as the safe default.
+// normalizeJSONValue normalizes a decoded JSON value for storage in r.data:
+//   - For columns whose declared FieldTypes entry is a composite JSON type
+//     (struct/slice/map/array, see needsJSONDecode), the incoming value is
+//     materialized into that declared type. This makes typed accessors work on
+//     rows built from JSON input (via UnmarshalJSON) — not only on rows read
+//     from the DB, where DecodeJSONFields does the equivalent on the read path.
+//     On a type mismatch it falls through to the default handling below.
+//   - For string-typed columns (and rows without table metadata), arrays and
+//     objects are serialized back to JSON strings (the opaque-JSON-string
+//     convention) so the SQL driver receives a string.
+//   - Other scalar fields preserve the original value so the SQL driver can
+//     reject it with a clear type-mismatch error.
 func normalizeJSONValue(key string, v interface{}, fieldTypes map[string]reflect.Type) interface{} {
-	switch val := v.(type) {
-	case []interface{}:
-		if fieldTypes == nil || fieldTypes[key] == reflect.TypeFor[string]() {
-			if b, err := json.Marshal(val); err == nil {
-				return string(b)
-			}
+	if ft, ok := fieldTypes[key]; ok && needsJSONDecode(ft) {
+		if decoded, ok := decodeToType(v, ft); ok {
+			return decoded
 		}
-		return v
-	case map[string]interface{}:
+	}
+	switch val := v.(type) {
+	case []interface{}, map[string]interface{}:
 		if fieldTypes == nil || fieldTypes[key] == reflect.TypeFor[string]() {
 			if b, err := json.Marshal(val); err == nil {
 				return string(b)
@@ -152,6 +158,22 @@ func normalizeJSONValue(key string, v interface{}, fieldTypes map[string]reflect
 	default:
 		return parseTimeValue(v)
 	}
+}
+
+// decodeToType marshals v back to JSON and unmarshals it into a new instance of
+// typ, returning the typed value. It reports ok=false if v cannot be decoded
+// into typ (e.g. a scalar where a slice is declared), letting the caller fall
+// back to default handling.
+func decodeToType(v interface{}, typ reflect.Type) (interface{}, bool) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, false
+	}
+	ptr := reflect.New(typ)
+	if err := json.Unmarshal(b, ptr.Interface()); err != nil {
+		return nil, false
+	}
+	return ptr.Elem().Interface(), true
 }
 
 // parseTimeValue tries to parse a string value as time.Time using TimeFormat
@@ -176,22 +198,26 @@ func parseTimeValue(v interface{}) interface{} {
 }
 
 // DecodeJSONFields decodes JSON columns of r from their raw string/[]byte form
-// into the struct types declared in the table's FieldTypes.
+// into the composite types declared in the table's FieldTypes.
 //
-// For each field whose FieldTypes entry is a struct type (other than time.Time),
-// if the value held in r is a non-empty string or []byte, it is json.Unmarshal-ed
-// into a new instance of that struct type and stored back. Scalar fields,
-// time.Time fields, empty/invalid values, and tables without registered metadata
-// are left untouched.
+// For each field whose FieldTypes entry is a composite type (struct, slice, map,
+// or array — excluding time.Time and []byte), if the value held in r is a
+// non-empty string or []byte, it is json.Unmarshal-ed into a new instance of
+// that type and stored back. Scalar fields, time.Time/[]byte fields,
+// empty/invalid values, and tables without registered metadata are left
+// untouched.
 //
 // It is called by the generated initRow() right after SetTable, so every Row
-// returned from a query carries typed values for declared JSON columns. The
-// write path is unaffected: normalizeSQLValue already serializes structs back
-// to JSON strings.
+// returned from a query carries typed values for declared JSON columns. Rows
+// built from JSON input get the same treatment via normalizeJSONValue in
+// unmarshalRow, so typed accessors work regardless of how the row was built.
+// The write path is unaffected: normalizeSQLValue serializes the typed value
+// back to a JSON string.
 //
-// To opt a column in, register its struct type in an init() next to the model:
+// To opt a column in, register its type in an init() next to the model:
 //
 //	Table.FieldTypes["profile"] = reflect.TypeOf(Profile{})
+//	Table.FieldTypes["tags"] = reflect.TypeOf([]string{})
 func DecodeJSONFields(r *Row) *Row {
 	if r.data == nil {
 		return r
@@ -217,10 +243,20 @@ func DecodeJSONFields(r *Row) *Row {
 }
 
 // needsJSONDecode reports whether a declared field type should be decoded from
-// a JSON string: structs except time.Time, which is a struct but is handled by
-// the SQL driver and ToTime rather than JSON decoding.
+// a JSON string into a typed Go value. This covers composite kinds — structs,
+// slices, arrays, and maps. time.Time (a struct handled by the SQL driver and
+// ToTime) and []byte (BLOB columns) are excluded. Scalar types return false:
+// string columns keep the opaque JSON-string convention, and other scalars let
+// the SQL driver surface type mismatches with a clear error.
 func needsJSONDecode(typ reflect.Type) bool {
-	return typ.Kind() == reflect.Struct && typ != reflect.TypeFor[time.Time]()
+	if typ == reflect.TypeFor[time.Time]() || typ == reflect.TypeFor[[]byte]() {
+		return false
+	}
+	switch typ.Kind() {
+	case reflect.Struct, reflect.Slice, reflect.Map, reflect.Array:
+		return true
+	}
+	return false
 }
 
 // jsonString returns the underlying text for string and []byte values, reporting

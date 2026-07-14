@@ -204,3 +204,167 @@ func TestRowUnmarshalJSONNoTable(t *testing.T) {
 		t.Fatalf("config should be string (safe default), got %T", config)
 	}
 }
+
+// testProfile is a struct-typed JSON column used in the composite-type tests.
+type testProfile struct {
+	Name string `json:"name"`
+	Age  int    `json:"age"`
+}
+
+// Declared composite FieldTypes ([]string, struct) are materialized on the
+// UnmarshalJSON input path, so typed accessors work on rows built from request
+// bodies — not only on rows read from the DB.
+func TestUnmarshalJSONCompositeFieldTypes(t *testing.T) {
+	RegisterTable(&Table{
+		Name:   "composite_table",
+		Fields: "tags,profile,name",
+		FieldTypes: map[string]reflect.Type{
+			"tags":    reflect.TypeOf([]string{}),
+			"profile": reflect.TypeOf(testProfile{}),
+			"name":    reflect.TypeFor[string](),
+		},
+	})
+
+	row := NewRow("composite_table")
+	err := row.UnmarshalJSON([]byte(`{"tags":["a","b"],"profile":{"name":"n","age":3},"name":"x"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// []string field → materialized to []string
+	tags, ok := row.Get("tags").([]string)
+	if !ok {
+		t.Fatalf("tags should be []string, got %T: %v", row.Get("tags"), row.Get("tags"))
+	}
+	if len(tags) != 2 || tags[0] != "a" || tags[1] != "b" {
+		t.Fatalf("tags should be [a b], got %v", tags)
+	}
+
+	// struct field → materialized to the declared struct
+	profile, ok := row.Get("profile").(testProfile)
+	if !ok {
+		t.Fatalf("profile should be testProfile, got %T: %v", row.Get("profile"), row.Get("profile"))
+	}
+	if profile.Name != "n" || profile.Age != 3 {
+		t.Fatalf("profile should be {n 3}, got %+v", profile)
+	}
+
+	// string field keeps the opaque-JSON-string convention
+	if row.GetStr("name") != "x" {
+		t.Fatalf("name should be x, got %q", row.GetStr("name"))
+	}
+
+	// No raw []interface{}/map[string]interface{} should remain.
+	for k, v := range row.data {
+		switch v.(type) {
+		case []interface{}, map[string]interface{}:
+			t.Fatalf("field %q has unmaterialized type %T", k, v)
+		}
+	}
+
+	// Round-trip to SQL: a []string must serialize back to a JSON string.
+	if s, ok := normalizeSQLValue(row.Get("tags")).(string); !ok || s != `["a","b"]` {
+		t.Fatalf("tags should normalize to JSON string [\"a\",\"b\"], got %v", normalizeSQLValue(row.Get("tags")))
+	}
+}
+
+// DecodeJSONFields materializes declared composite types on the DB read path.
+func TestDecodeJSONFieldsComposite(t *testing.T) {
+	RegisterTable(&Table{
+		Name:   "composite_read_table",
+		Fields: "tags,profile",
+		FieldTypes: map[string]reflect.Type{
+			"tags":    reflect.TypeOf([]string{}),
+			"profile": reflect.TypeOf(testProfile{}),
+		},
+	})
+
+	// Values as they arrive from the DB driver: raw JSON strings.
+	row := NewRow("composite_read_table")
+	row.Put("tags", `["a","b"]`)
+	row.Put("profile", `{"name":"n","age":3}`)
+	DecodeJSONFields(row)
+
+	tags, ok := row.Get("tags").([]string)
+	if !ok {
+		t.Fatalf("tags should decode to []string, got %T: %v", row.Get("tags"), row.Get("tags"))
+	}
+	if len(tags) != 2 || tags[0] != "a" || tags[1] != "b" {
+		t.Fatalf("tags should be [a b], got %v", tags)
+	}
+
+	profile, ok := row.Get("profile").(testProfile)
+	if !ok {
+		t.Fatalf("profile should decode to testProfile, got %T: %v", row.Get("profile"), row.Get("profile"))
+	}
+	if profile.Name != "n" || profile.Age != 3 {
+		t.Fatalf("profile should be {n 3}, got %+v", profile)
+	}
+}
+
+// A declared composite field that receives an incompatible scalar falls through
+// to the default handling instead of failing the whole unmarshal.
+func TestUnmarshalJSONCompositeTypeMismatch(t *testing.T) {
+	RegisterTable(&Table{
+		Name:   "composite_mismatch_table",
+		Fields: "tags",
+		FieldTypes: map[string]reflect.Type{
+			"tags": reflect.TypeOf([]string{}),
+		},
+	})
+
+	row := NewRow("composite_mismatch_table")
+	if err := row.UnmarshalJSON([]byte(`{"tags":"not-an-array"}`)); err != nil {
+		t.Fatal(err)
+	}
+	// Falls through: a plain string stays a string.
+	if row.GetStr("tags") != "not-an-array" {
+		t.Fatalf("mismatched tags should fall through to string, got %v", row.Get("tags"))
+	}
+}
+
+// decodeRows binds table metadata and decodes JSON columns for raw-SQL result
+// rows. No-op for empty/unregistered tables; idempotent on already-typed rows.
+func TestDecodeRowsBindsTableAndDecodes(t *testing.T) {
+	RegisterTable(&Table{
+		Name:        "decode_rows_table",
+		Fields:      "id,tags",
+		PrimaryKeys: []string{"id"},
+		FieldTypes: map[string]reflect.Type{
+			"id":   reflect.TypeOf(int64(0)),
+			"tags": reflect.TypeOf([]string{}),
+		},
+	})
+
+	rows := []*Row{{data: map[string]interface{}{"id": int64(1), "tags": `["a","b"]`}}}
+	decodeRows(rows, "decode_rows_table")
+
+	r := rows[0]
+	if r.Table() != "decode_rows_table" {
+		t.Fatalf("table should be bound, got %q", r.Table())
+	}
+	if got := r.PrimaryKeys(); len(got) != 1 || got[0] != "id" {
+		t.Fatalf("primary keys should be [id], got %v", got)
+	}
+	tags, ok := r.Get("tags").([]string)
+	if !ok {
+		t.Fatalf("tags should decode to []string, got %T", r.Get("tags"))
+	}
+	if len(tags) != 2 || tags[0] != "a" || tags[1] != "b" {
+		t.Fatalf("tags should be [a b], got %v", tags)
+	}
+
+	// Idempotent: re-decoding an already-typed row is a no-op.
+	decodeRows(rows, "decode_rows_table")
+	if _, ok := r.Get("tags").([]string); !ok {
+		t.Fatalf("tags should stay []string after re-decode, got %T", r.Get("tags"))
+	}
+
+	// Unregistered / empty table → no-op, no binding.
+	noop := []*Row{{data: map[string]interface{}{"x": 1}}}
+	decodeRows(noop, "no_such_table")
+	if noop[0].Table() != "" {
+		t.Fatalf("unregistered table should not bind, got %q", noop[0].Table())
+	}
+	decodeRows(noop, "")
+}

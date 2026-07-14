@@ -13,6 +13,7 @@ type Dao struct {
 	fromTable  string
 	sqlPara    *dbsql.SqlPara
 	hasGroupBy bool
+	table      string // declared result table; binds row metadata + decodes JSON columns
 }
 
 // ---- Builder methods (set SQL on Dao, no execution) ----
@@ -25,6 +26,17 @@ func (d *Dao) RawSql(query string, args ...interface{}) *Dao {
 
 func (d *Dao) Select(fields string) *Dao {
 	d.selFields = fields
+	return d
+}
+
+// Table declares the table that raw-SQL result rows belong to. When set, result
+// rows carry table/primary-key metadata and declared JSON columns (see
+// Table.FieldTypes) are decoded into their Go types — so typed accessors and the
+// wire format match the model DAO without per-call decoding at the call site.
+// Builder queries (FindBy, FindByID, FindAll, FindIn, ...) set this automatically
+// from their table argument. No-op for unregistered tables.
+func (d *Dao) Table(name string) *Dao {
+	d.table = name
 	return d
 }
 
