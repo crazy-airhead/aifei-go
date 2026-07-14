@@ -226,7 +226,19 @@ func DecodeJSONFields(r *Row) *Row {
 	if t == nil {
 		return r
 	}
-	for col, typ := range t.FieldTypes {
+	return decodeJSONFieldsWith(r, t.FieldTypes)
+}
+
+// DecodeJSONFieldsWith decodes JSON columns using a caller-supplied type map.
+// This is the multi-table entry point: mergedFieldTypes contains types from all
+// involved tables. Unregistered/unknown columns are left untouched.
+func DecodeJSONFieldsWith(r *Row, ft map[string]reflect.Type) *Row {
+	return decodeJSONFieldsWith(r, ft)
+}
+
+// decodeJSONFieldsWith is the internal implementation.
+func decodeJSONFieldsWith(r *Row, ft map[string]reflect.Type) *Row {
+	for col, typ := range ft {
 		if !needsJSONDecode(typ) {
 			continue
 		}

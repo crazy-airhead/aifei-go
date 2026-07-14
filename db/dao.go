@@ -13,7 +13,9 @@ type Dao struct {
 	fromTable  string
 	sqlPara    *dbsql.SqlPara
 	hasGroupBy bool
-	table      string // declared result table; binds row metadata + decodes JSON columns
+	table      string     // single-table hint (existing)
+	multi      []TableRef // multi-table explicit hint (new)
+	autoTables bool       // auto-parse switch (new)
 }
 
 // ---- Builder methods (set SQL on Dao, no execution) ----
@@ -37,6 +39,22 @@ func (d *Dao) Select(fields string) *Dao {
 // from their table argument. No-op for unregistered tables.
 func (d *Dao) Table(name string) *Dao {
 	d.table = name
+	return d
+}
+
+// Tables declares the tables involved in a multi-table query, with optional aliases.
+// The first element is the primary table (determines row.Table() and write path).
+// Overrides Table(). No-op for unregistered tables.
+func (d *Dao) Tables(refs ...TableRef) *Dao {
+	d.multi = append(d.multi[:0], refs...)
+	return d
+}
+
+// AutoTables enables automatic SQL parsing for multi-table mapping on this Dao.
+// When set, the Dao parses the rendered SQL at execution time to discover table
+// references and build column-to-table mappings. Requires tables to be registered.
+func (d *Dao) AutoTables() *Dao {
+	d.autoTables = true
 	return d
 }
 

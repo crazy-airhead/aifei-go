@@ -291,7 +291,9 @@ func execFind(dao *Dao, isRawSQL bool) ([]*Row, error) {
 	if hk != nil && hk.QueryHook != nil && isRawSQL {
 		hk.QueryHook.AfterQuery(dao, result, toAfterQuery)
 	}
-	decodeRows(result, dao.table)
+	if m := resolveMapping(dao, query); m != nil {
+		decodeRowsWithMapping(result, m)
+	}
 	return result, nil
 }
 
@@ -332,7 +334,9 @@ func execFindBy(dao *Dao) ([]*Row, error) {
 	if hk != nil && hk.FindHook != nil {
 		hk.FindHook.AfterFind(dao, result, toAfter)
 	}
-	decodeRows(result, dao.table)
+	if m := resolveMapping(dao, query); m != nil {
+		decodeRowsWithMapping(result, m)
+	}
 	return result, nil
 }
 
@@ -404,7 +408,9 @@ func execPaginate(dao *Dao, pageNum, pageSize int) (*Page, error) {
 	if err != nil {
 		return nil, err
 	}
-	decodeRows(result, dao.table)
+	if m := resolveMapping(dao, query); m != nil {
+		decodeRowsWithMapping(result, m)
+	}
 
 	page := NewPage(pageNum, pageSize, totalRows, result)
 	if hk != nil && hk.PaginateHook != nil {
@@ -488,7 +494,9 @@ func execPaginateWithTotalRows(dao *Dao, pageNum, pageSize int, totalRowsFn func
 	if err != nil {
 		return nil, err
 	}
-	decodeRows(result, dao.table)
+	if m := resolveMapping(dao, query); m != nil {
+		decodeRowsWithMapping(result, m)
+	}
 
 	page := NewPage(pageNum, pageSize, totalRows, result)
 	if hk != nil && hk.PaginateHook != nil {
@@ -727,7 +735,7 @@ func execForEach(dao *Dao, fn func(*Row) bool) error {
 	for i, ct := range colTypes {
 		isBinary[i] = isBinaryColumnType(ct.DatabaseTypeName())
 	}
-	decodeTable := tableFor(dao.table)
+	mapping := resolveMapping(dao, query)
 	var rowList []*Row
 	for rows.Next() {
 		values := make([]interface{}, len(cols))
@@ -751,8 +759,8 @@ func execForEach(dao *Dao, fn func(*Row) bool) error {
 			}
 		}
 		row := &Row{data: data}
-		if decodeTable != nil {
-			decodeRow(row, decodeTable)
+		if mapping != nil {
+			decodeRowWithMapping(row, mapping)
 		}
 		rowList = append(rowList, row)
 		if !fn(row) {
@@ -1024,18 +1032,50 @@ func scanRows(rows *sql.Rows) ([]*Row, error) {
 	return results, nil
 }
 
+// resolveMapping computes the table mapping for a Dao, following priority:
+//   explicit Tables() > auto-parse > single table > nil
+func resolveMapping(dao *Dao, sql string) *tableMapping {
+	if len(dao.multi) > 0 {
+		return buildMappingFromRefs(dao.multi, sql)
+	}
+	if dao.autoTables || (dao.config != nil && dao.config.AutoTableMapping) {
+		return buildMappingFromSQL(sql)
+	}
+	if dao.table != "" {
+		return buildSingleTableMapping(dao.table)
+	}
+	return nil
+}
+
 // decodeRows binds table/primary-key metadata to result rows and decodes declared
-// JSON columns into their Go types. It is a no-op when table is empty or not
-// registered, so raw queries without a Table() hint (and unregistered tables)
-// stay exactly as before. Idempotent: re-decoding an already-typed row is a no-op.
+// JSON columns into their Go types. Now delegates to buildSingleTableMapping for
+// backward compatibility; for multi-table queries, use decodeRowsWithMapping directly.
 func decodeRows(rows []*Row, table string) {
-	t := tableFor(table)
-	if t == nil {
+	m := buildSingleTableMapping(table)
+	if m == nil {
+		return
+	}
+	decodeRowsWithMapping(rows, m)
+}
+
+// decodeRowsWithMapping applies a tableMapping to all rows.
+func decodeRowsWithMapping(rows []*Row, m *tableMapping) {
+	if m == nil {
 		return
 	}
 	for _, r := range rows {
-		decodeRow(r, t)
+		decodeRowWithMapping(r, m)
 	}
+}
+
+// decodeRowWithMapping binds table/PK metadata and decodes JSON columns using
+// the merged field types from the multi-table mapping.
+func decodeRowWithMapping(r *Row, m *tableMapping) {
+	r.SetTable(m.primary.Name)
+	if len(m.primary.PrimaryKeys) > 0 {
+		r.SetPrimaryKeys(m.primary.PrimaryKeys...)
+	}
+	DecodeJSONFieldsWith(r, m.mergedFieldTypes)
 }
 
 // tableFor returns the registered Table for name, or nil when name is empty or
@@ -1048,6 +1088,7 @@ func tableFor(table string) *Table {
 }
 
 // decodeRow binds table/primary-key metadata to r and decodes its JSON columns.
+// Kept for backward compatibility with generated initRow() calls.
 func decodeRow(r *Row, t *Table) {
 	r.SetTable(t.Name)
 	if len(t.PrimaryKeys) > 0 {

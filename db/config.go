@@ -11,17 +11,18 @@ import (
 
 // Config holds database connection configuration.
 type Config struct {
-	ID         string
-	DriverName string
-	DSN        string
-	Dialect    Dialect
-	MaxOpen    int
-	MaxIdle    int
-	MaxLife    time.Duration
-	Printer    func(sql string, args ...interface{})
-	SqlKit     *dbsql.SqlKit
-	HookKit    *DbHookKit
-	pool       *sql.DB
+	ID               string
+	DriverName       string
+	DSN              string
+	Dialect          Dialect
+	MaxOpen          int
+	MaxIdle          int
+	MaxLife          time.Duration
+	Printer          func(sql string, args ...interface{})
+	SqlKit           *dbsql.SqlKit
+	HookKit          *DbHookKit
+	AutoTableMapping bool // opt-in: auto-parse raw SQL for multi-table column mapping
+	pool             *sql.DB
 }
 
 // ConfigOption is a functional option for Config.
@@ -60,6 +61,11 @@ func WithSqlKit(sk *dbsql.SqlKit) ConfigOption {
 // WithHookKit sets the database hook kit.
 func WithHookKit(hk *DbHookKit) ConfigOption {
 	return func(c *Config) { c.HookKit = hk }
+}
+
+// WithAutoTableMapping enables automatic SQL parsing for multi-table column mapping.
+func WithAutoTableMapping(b bool) ConfigOption {
+	return func(c *Config) { c.AutoTableMapping = b }
 }
 
 // GetDbHookKit returns the hook kit, may be nil.
