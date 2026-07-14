@@ -301,31 +301,66 @@ func (c *HttpContext) Body() []byte {
 
 func (c *HttpContext) Query() url.Values { return c.Request.URL.Query() }
 
-// GetMap returns query parameters as a map. Pass keys to filter by a
-// dot-joined prefix:
+// GetMap returns request parameters as a map. It reads from the request body
+// (form-encoded or raw JSON), falling back to query parameters when the body is
+// empty — the same resolution order as GetBean.
+//
+// Pass keys to filter by a dot-joined prefix:
 //
 //	GetMap()                  → all params
 //	GetMap("user")            → "user.*" params, prefix stripped
 //	GetMap("user", "addr")    → "user.addr.*" params
 func (c *HttpContext) GetMap(keys ...string) map[string]interface{} {
-	q := c.Query()
+	bt, err := c.ensureBody()
+	if err != nil {
+		bt = bodyNone
+	}
+
 	m := make(map[string]interface{})
+	switch bt {
+	case bodyForm:
+		if c.Request.Form != nil {
+			for k, v := range c.Request.Form {
+				if len(v) > 0 {
+					m[k] = v[0]
+				}
+			}
+		}
+	case bodyJSON:
+		if data := c.Body(); len(data) > 0 {
+			// Unmarshal top-level JSON object into flat map.
+			var raw map[string]interface{}
+			if err := json.Unmarshal(data, &raw); err == nil {
+				for k, v := range raw {
+					m[k] = v
+				}
+			}
+		}
+	case bodyNone:
+		for k, v := range c.Request.URL.Query() {
+			if len(v) > 0 {
+				m[k] = v[0]
+			}
+		}
+	}
+
+	// Apply prefix filter and strip.
 	prefix := ""
 	if len(keys) > 0 {
 		prefix = strings.Join(keys, ".") + "."
 	}
-	for k, v := range q {
-		if prefix != "" {
-			if !strings.HasPrefix(k, prefix) {
-				continue
-			}
-			k = strings.TrimPrefix(k, prefix)
-		}
-		if len(v) > 0 {
-			m[k] = v[0]
-		}
+	if prefix == "" {
+		return m
 	}
-	return m
+
+	filtered := make(map[string]interface{})
+	for k, v := range m {
+		if !strings.HasPrefix(k, prefix) {
+			continue
+		}
+		filtered[strings.TrimPrefix(k, prefix)] = v
+	}
+	return filtered
 }
 
 func (c *HttpContext) getVal(key string) string {
