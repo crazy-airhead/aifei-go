@@ -3,9 +3,9 @@ module github.com/crazy-airhead/aifei-go/plugins/dami
 go 1.26
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v0.0.30
-	github.com/crazy-airhead/aifei-go/dami v0.0.30
-	github.com/crazy-airhead/aifei-go/log v0.0.30
+	github.com/crazy-airhead/aifei-go/aifei v0.0.31
+	github.com/crazy-airhead/aifei-go/dami v0.0.31
+	github.com/crazy-airhead/aifei-go/log v0.0.31
 )
 
 replace (
