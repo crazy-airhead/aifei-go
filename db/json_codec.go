@@ -2,7 +2,9 @@ package db
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -130,6 +132,8 @@ func unmarshalRow(r *Row, data []byte) error {
 }
 
 // normalizeJSONValue normalizes a decoded JSON value for storage in r.data:
+//   - For integer-typed columns (int, int64, etc.), null/empty-string JSON values
+//     are converted to nil so SQL receives NULL instead of an empty string.
 //   - For columns whose declared FieldTypes entry is a composite JSON type
 //     (struct/slice/map/array, see needsJSONDecode), the incoming value is
 //     materialized into that declared type. This makes typed accessors work on
@@ -142,11 +146,60 @@ func unmarshalRow(r *Row, data []byte) error {
 //   - Other scalar fields preserve the original value so the SQL driver can
 //     reject it with a clear type-mismatch error.
 func normalizeJSONValue(key string, v interface{}, fieldTypes map[string]reflect.Type) interface{} {
+	// Handle null values
+	if v == nil {
+		return nil
+	}
+
+	// Handle string values: check for empty string or numeric strings
+	if str, ok := v.(string); ok {
+		// Empty string handling
+		if str == "" {
+			// Empty string for integer/numeric types should be nil (SQL NULL)
+			if ft, ok := fieldTypes[key]; ok {
+				switch ft.Kind() {
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+					reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+					reflect.Float32, reflect.Float64:
+					return nil
+				}
+			}
+			// For string columns, keep empty string as-is
+			return str
+		}
+
+		// Non-empty string: for numeric type columns, try to parse as number
+		if ft, ok := fieldTypes[key]; ok {
+			switch ft.Kind() {
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				if i, err := strconv.ParseInt(str, 10, 64); err == nil {
+					return convertToInt(i, ft)
+				}
+				return fmt.Errorf("invalid integer value %q for column %q", str, key)
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				if i, err := strconv.ParseUint(str, 10, 64); err == nil {
+					return convertToUint(i, ft)
+				}
+				return fmt.Errorf("invalid unsigned integer value %q for column %q", str, key)
+			case reflect.Float32, reflect.Float64:
+				if f, err := strconv.ParseFloat(str, 64); err == nil {
+					if ft.Kind() == reflect.Float32 {
+						return float32(f)
+					}
+					return f
+				}
+				return fmt.Errorf("invalid float value %q for column %q", str, key)
+			}
+		}
+	}
+
+	// Handle composite types (struct/slice/map/array)
 	if ft, ok := fieldTypes[key]; ok && needsJSONDecode(ft) {
 		if decoded, ok := decodeToType(v, ft); ok {
 			return decoded
 		}
 	}
+
 	switch val := v.(type) {
 	case []interface{}, map[string]interface{}:
 		if fieldTypes == nil || fieldTypes[key] == reflect.TypeFor[string]() {
@@ -157,6 +210,60 @@ func normalizeJSONValue(key string, v interface{}, fieldTypes map[string]reflect
 		return v
 	default:
 		return parseTimeValue(v)
+	}
+}
+
+// convertToInt converts an int64 value to the target integer type with range checking.
+func convertToInt(i int64, target reflect.Type) interface{} {
+	switch target.Kind() {
+	case reflect.Int:
+		return int(i)
+	case reflect.Int8:
+		if i < -128 || i > 127 {
+			return fmt.Errorf("value %d out of range for int8", i)
+		}
+		return int8(i)
+	case reflect.Int16:
+		if i < -32768 || i > 32767 {
+			return fmt.Errorf("value %d out of range for int16", i)
+		}
+		return int16(i)
+	case reflect.Int32:
+		if i < -2147483648 || i > 2147483647 {
+			return fmt.Errorf("value %d out of range for int32", i)
+		}
+		return int32(i)
+	case reflect.Int64:
+		return i
+	default:
+		return i
+	}
+}
+
+// convertToUint converts a uint64 value to the target unsigned integer type with range checking.
+func convertToUint(i uint64, target reflect.Type) interface{} {
+	switch target.Kind() {
+	case reflect.Uint:
+		return uint(i)
+	case reflect.Uint8:
+		if i > 255 {
+			return fmt.Errorf("value %d out of range for uint8", i)
+		}
+		return uint8(i)
+	case reflect.Uint16:
+		if i > 65535 {
+			return fmt.Errorf("value %d out of range for uint16", i)
+		}
+		return uint16(i)
+	case reflect.Uint32:
+		if i > 4294967295 {
+			return fmt.Errorf("value %d out of range for uint32", i)
+		}
+		return uint32(i)
+	case reflect.Uint64:
+		return i
+	default:
+		return i
 	}
 }
 
