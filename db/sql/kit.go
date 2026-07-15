@@ -39,6 +39,11 @@ func (sk *SqlKit) GetSqlPara(sql string, data map[string]interface{}) *SqlPara {
 	tpl := sk.engine.GetTemplateByString(sql)
 	sp := NewSqlPara()
 
+	// 需要放置参数，为空的时候，初始化一个
+	if data == nil {
+		data = map[string]interface{}{}
+	}
+
 	data[SqlParaKey] = sp
 	sp.SetSql(tpl.RenderToString(data))
 	delete(data, SqlParaKey)
