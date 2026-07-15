@@ -2,6 +2,6 @@ module github.com/crazy-airhead/aifei-go/tools/damigen
 
 go 1.26
 
-require github.com/crazy-airhead/aifei-go/enjoy v0.0.31
+require github.com/crazy-airhead/aifei-go/enjoy v0.0.32
 
 replace github.com/crazy-airhead/aifei-go/enjoy => ../../enjoy
