@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"fmt"
 )
 
@@ -13,6 +14,19 @@ type BatchResult struct {
 // Batch provides batch database operations.
 type Batch struct {
 	config *Config
+	ctx    context.Context
+}
+
+// Ctx binds a context so the Batch participates in any transaction carried by
+// ctx (see Transaction / WithTx). A Batch without a ctx always uses the pool.
+func (b *Batch) Ctx(ctx context.Context) *Batch {
+	b.ctx = ctx
+	return b
+}
+
+// runner returns the DBConn this Batch executes on (tx from ctx, or the pool).
+func (b *Batch) runner() (DBConn, error) {
+	return b.config.runner(b.ctx)
 }
 
 // Insert batch-inserts rows.
@@ -28,7 +42,7 @@ func (b *Batch) InsertWithTable(table string, rows []*Row) (*BatchResult, error)
 	if len(rows) == 0 {
 		return &BatchResult{}, nil
 	}
-	pool, err := b.config.Pool()
+	r, err := b.runner()
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +50,7 @@ func (b *Batch) InsertWithTable(table string, rows []*Row) (*BatchResult, error)
 	fields := filterTableFields(table, rows[0].FieldNames())
 	sqlStr := b.config.Dialect.ForInsert(table, fields)
 
-	stmt, err := pool.Prepare(sqlStr)
+	stmt, err := r.Prepare(sqlStr)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +82,7 @@ func (b *Batch) Update(rows []*Row) (*BatchResult, error) {
 
 // UpdateWithTable batch-updates rows for a specific table.
 func (b *Batch) UpdateWithTable(table string, rows []*Row) (*BatchResult, error) {
-	pool, err := b.config.Pool()
+	r, err := b.runner()
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +102,7 @@ func (b *Batch) UpdateWithTable(table string, rows []*Row) (*BatchResult, error)
 		}
 
 		sqlStr := b.config.Dialect.ForUpdate(table, changedFields, row.primaryKeys)
-		result, err := pool.Exec(sqlStr, args...)
+		result, err := r.Exec(sqlStr, args...)
 		if err != nil {
 			return &BatchResult{RowsAffected: total, Error: err}, err
 		}
@@ -100,11 +114,11 @@ func (b *Batch) UpdateWithTable(table string, rows []*Row) (*BatchResult, error)
 
 // Execute batch-executes the same SQL with different args.
 func (b *Batch) Execute(sql string, argsList [][]interface{}) (*BatchResult, error) {
-	pool, err := b.config.Pool()
+	r, err := b.runner()
 	if err != nil {
 		return nil, err
 	}
-	stmt, err := pool.Prepare(sql)
+	stmt, err := r.Prepare(sql)
 	if err != nil {
 		return nil, err
 	}
@@ -124,13 +138,13 @@ func (b *Batch) Execute(sql string, argsList [][]interface{}) (*BatchResult, err
 
 // ExecuteSQLs batch-executes multiple SQL statements.
 func (b *Batch) ExecuteSQLs(sqls []string) (*BatchResult, error) {
-	pool, err := b.config.Pool()
+	r, err := b.runner()
 	if err != nil {
 		return nil, err
 	}
 	var total int64
 	for _, sql := range sqls {
-		result, err := pool.Exec(sql)
+		result, err := r.Exec(sql)
 		if err != nil {
 			return &BatchResult{RowsAffected: total, Error: err}, fmt.Errorf("sql error: %w", err)
 		}

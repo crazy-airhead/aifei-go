@@ -37,7 +37,7 @@
 
 | 编号 | 标题 | 状态 | 相关任务 | 文件 |
 |------|------|------|----------|------|
-| 0001 | db 事务回调内 SQL 各自独立提交（不在同一事务） | 🔴 | db | [0001-db-事务不传播](0001-db-事务不传播.md) |
+| 0001 | db 事务回调内 SQL 各自独立提交（不在同一事务） | 🟢 | db | [0001-db-事务不传播](0001-db-事务不传播.md) |
 | 0002 | enjoy 算术 `+` 不支持字符串拼接、数值降级 float64 | 🔴 | enjoy | [0002-enjoy-算术加号降级float64](0002-enjoy-算术加号降级float64.md) |
 | 0003 | enjoy `#returnIf` 被当成无条件 return | 🔴 | enjoy | [0003-enjoy-returnIf语义错误](0003-enjoy-returnIf语义错误.md) |
 | 0004 | enjoy `#for` 无法迭代 Map | 🔴 | enjoy | [0004-enjoy-for无法迭代map](0004-enjoy-for无法迭代map.md) |

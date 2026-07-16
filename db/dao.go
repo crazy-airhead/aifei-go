@@ -1,12 +1,15 @@
 package db
 
 import (
+	"context"
+
 	dbsql "github.com/crazy-airhead/aifei-go/db/sql"
 )
 
 // Dao provides chainable database operations.
 type Dao struct {
 	config     *Config
+	ctx        context.Context // propagated tx context; nil → pool (default)
 	sqlStr     string
 	sqlArgs    []interface{}
 	selFields  string
@@ -99,6 +102,20 @@ func (d *Dao) SqlPara(sp *dbsql.SqlPara) *Dao {
 }
 
 // ---- Internal helpers ----
+
+// Ctx binds a context to the Dao so its executors participate in any
+// transaction carried by ctx (see Transaction / WithTx). A Dao without a ctx
+// (the default) always uses the connection pool, matching pre-existing behavior.
+func (d *Dao) Ctx(ctx context.Context) *Dao {
+	d.ctx = ctx
+	return d
+}
+
+// runner returns the DBConn this Dao executes on: the *sql.Tx from ctx when
+// inside a transaction, otherwise the pool.
+func (d *Dao) runner() (DBConn, error) {
+	return d.config.runner(d.ctx)
+}
 
 func (d *Dao) setSqlPara(sp *dbsql.SqlPara) {
 	d.sqlPara = sp
@@ -335,6 +352,11 @@ func (d *Dao) FindInIds(table string, ids ...interface{}) ([]*Row, error) {
 
 // ---- Transaction ----
 
-func (d *Dao) Transaction(fn func(*Dao) error) error {
+// Transaction executes fn in a transaction on this Dao's config, propagating
+// the *sql.Tx to fn via context so every db call inside fn that uses the
+// ctx-aware dao d (or db.WithCtx(ctx)) participates in the same transaction.
+// Nested calls join the outer transaction. See the package-level Transaction
+// for full semantics.
+func (d *Dao) Transaction(fn func(ctx context.Context, d *Dao) error) error {
 	return execTransaction(d, fn)
 }

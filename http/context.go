@@ -104,6 +104,16 @@ func (c *HttpContext) Context() context.Context {
 	return c.Request.Context()
 }
 
+// SetContext replaces the request's context. The new context takes effect for
+// subsequent Context() calls, so anything propagated on it — a transaction's
+// *sql.Tx via db.WithTx, a request id, a deadline — becomes visible to the
+// handler and to interceptors that run after this call. server.TxInterceptor
+// uses it to inject the active transaction into the request so service methods
+// can join it with db.Ctx(in.Context()).
+func (c *HttpContext) SetContext(ctx context.Context) {
+	c.Request = c.Request.WithContext(ctx)
+}
+
 func (c *HttpContext) Has(name string) bool {
 	bt, _ := c.ensureBody()
 	if bt == bodyForm && c.Request.Form != nil {

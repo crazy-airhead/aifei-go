@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -33,12 +34,12 @@ func execInsertRow(dao *Dao, row *Row) (*Row, error) {
 		}
 	}
 
-	pool, err := config.Pool()
+	r, err := dao.runner()
 	if err != nil {
 		return nil, err
 	}
 	config.logSQL(sqlStr, values...)
-	result, err := pool.Exec(sqlStr, values...)
+	result, err := r.Exec(sqlStr, values...)
 	if err != nil {
 		return nil, err
 	}
@@ -185,12 +186,12 @@ func execSqlUpdate(dao *Dao) (int64, error) {
 		}
 	}
 
-	pool, err := config.Pool()
+	r, err := dao.runner()
 	if err != nil {
 		return 0, err
 	}
 	config.logSQL(query, args...)
-	result, err := pool.Exec(query, args...)
+	result, err := r.Exec(query, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -223,12 +224,12 @@ func execSqlDelete(dao *Dao) (int64, error) {
 		}
 	}
 
-	pool, err := config.Pool()
+	r, err := dao.runner()
 	if err != nil {
 		return 0, err
 	}
 	config.logSQL(query, args...)
-	result, err := pool.Exec(query, args...)
+	result, err := r.Exec(query, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -269,12 +270,12 @@ func execFind(dao *Dao, isRawSQL bool) ([]*Row, error) {
 		args = sp.Paras
 	}
 
-	pool, err := config.Pool()
+	r, err := dao.runner()
 	if err != nil {
 		return nil, err
 	}
 	config.logSQL(query, args...)
-	rows, err := pool.Query(query, args...)
+	rows, err := r.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -315,12 +316,12 @@ func execFindBy(dao *Dao) ([]*Row, error) {
 		}
 	}
 
-	pool, err := config.Pool()
+	r, err := dao.runner()
 	if err != nil {
 		return nil, err
 	}
 	config.logSQL(query, args...)
-	rows, err := pool.Query(query, args...)
+	rows, err := r.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -365,13 +366,13 @@ func execPaginate(dao *Dao, pageNum, pageSize int) (*Page, error) {
 		}
 	}
 
-	pool, err := config.Pool()
+	r, err := dao.runner()
 	if err != nil {
 		return nil, err
 	}
 	config.logSQL(countSQL, args...)
 	var totalRows int64
-	if err := pool.QueryRow(countSQL, args...).Scan(&totalRows); err != nil {
+	if err := r.QueryRow(countSQL, args...).Scan(&totalRows); err != nil {
 		return nil, err
 	}
 
@@ -398,7 +399,7 @@ func execPaginate(dao *Dao, pageNum, pageSize int) (*Page, error) {
 	}
 
 	config.logSQL(paginateSQL, args...)
-	rows, err := pool.Query(paginateSQL, args...)
+	rows, err := r.Query(paginateSQL, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -435,14 +436,15 @@ func execPaginateWithTotalRows(dao *Dao, pageNum, pageSize int, totalRowsFn func
 	countSQL := dialect.ForCountSubquery(query)
 	countSP := &dbsql.SqlPara{Sql: countSQL, Paras: args}
 
+	r, err := dao.runner()
+	if err != nil {
+		return nil, err
+	}
+
 	defaultQuery := func() (int64, error) {
-		pool, err := config.Pool()
-		if err != nil {
-			return 0, err
-		}
 		config.logSQL(countSQL, args...)
 		var total int64
-		if err := pool.QueryRow(countSQL, args...).Scan(&total); err != nil {
+		if err := r.QueryRow(countSQL, args...).Scan(&total); err != nil {
 			return 0, err
 		}
 		return total, nil
@@ -479,12 +481,8 @@ func execPaginateWithTotalRows(dao *Dao, pageNum, pageSize int, totalRowsFn func
 		}
 	}
 
-	pool, err := config.Pool()
-	if err != nil {
-		return nil, err
-	}
 	config.logSQL(paginateSQL, args...)
-	rows, err := pool.Query(paginateSQL, args...)
+	rows, err := r.Query(paginateSQL, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -529,12 +527,12 @@ func execInsertOrUpdateRow(dao *Dao, row *Row) (*Row, error) {
 		}
 	}
 
-	pool, err := config.Pool()
+	r, err := dao.runner()
 	if err != nil {
 		return nil, err
 	}
 	config.logSQL(sqlStr, values...)
-	if _, err := pool.Exec(sqlStr, values...); err != nil {
+	if _, err := r.Exec(sqlStr, values...); err != nil {
 		return nil, err
 	}
 
@@ -669,12 +667,12 @@ func execFindExists(dao *Dao) (bool, error) {
 		args = sp.Paras
 	}
 
-	pool, err := config.Pool()
+	r, err := dao.runner()
 	if err != nil {
 		return false, err
 	}
 	config.logSQL(query, args...)
-	rows, err := pool.Query(query, args...)
+	rows, err := r.Query(query, args...)
 	if err != nil {
 		return false, err
 	}
@@ -715,12 +713,12 @@ func execForEach(dao *Dao, fn func(*Row) bool) error {
 		args = sp.Paras
 	}
 
-	pool, err := config.Pool()
+	r, err := dao.runner()
 	if err != nil {
 		return err
 	}
 	config.logSQL(query, args...)
-	rows, err := pool.Query(query, args...)
+	rows, err := r.Query(query, args...)
 	if err != nil {
 		return err
 	}
@@ -827,12 +825,12 @@ func execQuery(dao *Dao, returnFirst bool) ([]interface{}, error) {
 		}
 	}
 
-	pool, err := config.Pool()
+	r, err := dao.runner()
 	if err != nil {
 		return nil, err
 	}
 	config.logSQL(query, args...)
-	rows, err := pool.Query(query, args...)
+	rows, err := r.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -974,8 +972,17 @@ func execFindInIds(dao *Dao, table string, ids []interface{}) ([]*Row, error) {
 
 // ---- Transaction on Dao ----
 
-// execTransaction executes fn within a transaction for the Dao's config.
-func execTransaction(dao *Dao, fn func(*Dao) error) error {
+// execTransaction executes fn within a transaction for the Dao's config,
+// propagating the *sql.Tx to fn via context so every db call inside fn
+// participates in the same transaction. If dao already carries a tx (a nested
+// call), fn joins the outer transaction without beginning a new one and without
+// committing/rolling back — the error is propagated for the outermost owner to
+// act on.
+func execTransaction(dao *Dao, fn func(ctx context.Context, d *Dao) error) error {
+	// Nested call: join the outer transaction instead of beginning a new one.
+	if _, ok := txFromContext(dao.ctx); ok {
+		return fn(dao.ctx, dao)
+	}
 	config := dao.config
 	pool, err := config.Pool()
 	if err != nil {
@@ -985,7 +992,10 @@ func execTransaction(dao *Dao, fn func(*Dao) error) error {
 	if err != nil {
 		return err
 	}
-	if err := fn(dao); err != nil {
+	txCtx := withTx(dao.ctx, tx)
+	txDao := *dao // shallow copy keeps builder state; only ctx is overridden
+	txDao.ctx = txCtx
+	if err := fn(txCtx, &txDao); err != nil {
 		tx.Rollback()
 		return err
 	}
@@ -1033,7 +1043,8 @@ func scanRows(rows *sql.Rows) ([]*Row, error) {
 }
 
 // resolveMapping computes the table mapping for a Dao, following priority:
-//   explicit Tables() > auto-parse > single table > nil
+//
+//	explicit Tables() > auto-parse > single table > nil
 func resolveMapping(dao *Dao, sql string) *tableMapping {
 	if len(dao.multi) > 0 {
 		return buildMappingFromRefs(dao.multi, sql)

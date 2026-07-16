@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -138,6 +139,17 @@ func (c *Config) Pool() (*sql.DB, error) {
 	}
 	c.pool = db
 	return db, nil
+}
+
+// runner returns the DBConn that SQL executes on: the *sql.Tx carried by ctx
+// when inside a transaction, otherwise the connection pool. A nil ctx safely
+// falls back to the pool, so callers that do not propagate a ctx behave exactly
+// as before.
+func (c *Config) runner(ctx context.Context) (DBConn, error) {
+	if tx, ok := txFromContext(ctx); ok {
+		return tx, nil
+	}
+	return c.Pool()
 }
 
 // CreateDao creates a new Dao instance.

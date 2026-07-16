@@ -1,16 +1,31 @@
 package server
 
 import (
+	"context"
+
 	"github.com/crazy-airhead/aifei-go/aifei"
 	"github.com/crazy-airhead/aifei-go/db"
 )
 
-// TxInterceptor returns an Interceptor that wraps the method in a database transaction.
-// If the method returns an Output with code != 0, the transaction is rolled back.
+// ctxSetter is implemented by any Input whose request context can be replaced.
+// *http.HttpContext (and *In, via embedding) satisfy it. Interceptors use it to
+// propagate context-bound values — like the active transaction — into the
+// service method without depending on a concrete Input type.
+type ctxSetter interface {
+	SetContext(ctx context.Context)
+}
+
+// TxInterceptor returns an Interceptor that wraps the method in a database
+// transaction. The *sql.Tx is carried by the context injected into the request,
+// so a service method joins the transaction by using db.Ctx(in.Context()) (or
+// the ctx-aware db helpers such as db.InsertCtx) for its db calls. If the method
+// returns an Output with code != 0, the transaction is rolled back; otherwise it
+// is committed.
 func TxInterceptor() aifei.Interceptor {
 	return aifei.InterceptorFunc(func(method string, in aifei.Input, invoke func() aifei.Output) aifei.Output {
 		var out aifei.Output
-		err := db.Transaction(func() error {
+		err := db.TransactionCtx(in.Context(), func(txCtx context.Context) error {
+			setInContext(in, txCtx)
 			out = invoke()
 			if out != nil && out.Code() != 0 {
 				return &rollbackError{}
@@ -25,6 +40,16 @@ func TxInterceptor() aifei.Interceptor {
 		}
 		return out
 	})
+}
+
+// setInContext injects ctx into in so that in.Context() returns it for the
+// service method. Inputs that do not support SetContext (e.g. test fixtures) are
+// left untouched — the transaction still commits/rolls back, the method just
+// won't automatically join it unless it propagates the ctx some other way.
+func setInContext(in aifei.Input, ctx context.Context) {
+	if s, ok := in.(ctxSetter); ok {
+		s.SetContext(ctx)
+	}
 }
 
 type rollbackError struct{}

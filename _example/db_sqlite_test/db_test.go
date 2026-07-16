@@ -1,6 +1,7 @@
 package db_sqlite_test
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"testing"
@@ -184,9 +185,10 @@ func TestCountBy(t *testing.T) {
 func TestTransaction(t *testing.T) {
 	setupTestDB(t)
 
-	err := db.Transaction(func() error {
-		db.Insert(db.NewRow("user").Set("name", "tx1").Set("age", 1))
-		db.Insert(db.NewRow("user").Set("name", "tx2").Set("age", 2))
+	// Both inserts propagate the tx via ctx, so they commit together.
+	err := db.Transaction(func(ctx context.Context) error {
+		db.WithCtx(ctx).InsertRow(db.NewRow("user").Set("name", "tx1").Set("age", 1))
+		db.WithCtx(ctx).InsertRow(db.NewRow("user").Set("name", "tx2").Set("age", 2))
 		return nil
 	})
 	if err != nil {
@@ -202,11 +204,202 @@ func TestTransaction(t *testing.T) {
 func TestTransactionRollback(t *testing.T) {
 	setupTestDB(t)
 
-	err := db.Transaction(func() error {
+	// Insert inside the tx, then force a rollback. Before ISSUE-0001 the insert
+	// took a pool connection and auto-committed, so the row survived the
+	// "rollback". With tx propagation it must now be rolled back.
+	err := db.Transaction(func(ctx context.Context) error {
+		if _, e := db.WithCtx(ctx).InsertRow(db.NewRow("user").Set("name", "tx-rb").Set("age", 1)); e != nil {
+			return e
+		}
 		return fmt.Errorf("force rollback")
 	})
 	if err == nil {
 		t.Fatal("expected error from rollback")
+	}
+
+	count, _ := db.Count("user")
+	if count != 0 {
+		t.Fatalf("expected 0 rows after rollback, got %d (tx did not propagate)", count)
+	}
+}
+
+// TestTransactionCtxFacade exercises the TransactionCtx + ctx-aware facade helpers.
+func TestTransactionCtxFacade(t *testing.T) {
+	setupTestDB(t)
+
+	err := db.TransactionCtx(context.Background(), func(ctx context.Context) error {
+		_, e := db.InsertCtx(ctx, db.NewRow("user").Set("name", "facade").Set("age", 1))
+		return e
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count, _ := db.Count("user"); count != 1 {
+		t.Fatalf("expected 1 row, got %d", count)
+	}
+}
+
+// TestTransactionDeleteRollback verifies both an insert and a delete inside the
+// same tx are undone on rollback.
+func TestTransactionDeleteRollback(t *testing.T) {
+	setupTestDB(t)
+	// Seed a row outside any tx; it must survive the tx rollback below.
+	db.Insert(db.NewRow("user").Set("name", "seed").Set("age", 1))
+
+	err := db.Transaction(func(ctx context.Context) error {
+		db.InsertCtx(ctx, db.NewRow("user").Set("name", "in-tx").Set("age", 2))
+		db.DeleteByIDCtx(ctx, "user", 1) // delete the seeded row inside the tx
+		return fmt.Errorf("force rollback")
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	if count, _ := db.Count("user"); count != 1 {
+		t.Fatalf("expected 1 row (seed) after rollback, got %d", count)
+	}
+	if r, _ := db.FindByID("user", 1); r == nil {
+		t.Fatal("seeded row should survive tx rollback")
+	}
+}
+
+// TestNestedTransactionJoins verifies the nested-call "join" semantics: the
+// inner call reuses the outer tx rather than starting a new one.
+func TestNestedTransactionJoins(t *testing.T) {
+	setupTestDB(t)
+
+	// Inner errors → propagates → outer rolls back → 0 rows.
+	err := db.Transaction(func(ctx context.Context) error {
+		db.WithCtx(ctx).InsertRow(db.NewRow("user").Set("name", "outer").Set("age", 1))
+		return db.TransactionCtx(ctx, func(ctx context.Context) error {
+			db.WithCtx(ctx).InsertRow(db.NewRow("user").Set("name", "inner").Set("age", 2))
+			return fmt.Errorf("inner fails")
+		})
+	})
+	if err == nil {
+		t.Fatal("expected error from inner")
+	}
+	if count, _ := db.Count("user"); count != 0 {
+		t.Fatalf("expected 0 rows after nested rollback, got %d", count)
+	}
+
+	// Both succeed → 2 rows (inner joined outer, didn't lose data to a second tx).
+	setupTestDB(t)
+	err = db.Transaction(func(ctx context.Context) error {
+		db.WithCtx(ctx).InsertRow(db.NewRow("user").Set("name", "outer").Set("age", 1))
+		return db.TransactionCtx(ctx, func(ctx context.Context) error {
+			db.WithCtx(ctx).InsertRow(db.NewRow("user").Set("name", "inner").Set("age", 2))
+			return nil
+		})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count, _ := db.Count("user"); count != 2 {
+		t.Fatalf("expected 2 rows after nested commit, got %d", count)
+	}
+}
+
+// TestDaoTransaction verifies Dao-level transaction propagation and rollback.
+func TestDaoTransaction(t *testing.T) {
+	setupTestDB(t)
+
+	err := db.Use().Transaction(func(ctx context.Context, d *db.Dao) error {
+		if _, e := d.InsertRow(db.NewRow("user").Set("name", "dao1").Set("age", 1)); e != nil {
+			return e
+		}
+		_, e := d.InsertRow(db.NewRow("user").Set("name", "dao2").Set("age", 2))
+		return e
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count, _ := db.Count("user"); count != 2 {
+		t.Fatalf("expected 2 rows, got %d", count)
+	}
+
+	// Rollback path: the ctx-aware dao d runs inside the tx, so the insert rolls back.
+	setupTestDB(t)
+	err = db.Use().Transaction(func(ctx context.Context, d *db.Dao) error {
+		d.InsertRow(db.NewRow("user").Set("name", "dao1").Set("age", 1))
+		return fmt.Errorf("force rollback")
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if count, _ := db.Count("user"); count != 0 {
+		t.Fatalf("expected 0 rows after Dao tx rollback, got %d", count)
+	}
+}
+
+// TestBatchInTransaction verifies batch operations participate in a transaction.
+func TestBatchInTransaction(t *testing.T) {
+	setupTestDB(t)
+
+	rows := []*db.Row{
+		db.NewRow("user").Set("name", "b1").Set("age", 1),
+		db.NewRow("user").Set("name", "b2").Set("age", 2),
+	}
+
+	// Commit path.
+	err := db.Transaction(func(ctx context.Context) error {
+		_, e := db.NewBatchCtx(ctx).Insert(rows)
+		return e
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count, _ := db.Count("user"); count != 2 {
+		t.Fatalf("expected 2 rows after batch commit, got %d", count)
+	}
+
+	// Rollback path: batch writes inside the tx must be undone.
+	setupTestDB(t)
+	err = db.Transaction(func(ctx context.Context) error {
+		db.NewBatchCtx(ctx).Insert(rows)
+		return fmt.Errorf("force rollback")
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if count, _ := db.Count("user"); count != 0 {
+		t.Fatalf("expected 0 rows after batch rollback, got %d", count)
+	}
+}
+
+// TestCtxNilFallback verifies that a ctx-less Dao still uses the pool and
+// auto-commits, exactly as before the change (regression guard).
+func TestCtxNilFallback(t *testing.T) {
+	setupTestDB(t)
+
+	if _, err := db.Use().InsertRow(db.NewRow("user").Set("name", "noctx").Set("age", 1)); err != nil {
+		t.Fatal(err)
+	}
+	if count, _ := db.Count("user"); count != 1 {
+		t.Fatalf("expected 1 row, got %d", count)
+	}
+}
+
+// TestTxBeginWithTx verifies manual tx management (TxBegin) composes with the
+// new context-based propagation via WithTx.
+func TestTxBeginWithTx(t *testing.T) {
+	setupTestDB(t)
+
+	tx, err := db.TxBegin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := db.WithTx(context.Background(), tx)
+	if _, err := db.WithCtx(ctx).InsertRow(db.NewRow("user").Set("name", "manual").Set("age", 1)); err != nil {
+		tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
+	if count, _ := db.Count("user"); count != 0 {
+		t.Fatalf("expected 0 rows after manual tx rollback, got %d", count)
 	}
 }
 

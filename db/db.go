@@ -1,8 +1,19 @@
 package db
 
+import "context"
+
 // Use returns the default Dao.
 func Use() *Dao {
 	return GetConfig().CreateDao()
+}
+
+// WithCtx returns the default Dao bound to ctx, so its executors participate in
+// any transaction carried by ctx (see Transaction / WithTx). This is the
+// primary entry point for ctx-aware db calls inside a transaction callback.
+func WithCtx(ctx context.Context) *Dao {
+	d := Use()
+	d.ctx = ctx
+	return d
 }
 
 // UseWithID returns a Dao for the given config ID.
@@ -125,7 +136,46 @@ func NewBatch() *Batch {
 	return &Batch{config: GetConfig()}
 }
 
-// Transaction executes a function in a transaction.
-func Transaction(fn func() error) error {
-	return TransactionWithID(defaultConfigID, fn)
+// NewBatchCtx returns a Batch bound to ctx, so its operations participate in any
+// transaction carried by ctx (see Transaction / WithTx).
+func NewBatchCtx(ctx context.Context) *Batch {
+	b := NewBatch()
+	b.ctx = ctx
+	return b
+}
+
+// ---- ctx-aware facade ----
+//
+// Each helper below is equivalent to WithCtx(ctx).Xxx(...); they exist so call
+// sites inside a transaction stay as concise as the ctx-less variants.
+// Transaction / TransactionCtx / TransactionWithID live in transaction.go.
+
+// InsertCtx inserts a row using the connection carried by ctx.
+func InsertCtx(ctx context.Context, row *Row) (*Row, error) {
+	return WithCtx(ctx).InsertRow(row)
+}
+
+// UpdateCtx updates a row using the connection carried by ctx.
+func UpdateCtx(ctx context.Context, row *Row) (bool, error) {
+	return WithCtx(ctx).UpdateRow(row)
+}
+
+// DeleteCtx deletes a row using the connection carried by ctx.
+func DeleteCtx(ctx context.Context, row *Row) (bool, error) {
+	return WithCtx(ctx).DeleteRow(row)
+}
+
+// DeleteByIDCtx deletes by table and ID using the connection carried by ctx.
+func DeleteByIDCtx(ctx context.Context, table string, id interface{}) (bool, error) {
+	return WithCtx(ctx).DeleteByID(table, id)
+}
+
+// FindByIDCtx finds a row by table and ID using the connection carried by ctx.
+func FindByIDCtx(ctx context.Context, table string, id interface{}) (*Row, error) {
+	return WithCtx(ctx).FindByID(table, id)
+}
+
+// FindByCtx finds rows by condition using the connection carried by ctx.
+func FindByCtx(ctx context.Context, table, whereOrField string, args ...interface{}) ([]*Row, error) {
+	return WithCtx(ctx).FindBy(table, whereOrField, args...)
 }
