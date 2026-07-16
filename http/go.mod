@@ -2,6 +2,6 @@ module github.com/crazy-airhead/aifei-go/http
 
 go 1.26
 
-require github.com/crazy-airhead/aifei-go/aifei v0.0.32
+require github.com/crazy-airhead/aifei-go/aifei v0.0.33
 
 replace github.com/crazy-airhead/aifei-go/aifei => ../aifei
