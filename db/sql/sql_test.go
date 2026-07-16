@@ -97,6 +97,36 @@ func TestWhereAnd(t *testing.T) {
 	}
 }
 
+func TestWhereOr(t *testing.T) {
+	sk := NewSqlKit("test_where_or")
+
+	sql := "select * from user #where(age, '>', age) #or(status, 'in', status)"
+	filter := map[string]interface{}{"age": 18, "status": []string{"active", "pending"}}
+	sp := sk.GetSqlPara(sql, filter)
+
+	if !strings.Contains(sp.Sql, "WHERE age > ? OR status IN (?, ?)") {
+		t.Fatalf("expected 'WHERE age > ? OR status IN (?, ?)', got: %s", sp.Sql)
+	}
+	if len(sp.Paras) != 3 {
+		t.Fatalf("expected 3 params, got: %d", len(sp.Paras))
+	}
+}
+
+func TestWhereAndOrMixed(t *testing.T) {
+	sk := NewSqlKit("test_where_and_or")
+
+	sql := "select * from user #where(age, '>', age) #and(name, 'like', name) #or(status, '=', status)"
+	filter := map[string]interface{}{"age": 18, "name": "test", "status": "active"}
+	sp := sk.GetSqlPara(sql, filter)
+
+	if !strings.Contains(sp.Sql, "WHERE age > ? AND name LIKE ? OR status = ?") {
+		t.Fatalf("expected 'WHERE age > ? AND name LIKE ? OR status = ?', got: %s", sp.Sql)
+	}
+	if len(sp.Paras) != 3 {
+		t.Fatalf("expected 3 params, got: %d", len(sp.Paras))
+	}
+}
+
 func TestWhereIn(t *testing.T) {
 	sk := NewSqlKit("test_where_in")
 

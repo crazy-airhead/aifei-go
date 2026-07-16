@@ -10,15 +10,21 @@ import (
 // FirstConditionKey is the scope key for tracking first condition generation.
 const FirstConditionKey = "_FIRST_CONDITION_"
 
-// SqlCondition encapsulates #where / #and directive parameter parsing and generation.
+// SqlCondition encapsulates #where / #and / #or directive parameter parsing and generation.
 type SqlCondition struct {
-	field    string
-	operator *SqlOperator
-	para     enjoy.Expr
+	field       string
+	operator    *SqlOperator
+	para        enjoy.Expr
+	conjunction string // "AND" or "OR"
 }
 
 // NewSqlCondition parses the directive parameters.
 func NewSqlCondition(exprList *enjoy.ExprList, directive string) (*SqlCondition, error) {
+	return NewSqlConditionWithConjunction(exprList, directive, "AND")
+}
+
+// NewSqlConditionWithConjunction parses the directive parameters with a custom conjunction.
+func NewSqlConditionWithConjunction(exprList *enjoy.ExprList, directive string, conjunction string) (*SqlCondition, error) {
 	length := exprList.Length()
 	if length < 2 || length > 3 {
 		return nil, fmt.Errorf("%s requires 2 to 3 arguments, got %d", directive, length)
@@ -56,14 +62,14 @@ func NewSqlCondition(exprList *enjoy.ExprList, directive string) (*SqlCondition,
 		if paraCount != 0 {
 			return nil, fmt.Errorf("%s requires 0 arguments, got %d", operator.SQL(), paraCount)
 		}
-		return &SqlCondition{field: field, operator: operator}, nil
+		return &SqlCondition{field: field, operator: operator, conjunction: conjunction}, nil
 	}
 
 	// Non-zero-para operators
 	if paraCount != 1 {
 		return nil, fmt.Errorf("%s requires 1 argument, got %d", operator.SQL(), paraCount)
 	}
-	return &SqlCondition{field: field, operator: operator, para: exprList.GetExpr(2)}, nil
+	return &SqlCondition{field: field, operator: operator, para: exprList.GetExpr(2), conjunction: conjunction}, nil
 }
 
 // Generate evaluates the condition and writes SQL to the writer.
@@ -107,7 +113,8 @@ func (c *SqlCondition) writeConditionHead(writer *enjoy.IOAdapter, firstConditio
 		*firstCondition = false
 		writer.WriteString("WHERE ")
 	} else {
-		writer.WriteString("AND ")
+		writer.WriteString(c.conjunction)
+		writer.WriteString(" ")
 	}
 	writer.WriteString(c.field)
 	writer.WriteString(" ")

@@ -20,6 +20,7 @@ func NewSqlKit(name string) *SqlKit {
 	engine.AddDirective("sql", func() enjoy.Directive { return &SqlDirective{} })
 	engine.AddDirective("where", func() enjoy.Directive { return &WhereDirective{} })
 	engine.AddDirective("and", func() enjoy.Directive { return &AndDirective{} })
+	engine.AddDirective("or", func() enjoy.Directive { return &OrDirective{} })
 	engine.AddDirective("orderBy", func() enjoy.Directive { return &OrderByDirective{} })
 	engine.AddDirective("para", func() enjoy.Directive { return &ParaDirective{} })
 	engine.AddDirective("p", func() enjoy.Directive { return &ParaDirective{} })
