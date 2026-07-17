@@ -39,7 +39,7 @@
 |------|------|------|----------|------|
 | 0001 | db 事务回调内 SQL 各自独立提交（不在同一事务） | 🟢 | db | [0001-db-事务不传播](0001-db-事务不传播.md) |
 | 0002 | enjoy 算术 `+` 不支持字符串拼接、数值降级 float64 | 🟢 | enjoy | [0002-enjoy-算术加号降级float64](0002-enjoy-算术加号降级float64.md) |
-| 0003 | enjoy `#returnIf` 被当成无条件 return | 🔴 | enjoy | [0003-enjoy-returnIf语义错误](0003-enjoy-returnIf语义错误.md) |
+| 0003 | enjoy `#returnIf` 被当成无条件 return | 🟢 | enjoy | [0003-enjoy-returnIf语义错误](0003-enjoy-returnIf语义错误.md) |
 | 0004 | enjoy `#for` 无法迭代 Map | 🔴 | enjoy | [0004-enjoy-for无法迭代map](0004-enjoy-for无法迭代map.md) |
 | 0005 | enjoy `sharedObjectMap` 为死代码 | 🔴 | enjoy | [0005-enjoy-sharedObjectMap死代码](0005-enjoy-sharedObjectMap死代码.md) |
 | 0006 | db `Row.Keep()` 未清理 change 集合 | 🔴 | db | [0006-db-Row-Keep未清理change](0006-db-Row-Keep未清理change.md) |

@@ -1,6 +1,6 @@
 # ISSUE-0003 — enjoy `#returnIf` 被当成无条件 return
 
-> **编号**：0003　**状态**：🔴 未处理　**严重程度**：⚠️ 一般
+> **编号**：0003　**状态**：🟢 已处理　**严重程度**：⚠️ 一般
 > **发现日期**：2026-07-16　**相关任务**：enjoy 模块（对照 `docs/java-go-comparison.md` §3.1 Bug #2）
 
 ## 问题描述
@@ -35,7 +35,20 @@
 
 ## 解决记录
 
-- 修复提交 / PR：
+- 修复提交 / PR：（待提交）
 - 改动：
-- 校验：`go build ./...` / `go vet ./...` 改动文件 0 新错
+  - `enjoy/stat_parser.go`：
+    - 新增 `ReturnIfStat{Cond Expr}` 类型，`Exec` 中仅当 `isTruthy(Cond.Eval(scope, ctrl))` 为真才置 `ctrl.Return = true`（对照 Java `ReturnIf.java`：expr 作为「返回条件」，不写入 `ctrl.Attachment`）
+    - `parseOneStat` 拆分 `TokReturn` / `TokReturnIf` 分支，`TokReturnIf` 不再复用 `parseReturnStat`
+    - 新增 `parseReturnIfStat`：空参数报错（对照 Java `ReturnIf` 构造函数抛 `ParseException`），expr 作为条件而非返回值
+  - `enjoy/stat_parser_test.go`（新增）：条件真/假两类返回行为、后续 `#(expr)` 跳过、空参数报错
+- 校验：`go build ./enjoy` / `go vet ./enjoy` 0 新错；`go test ./enjoy ./_example/enjoy_test` 全绿（含新增 `TestReturnIfConditional` / `TestReturnIfSkipsFollowing` / `TestReturnIfEmptyParam`）
 - 验收：
+  - `#returnIf(count > 0)` + `count=0` → 继续渲染后续（非恒返回）✓
+  - `#returnIf(count > 0)` + `count=3` → 提前返回 ✓
+  - `A#returnIf(ok)B#(value)C` + `ok=true` → 仅输出 `A`（后续 `#(value)` 不渲染）✓
+  - `#returnIf()` 空参数 → 解析报错 ✓
+
+### 备注
+
+- Go 版 `#return`（`ReturnStat`）支持返回值（写入 `ctrl.Attachment`），与 Java `Return.java`「不支持返回值」不同；该差异不在本 issue 范围，未改动，仅修正 `#returnIf` 的条件语义。

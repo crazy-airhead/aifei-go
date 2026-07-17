@@ -210,6 +210,19 @@ func (s *ReturnStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl)
 	ctrl.Return = true
 }
 
+// ReturnIfStat represents #returnIf(cond): returns from the current
+// template / define only when cond evaluates to true (对照 Java ReturnIf.java)。
+// cond 是「返回条件」而非返回值，且不写入 ctrl.Attachment。
+type ReturnIfStat struct {
+	Cond Expr
+}
+
+func (s *ReturnIfStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	if s.Cond != nil && isTruthy(s.Cond.Eval(scope, ctrl)) {
+		ctrl.Return = true
+	}
+}
+
 // NullStat is an empty statement.
 type NullStat struct{}
 
@@ -368,8 +381,10 @@ func parseOneStat(tok Token, lexer *Lexer, env *Env) (Stat, error) {
 		return parseSwitchStat(tok.Val, lexer, env)
 	case TokCase, TokDefault:
 		return nil, nil
-	case TokReturn, TokReturnIf:
+	case TokReturn:
 		return parseReturnStat(tok.Val)
+	case TokReturnIf:
+		return parseReturnIfStat(tok.Val)
 	case TokID:
 		return parseDirectiveStat(tok, lexer, env)
 	default:
@@ -687,6 +702,20 @@ func parseReturnStat(val string) (Stat, error) {
 		return nil, err
 	}
 	return &ReturnStat{Expr: ex}, nil
+}
+
+// parseReturnIfStat parses #returnIf(cond): cond is the return condition
+// (对照 Java ReturnIf.java，空参数报错，expr 作为条件而非返回值)。
+func parseReturnIfStat(val string) (Stat, error) {
+	val = strings.TrimSpace(val)
+	if val == "" {
+		return nil, fmt.Errorf("the parameter of #returnIf directive can not be blank")
+	}
+	ex, err := ParseExpr(val)
+	if err != nil {
+		return nil, err
+	}
+	return &ReturnIfStat{Cond: ex}, nil
 }
 
 func parseIncludeStat(para string, env *Env) (Stat, error) {
