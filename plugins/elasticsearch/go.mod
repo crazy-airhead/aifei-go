@@ -3,9 +3,9 @@ module github.com/crazy-airhead/aifei-go/plugins/elasticsearch
 go 1.26
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v0.0.34
-	github.com/crazy-airhead/aifei-go/config v0.0.34
-	github.com/crazy-airhead/aifei-go/log v0.0.34
+	github.com/crazy-airhead/aifei-go/aifei v0.0.35
+	github.com/crazy-airhead/aifei-go/config v0.0.35
+	github.com/crazy-airhead/aifei-go/log v0.0.35
 	github.com/elastic/go-elasticsearch/v8 v8.18.0
 )
 
