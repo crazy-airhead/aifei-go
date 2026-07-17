@@ -39,29 +39,33 @@ type ArithExpr struct {
 
 func (e *ArithExpr) Eval(scope *Scope, ctrl *Ctrl) interface{} {
 	if e.Op == "neg" {
-		return -toFloat64(e.Left.Eval(scope, ctrl))
+		return negateNum(e.Left.Eval(scope, ctrl))
 	}
-	l := toFloat64(e.Left.Eval(scope, ctrl))
-	r := toFloat64(e.Right.Eval(scope, ctrl))
-	switch e.Op {
-	case "+":
-		return l + r
-	case "-":
-		return l - r
-	case "*":
-		return l * r
-	case "/":
-		if r == 0 {
-			return float64(0)
+	l := e.Left.Eval(scope, ctrl)
+	r := e.Right.Eval(scope, ctrl)
+
+	// 字符串加法：任一侧为 String 时拼接（对照 Java Arith: String.valueOf(l).concat(String.valueOf(r))）
+	if e.Op == "+" {
+		if _, ok := l.(string); ok {
+			return toStr(l) + toStr(r)
 		}
-		return l / r
-	case "%":
-		if r == 0 {
-			return float64(0)
+		if _, ok := r.(string); ok {
+			return toStr(l) + toStr(r)
 		}
-		return math.Mod(l, r)
 	}
-	return float64(0)
+
+	// 数值运算：按类型分派，整数运算保留整型（对照 Java Arith: INT/LONG/FLOAT/DOUBLE）
+	lk, li, lf := numInfo(l)
+	rk, ri, rf := numInfo(r)
+	if lk != numNone && rk != numNone {
+		if lk == numFloat || rk == numFloat {
+			return arithFloat(e.Op, lf, rf)
+		}
+		return arithInt(e.Op, li, ri)
+	}
+
+	// 兜底：宽松降级为 float64 运算（Go 版本不抛异常，保持与历史行为一致）
+	return arithFloat(e.Op, toFloat64(l), toFloat64(r))
 }
 
 // CompareExpr is a comparison expression.
@@ -424,6 +428,116 @@ func stringMethod(s string, name string, args []interface{}) interface{} {
 		return s == ""
 	}
 	return nil
+}
+
+// 数值种类：整数 / 浮点 / 非数值。
+const (
+	numNone = iota
+	numInt
+	numFloat
+)
+
+// numInfo 返回 v 的数值种类及其 int64/float64 表示。非数值返回 numNone。
+func numInfo(v interface{}) (kind int, i int64, f float64) {
+	if v == nil {
+		return numNone, 0, 0
+	}
+	switch n := v.(type) {
+	case int:
+		return numInt, int64(n), float64(n)
+	case int8:
+		return numInt, int64(n), float64(n)
+	case int16:
+		return numInt, int64(n), float64(n)
+	case int32:
+		return numInt, int64(n), float64(n)
+	case int64:
+		return numInt, n, float64(n)
+	case uint:
+		return numInt, int64(n), float64(n)
+	case uint8:
+		return numInt, int64(n), float64(n)
+	case uint16:
+		return numInt, int64(n), float64(n)
+	case uint32:
+		return numInt, int64(n), float64(n)
+	case uint64:
+		return numInt, int64(n), float64(n)
+	case float32:
+		return numFloat, int64(n), float64(n)
+	case float64:
+		return numFloat, int64(n), n
+	}
+	return numNone, 0, 0
+}
+
+// arithInt 对两个 int64 做整数运算，除零返回 0（对照 Java Arith 整型分支）。
+func arithInt(op string, l, r int64) interface{} {
+	switch op {
+	case "+":
+		return l + r
+	case "-":
+		return l - r
+	case "*":
+		return l * r
+	case "/":
+		if r == 0 {
+			return int64(0)
+		}
+		return l / r
+	case "%":
+		if r == 0 {
+			return int64(0)
+		}
+		return l % r
+	}
+	return int64(0)
+}
+
+// arithFloat 对两个 float64 做浮点运算，除零返回 0（对照 Java Arith 浮点分支）。
+func arithFloat(op string, l, r float64) interface{} {
+	switch op {
+	case "+":
+		return l + r
+	case "-":
+		return l - r
+	case "*":
+		return l * r
+	case "/":
+		if r == 0 {
+			return float64(0)
+		}
+		return l / r
+	case "%":
+		if r == 0 {
+			return float64(0)
+		}
+		return math.Mod(l, r)
+	}
+	return float64(0)
+}
+
+// negateNum 取负，保留原数值种类（整数保持整型）。
+func negateNum(v interface{}) interface{} {
+	k, i, f := numInfo(v)
+	if k == numInt {
+		return -i
+	}
+	if k == numFloat {
+		return -f
+	}
+	return -toFloat64(v)
+}
+
+// toStr 将任意值转为字符串用于拼接；nil 转空串，避免输出 "<nil>"。
+func toStr(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fmt.Sprintf("%v", v)
 }
 
 func toFloat64(v interface{}) float64 {
