@@ -623,17 +623,43 @@ func valEquals(a, b interface{}) bool {
 	return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b)
 }
 
+// forEntry 封装 map 迭代产生的 key/value 项，模板中通过 entry.key / entry.value 取值
+// （对照 Java ForEntry.getKey()/getValue()）。用 map 而非 struct，是因为 FieldExpr 的
+// getField 只识别 map key 与（导出）struct 字段，无法回退到 getter 方法。
+func forEntry(k, v interface{}) map[string]interface{} {
+	return map[string]interface{}{"key": k, "value": v}
+}
+
+// toSlice 将迭代源规整为 []interface{}，支持 slice/array/map 与指针解引用；
+// 非集合单对象自动包成单元素列表（对照 Java ForIteratorStatus.init）。
+// map 转为 key/value entry 列表，使 #for(entry : myMap) 可遍历 #(entry.key)/#(entry.value)。
 func toSlice(v interface{}) []interface{} {
 	if v == nil {
 		return nil
 	}
 	rv := reflect.ValueOf(v)
-	if rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array {
-		return []interface{}{v}
+	// 解引用指针（含 ptr-to-slice / ptr-to-array / ptr-to-map）
+	for rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return nil
+		}
+		rv = rv.Elem()
 	}
-	result := make([]interface{}, rv.Len())
-	for i := 0; i < rv.Len(); i++ {
-		result[i] = rv.Index(i).Interface()
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+		result := make([]interface{}, rv.Len())
+		for i := 0; i < rv.Len(); i++ {
+			result[i] = rv.Index(i).Interface()
+		}
+		return result
+	case reflect.Map:
+		result := make([]interface{}, 0, rv.Len())
+		iter := rv.MapRange()
+		for iter.Next() {
+			result = append(result, forEntry(iter.Key().Interface(), iter.Value().Interface()))
+		}
+		return result
 	}
-	return result
+	// 非集合单对象自动包成单元素列表（对照 Java SingleObjectIterator）
+	return []interface{}{v}
 }

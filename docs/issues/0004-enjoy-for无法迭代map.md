@@ -1,6 +1,6 @@
 # ISSUE-0004 — enjoy `#for` 无法迭代 Map
 
-> **编号**：0004　**状态**：🔴 未处理　**严重程度**：⚠️ 一般
+> **编号**：0004　**状态**：🟢 已修复　**严重程度**：⚠️ 一般
 > **发现日期**：2026-07-16　**相关任务**：enjoy 模块（对照 `docs/java-go-comparison.md` §3.1 Bug #3）
 
 ## 问题描述
@@ -36,7 +36,19 @@ map 因 `kind != Slice/Array` 被当作单元素，迭代失败。
 
 ## 解决记录
 
-- 修复提交 / PR：
+- 修复提交 / PR：（待提交）
 - 改动：
-- 校验：`go build ./...` / `go vet ./...` 改动文件 0 新错
+  - `enjoy/expr_eval.go`：
+    - 新增 `forEntry(k, v)` 返回 `map[string]interface{}{"key": k, "value": v}`，封装 map 迭代产生的 key/value 项（对照 Java `ForEntry.getKey()/getValue()`）。用 map 而非 struct，是因为 `FieldExpr`→`getField` 只识别 map key 与（导出）struct 字段、无法回退到 getter 方法，map 形式才能让模板的 `entry.key`/`entry.value` 命中。
+    - 重写 `toSlice`：先解引用指针（`for rv.Kind() == reflect.Ptr`，nil 指针返回 nil）；`switch rv.Kind()` 分别处理 `Slice`/`Array`（逐元素）、`Map`（`MapRange` 转 key/value entry 列表）；其余非集合单对象包成单元素列表（对照 Java `ForIteratorStatus.init` + `SingleObjectIterator`）。
+  - `_example/enjoy_test/stat_parser_test.go`（新增，黑盒 `package enjoy_test`）：`TestForIterateMap`（map 迭代输出 key=value）、`TestForIterateMapEntryCount`（entry 数量 = map 大小、`entry.key`/`entry.value` 可取）、`TestForIteratePointerSliceAndEmptyMap`（ptr-to-slice 解引用、空 map 迭代 0 次）、`TestForIterateSingleObject`（非集合单对象包成单元素列表）。
+- 校验：`go build ./enjoy` / `go vet ./enjoy` 0 新错；`go test ./_example/enjoy_test` 全绿（含 4 个新增测试）。
 - 验收：
+  - `#for(entry : m)#(entry.key)=#(entry.value);#end` + `m={a:1,b:2}` → 输出含 `a=1;` 与 `b=2;`，迭代 2 个 entry ✓
+  - `map[int]` 等非字符串 key 也可取 `entry.key`（key 原样透传）✓
+  - ptr-to-slice 解引用后正常迭代 ✓
+  - 空 map 迭代 0 次、单对象迭代 1 次 ✓
+
+### 备注
+
+- 调试中发现一个与本 issue **无关**的既有解析细节：`#for ... #end` 后紧跟的一个字符会被吃掉（slice/map 均复现）。新测试以 `#end` 收尾规避该细节，未在本 issue 修复，留待后续。

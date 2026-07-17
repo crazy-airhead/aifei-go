@@ -1,13 +1,17 @@
-package enjoy
+package enjoy_test
 
-import "testing"
+import (
+	"testing"
 
-func intLit(v int64) *ConstExpr     { return &ConstExpr{Type: "int", Value: v} }
-func floatLit(v float64) *ConstExpr { return &ConstExpr{Type: "float", Value: v} }
-func strLit(v string) *ConstExpr    { return &ConstExpr{Type: "string", Value: v} }
+	"github.com/crazy-airhead/aifei-go/enjoy"
+)
 
-func evalExpr(e Expr) interface{} {
-	return e.Eval(NewScope(nil), NewCtrl())
+func intLit(v int64) *enjoy.ConstExpr     { return &enjoy.ConstExpr{Type: "int", Value: v} }
+func floatLit(v float64) *enjoy.ConstExpr { return &enjoy.ConstExpr{Type: "float", Value: v} }
+func strLit(v string) *enjoy.ConstExpr    { return &enjoy.ConstExpr{Type: "string", Value: v} }
+
+func evalExpr(e enjoy.Expr) interface{} {
+	return e.Eval(enjoy.NewScope(nil), enjoy.NewCtrl())
 }
 
 // 整数运算保留整型（对照 Java Arith: int+int→int）。
@@ -24,7 +28,7 @@ func TestArithIntPreserved(t *testing.T) {
 		{"%", 7, 3, 1},
 	}
 	for _, c := range cases {
-		got := evalExpr(&ArithExpr{Op: c.op, Left: intLit(c.l), Right: intLit(c.r)})
+		got := evalExpr(&enjoy.ArithExpr{Op: c.op, Left: intLit(c.l), Right: intLit(c.r)})
 		if got != c.want {
 			t.Errorf("%d %s %d = %v (%T), want %d", c.l, c.op, c.r, got, got, c.want)
 		}
@@ -36,7 +40,7 @@ func TestArithIntPreserved(t *testing.T) {
 
 // 任一侧为浮点 → 提升为 float64。
 func TestArithFloatPromotion(t *testing.T) {
-	got := evalExpr(&ArithExpr{Op: "+", Left: intLit(1), Right: floatLit(1.5)})
+	got := evalExpr(&enjoy.ArithExpr{Op: "+", Left: intLit(1), Right: floatLit(1.5)})
 	if got != 2.5 {
 		t.Errorf("1 + 1.5 = %v, want 2.5", got)
 	}
@@ -44,7 +48,7 @@ func TestArithFloatPromotion(t *testing.T) {
 		t.Errorf("1 + 1.5 返回类型 %T, 应为 float64", got)
 	}
 
-	got = evalExpr(&ArithExpr{Op: "/", Left: floatLit(10), Right: intLit(3)})
+	got = evalExpr(&enjoy.ArithExpr{Op: "/", Left: floatLit(10), Right: intLit(3)})
 	if got != 10.0/3.0 {
 		t.Errorf("10.0 / 3 = %v, want %v", got, 10.0/3.0)
 	}
@@ -54,14 +58,14 @@ func TestArithFloatPromotion(t *testing.T) {
 func TestArithStringConcat(t *testing.T) {
 	cases := []struct {
 		name string
-		expr Expr
+		expr enjoy.Expr
 		want string
 	}{
-		{"str+str", &ArithExpr{Op: "+", Left: strLit("a"), Right: strLit("b")}, "ab"},
-		{"str+int", &ArithExpr{Op: "+", Left: strLit("v"), Right: intLit(1)}, "v1"},
-		{"int+str", &ArithExpr{Op: "+", Left: intLit(1), Right: strLit("v")}, "1v"},
-		{"str+float", &ArithExpr{Op: "+", Left: strLit("x"), Right: floatLit(1.5)}, "x1.5"},
-		{"str+nil", &ArithExpr{Op: "+", Left: strLit("n"), Right: &ConstExpr{Type: "null"}}, "n"},
+		{"str+str", &enjoy.ArithExpr{Op: "+", Left: strLit("a"), Right: strLit("b")}, "ab"},
+		{"str+int", &enjoy.ArithExpr{Op: "+", Left: strLit("v"), Right: intLit(1)}, "v1"},
+		{"int+str", &enjoy.ArithExpr{Op: "+", Left: intLit(1), Right: strLit("v")}, "1v"},
+		{"str+float", &enjoy.ArithExpr{Op: "+", Left: strLit("x"), Right: floatLit(1.5)}, "x1.5"},
+		{"str+nil", &enjoy.ArithExpr{Op: "+", Left: strLit("n"), Right: &enjoy.ConstExpr{Type: "null"}}, "n"},
 	}
 	for _, c := range cases {
 		got := evalExpr(c.expr)
@@ -73,7 +77,7 @@ func TestArithStringConcat(t *testing.T) {
 
 // 负号保留整型。
 func TestArithNeg(t *testing.T) {
-	got := evalExpr(&ArithExpr{Op: "neg", Left: intLit(3)})
+	got := evalExpr(&enjoy.ArithExpr{Op: "neg", Left: intLit(3)})
 	if got != int64(-3) {
 		t.Errorf("-(3) = %v (%T), want -3 (int64)", got, got)
 	}
@@ -81,17 +85,17 @@ func TestArithNeg(t *testing.T) {
 
 // 除零返回 0 而非 panic。
 func TestArithDivZero(t *testing.T) {
-	if got := evalExpr(&ArithExpr{Op: "/", Left: intLit(5), Right: intLit(0)}); got != int64(0) {
+	if got := evalExpr(&enjoy.ArithExpr{Op: "/", Left: intLit(5), Right: intLit(0)}); got != int64(0) {
 		t.Errorf("5 / 0 = %v, want 0", got)
 	}
-	if got := evalExpr(&ArithExpr{Op: "/", Left: floatLit(5), Right: floatLit(0)}); got != float64(0) {
+	if got := evalExpr(&enjoy.ArithExpr{Op: "/", Left: floatLit(5), Right: floatLit(0)}); got != float64(0) {
 		t.Errorf("5.0 / 0 = %v, want 0", got)
 	}
 }
 
 // ISSUE-0002 端到端：模板渲染的三个复现场景。
 func TestArithIssue0002(t *testing.T) {
-	engine := NewEngine("issue0002")
+	engine := enjoy.NewEngine("issue0002")
 	cases := []struct {
 		tpl  string
 		want string
