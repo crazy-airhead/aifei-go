@@ -229,10 +229,19 @@ func (c *HttpContext) GetBool(key string, def ...bool) bool {
 
 // GetBean binds request parameters to obj. It reads from the request body
 // (form-encoded or raw JSON), falling back to query parameters when the body is
-// empty. All three sources go through the same JSON unmarshal path so callers
-// can pass id via query, form, or JSON body transparently.
+// empty, so callers can pass id via query, form, or JSON body transparently.
 //
-// With no keys the entire parameter set is used; each key walks one level deeper:
+// JSON bodies go through encoding/json directly. Form/query sources are
+// string-typed, which encoding/json cannot coerce into numeric/bool fields
+// (a "48" form value would fail to unmarshal into an int64). So for plain struct
+// targets GetBean binds field-by-field with per-field type coercion — the same
+// strconv path the typed getters use. A numeric-looking value still binds as a
+// string into a string field. Targets implementing json.Unmarshaler (e.g.
+// *db.Row-backed models) keep using the JSON path, where their custom unmarshaler
+// accepts strings natively.
+//
+// With no keys the entire parameter set is used; each key walks one level deeper
+// (JSON path only — form/query are flat):
 //
 //	GetBean(&user)                  → whole body
 //	GetBean(&user, "data")          → body["data"]
@@ -243,40 +252,17 @@ func (c *HttpContext) GetBean(obj interface{}, keys ...string) error {
 		return err
 	}
 
-	var data []byte
-	switch bt {
-	case bodyForm:
-		if c.Request.Form != nil && len(c.Request.Form) > 0 {
-			formMap := make(map[string]interface{}, len(c.Request.Form))
-			for key, values := range c.Request.Form {
-				if len(values) > 0 {
-					formMap[key] = values[0]
-				}
-			}
-			data, err = json.Marshal(formMap)
-			if err != nil {
-				return err
-			}
-		}
-	case bodyJSON:
-		data = c.Body()
-	case bodyNone:
-		query := c.Request.URL.Query()
-		if len(query) > 0 {
-			queryMap := make(map[string]interface{}, len(query))
-			for key, values := range query {
-				if len(values) > 0 {
-					queryMap[key] = values[0]
-				}
-			}
-			data, err = json.Marshal(queryMap)
-			if err != nil {
-				return err
-			}
+	// Form/query are string-typed: bind plain structs field-by-field with type
+	// coercion. Non-struct targets and custom unmarshalers fall through to the
+	// JSON path below.
+	if (bt == bodyForm || bt == bodyNone) && len(keys) == 0 {
+		if handled, err := c.bindFormStruct(obj); handled {
+			return err
 		}
 	}
 
-	if len(data) == 0 {
+	data := c.marshalBody(bt)
+	if data == nil || len(data) == 0 {
 		return io.EOF
 	}
 
@@ -294,6 +280,170 @@ func (c *HttpContext) GetBean(obj interface{}, keys ...string) error {
 
 	initEmbeddedPointers(reflect.ValueOf(obj))
 	return json.Unmarshal(data, obj)
+}
+
+// jsonUnmarshalerType is the reflect.Type for json.Unmarshaler, used to detect
+// targets (like *db.Row-backed models) that own their JSON/string parsing.
+var jsonUnmarshalerType = reflect.TypeOf((*json.Unmarshaler)(nil)).Elem()
+
+// bindFormStruct binds form/query parameters to a plain struct obj using
+// per-field type coercion. It reports handled=true when obj is a non-nil pointer
+// to a struct that does not implement json.Unmarshaler — the case the JSON path
+// can't handle for string-typed sources. For Row-backed models, slices, maps,
+// scalars, or custom unmarshalers it reports handled=false so GetBean falls back
+// to the JSON path, where the custom UnmarshalJSON accepts strings natively.
+func (c *HttpContext) bindFormStruct(obj interface{}) (handled bool, err error) {
+	rv := reflect.ValueOf(obj)
+	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+		return false, nil
+	}
+	if rv.Type().Implements(jsonUnmarshalerType) {
+		return false, nil
+	}
+	elem := rv.Elem()
+	if elem.Kind() != reflect.Struct {
+		return false, nil // slice/map/scalar → JSON path
+	}
+
+	params := c.formValues()
+	if len(params) == 0 {
+		return true, io.EOF
+	}
+	initEmbeddedPointers(rv)
+	bindStructFields(elem, params)
+	return true, nil
+}
+
+// formValues merges form and query parameters. Query overrides form on key
+// conflicts, matching getVal's precedence (query is consulted first).
+func (c *HttpContext) formValues() url.Values {
+	out := make(url.Values, len(c.Request.Form)+len(c.Request.URL.Query()))
+	for k, vs := range c.Request.Form {
+		if len(vs) > 0 {
+			out[k] = append(out[k], vs...)
+		}
+	}
+	for k, vs := range c.Request.URL.Query() {
+		if len(vs) > 0 {
+			out[k] = vs // query wins
+		}
+	}
+	return out
+}
+
+// bindStructFields walks rv's exported fields and assigns coerced values from
+// params by JSON tag, recursing into embedded/anonymous structs.
+func bindStructFields(rv reflect.Value, params url.Values) {
+	rt := rv.Type()
+	for i := 0; i < rt.NumField(); i++ {
+		f := rt.Field(i)
+		if !f.IsExported() {
+			continue
+		}
+		fv := rv.Field(i)
+		if f.Anonymous {
+			if fv.Kind() == reflect.Ptr {
+				if fv.IsNil() {
+					continue
+				}
+				fv = fv.Elem()
+			}
+			if fv.Kind() == reflect.Struct {
+				bindStructFields(fv, params)
+			}
+			continue
+		}
+		name := jsonFieldName(f)
+		if name == "-" {
+			continue
+		}
+		if name == "" {
+			name = f.Name
+		}
+		values, ok := params[name]
+		if !ok || len(values) == 0 {
+			continue
+		}
+		setField(fv, values)
+	}
+}
+
+// setField assigns coerced string value(s) to a struct field. Slices consume all
+// values; scalars consume the first (dereferencing an initialized pointer).
+func setField(fv reflect.Value, values []string) {
+	if fv.Kind() == reflect.Slice {
+		elem := fv.Type().Elem()
+		slice := reflect.MakeSlice(fv.Type(), 0, len(values))
+		for _, v := range values {
+			if cv, ok := coerceString(elem, v); ok {
+				slice = reflect.Append(slice, cv)
+			}
+		}
+		fv.Set(slice)
+		return
+	}
+	for fv.Kind() == reflect.Ptr {
+		if fv.IsNil() {
+			fv.Set(reflect.New(fv.Type().Elem()))
+		}
+		fv = fv.Elem()
+	}
+	if cv, ok := coerceString(fv.Type(), values[0]); ok {
+		fv.Set(cv)
+	}
+}
+
+// coerceString converts a form/query string to a reflect.Value of type t,
+// reporting whether the coercion is valid for t's kind. Numeric-looking strings
+// are NOT coerced for string kinds, so a value like "007" stays a string.
+func coerceString(t reflect.Type, s string) (reflect.Value, bool) {
+	switch t.Kind() {
+	case reflect.String:
+		return reflect.ValueOf(s).Convert(t), true
+	case reflect.Bool:
+		switch s {
+		case "true", "True", "TRUE", "1":
+			return reflect.ValueOf(true).Convert(t), true
+		case "false", "False", "FALSE", "0":
+			return reflect.ValueOf(false).Convert(t), true
+		}
+		return reflect.Value{}, false
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		n, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return reflect.Value{}, false
+		}
+		return reflect.ValueOf(n).Convert(t), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		n, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			return reflect.Value{}, false
+		}
+		return reflect.ValueOf(n).Convert(t), true
+	case reflect.Float32, reflect.Float64:
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return reflect.Value{}, false
+		}
+		return reflect.ValueOf(f).Convert(t), true
+	case reflect.Interface:
+		return reflect.ValueOf(s), true
+	}
+	return reflect.Value{}, false
+}
+
+// jsonFieldName extracts the name from a struct field's `json` tag. It returns
+// "" when the tag is absent or has no name (caller falls back to the field
+// name), and "-" to skip the field.
+func jsonFieldName(f reflect.StructField) string {
+	tag := f.Tag.Get("json")
+	if tag == "" {
+		return ""
+	}
+	if comma := strings.IndexByte(tag, ','); comma >= 0 {
+		tag = tag[:comma]
+	}
+	return tag
 }
 
 func (c *HttpContext) Body() []byte {
@@ -384,6 +534,40 @@ func (c *HttpContext) getVal(key string) string {
 		}
 	}
 	return ""
+}
+
+// marshalBody converts the request body (form/query/raw JSON) to JSON bytes.
+// For bodyForm and bodyNone it serializes the parameter map to JSON; for
+// bodyJSON it returns the raw body directly. Returns nil for empty bodies.
+func (c *HttpContext) marshalBody(bt bodyType) []byte {
+	switch bt {
+	case bodyForm:
+		if c.Request.Form != nil && len(c.Request.Form) > 0 {
+			formMap := make(map[string]interface{}, len(c.Request.Form))
+			for key, values := range c.Request.Form {
+				if len(values) > 0 {
+					formMap[key] = values[0]
+				}
+			}
+			data, _ := json.Marshal(formMap) // error is impossible for map[string]interface{}
+			return data
+		}
+	case bodyJSON:
+		return c.Body()
+	case bodyNone:
+		query := c.Request.URL.Query()
+		if len(query) > 0 {
+			queryMap := make(map[string]interface{}, len(query))
+			for key, values := range query {
+				if len(values) > 0 {
+					queryMap[key] = values[0]
+				}
+			}
+			data, _ := json.Marshal(queryMap)
+			return data
+		}
+	}
+	return nil
 }
 
 // ensureBody detects the request body type and parses form-encoded bodies.
