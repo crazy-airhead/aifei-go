@@ -23,21 +23,6 @@ func NewBaseGenerator() *BaseGenerator {
 	}
 }
 
-// FieldEntry holds pre-computed field data for the base template.
-type FieldEntry struct {
-	Name      string
-	AttrName  string
-	GoType    string
-	RowGetter string
-	ShortName string
-}
-
-// FieldTypeEntry holds a field-type pair for the Table.FieldTypes map.
-type FieldTypeEntry struct {
-	Name string
-	Zero string
-}
-
 // Generate generates base.go for a single table.
 func (g *BaseGenerator) Generate(engine *Engine, info *TableInfo, outputDir string) error {
 	data := g.buildData(info)
@@ -89,51 +74,48 @@ func (g *BaseGenerator) buildData(info *TableInfo) map[string]interface{} {
 	}
 	pkQuoted := strings.Join(pkParts, ", ")
 
-	// Build field type entries
-	var fieldTypes []FieldTypeEntry
+	// Build generated columns quoted
+	var generatedColumnsQuoted string
+	var generatedColumnNames []string
 	for _, f := range info.Fields {
-		fieldTypes = append(fieldTypes, FieldTypeEntry{
-			Name: f.Name,
-			Zero: util.ZeroValue(f.GoType),
-		})
+		if f.IsGenerated {
+			generatedColumnNames = append(generatedColumnNames, `"`+f.Name+`"`)
+		}
+	}
+	if len(generatedColumnNames) > 0 {
+		generatedColumnsQuoted = strings.Join(generatedColumnNames, ", ")
+	} else {
+		generatedColumnsQuoted = ""
 	}
 
-	// Build field data. JSON columns are skipped here: their getters/setters are
-	// generated into model.go instead, freeing the method name for a typed
-	// (struct) override. FieldTypes and the INSERT column list still include them.
-	var fields []FieldEntry
+	// Non-JSON fields drive the typed getters/setters; JSON columns are
+	// scaffolded in model.go, freeing the method name for a typed override.
+	// FieldTypes still includes them (info.Fields is passed through below).
+	var fields []*FieldInfo
 	for _, f := range info.Fields {
 		if f.IsJSON {
 			continue
 		}
-		shortName := f.AttrName
-		if IsGoKeyword(shortName) {
-			shortName += "_"
-		}
-		fields = append(fields, FieldEntry{
-			Name:      f.Name,
-			AttrName:  f.AttrName,
-			GoType:    f.GoType,
-			RowGetter: util.RowGetter(f.GoType),
-			ShortName: shortName,
-		})
+		fields = append(fields, f)
 	}
 
-	// Build short setter fields (empty slice when disabled)
-	var shortSetterFields []FieldEntry
+	// Short setter fields (nil when disabled)
+	var shortSetterFields []*FieldInfo
 	if g.GenerateShortSetter {
 		shortSetterFields = fields
 	}
 
 	return map[string]interface{}{
-		"pkgName":           info.PkgName,
-		"imports":           imports,
-		"tableName":         info.Name,
-		"fieldNamesStr":     fieldNamesStr,
-		"pkQuoted":          pkQuoted,
-		"fieldTypes":        fieldTypes,
-		"baseName":          info.BaseName,
-		"fields":            fields,
-		"shortSetterFields": shortSetterFields,
+		"pkgName":                info.PkgName,
+		"imports":                imports,
+		"tableName":              info.Name,
+		"tableComment":           info.Remarks,
+		"fieldNamesStr":          fieldNamesStr,
+		"pkQuoted":               pkQuoted,
+		"generatedColumnsQuoted": generatedColumnsQuoted,
+		"fieldTypes":             info.Fields,
+		"baseName":               info.BaseName,
+		"fields":                 fields,
+		"shortSetterFields":      shortSetterFields,
 	}
 }

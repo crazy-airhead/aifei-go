@@ -17,7 +17,7 @@ func execInsertRow(dao *Dao, row *Row) (*Row, error) {
 	dialect := config.Dialect
 	hk := config.GetDbHookKit()
 
-	fields := filterTableFields(row.table, row.FieldNames())
+	fields := filterWritableFields(row.table, row.FieldNames())
 	values := make([]interface{}, len(fields))
 	for i, f := range fields {
 		values[i] = normalizeSQLValue(row.data[f])
@@ -71,7 +71,7 @@ func execUpdateRow(dao *Dao, row *Row) (bool, error) {
 	dialect := config.Dialect
 	hk := config.GetDbHookKit()
 
-	changedFields := filterTableFields(row.table, row.ChangedFields())
+	changedFields := filterWritableFields(row.table, row.ChangedFields())
 	if len(changedFields) == 0 {
 		return false, nil
 	}

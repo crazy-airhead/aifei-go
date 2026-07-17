@@ -10,10 +10,14 @@ import (
 	"github.com/crazy-airhead/aifei-go/db"
 )
 
+#if (tableComment != "")
+// #(tableComment)
+#end
 var Table = &db.Table{
-	Name:        "#(tableName)",
-	Fields:      "#(fieldNamesStr)",
-	PrimaryKeys: []string{#(pkQuoted)},
+	Name:            "#(tableName)",
+	Fields:          "#(fieldNamesStr)",
+	PrimaryKeys:     []string{#(pkQuoted)},
+	GeneratedColumns: []string{#(generatedColumnsQuoted)},
 	FieldTypes: map[string]reflect.Type{
 #for (entry : fieldTypes)
 		"#(entry.Name)": reflect.TypeOf(#(entry.Zero)),
@@ -35,6 +39,9 @@ func NewWithRow(row *db.Row) *#(baseName) {
 
 ### --- Typed Getters ---
 #for (f : fields)
+#if (f.Remarks != "")
+// #(f.Remarks)
+#end
 func (r *#(baseName)) #(f.AttrName)() #(f.GoType) {
 	return r.#(f.RowGetter)("#(f.Name)")
 }

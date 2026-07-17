@@ -3,6 +3,9 @@
 
 package #(pkgName)
 
+#if (tableComment != "")
+// #(tableComment)
+#end
 // #(structName) is the data model for the #(tableName) table.
 type #(structName) struct {
 	*#(baseName)

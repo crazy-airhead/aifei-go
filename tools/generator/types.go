@@ -8,6 +8,13 @@ type FieldInfo struct {
 	Remarks         string // column comment
 	IsAutoIncrement bool   // whether the column is auto-increment
 	IsJSON          bool   // whether the column is a JSON/JSONB type
+	IsGenerated     bool   // whether the column is a generated/computed column
+
+	// Derived fields, filled by EnrichFields after metadata is read.
+	JSONName  string // json tag value, follows KeyFormat (camelCase by default)
+	RowGetter string // db.Row getter method, e.g. "GetInt"
+	Zero      string // zero-value expression, e.g. "int(0)"
+	ShortName string // AttrName + "_" when it collides with a Go keyword (for short setters)
 }
 
 // TableInfo holds metadata for a database table.

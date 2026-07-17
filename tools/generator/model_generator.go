@@ -51,20 +51,18 @@ func (g *ModelGenerator) Generate(engine *Engine, info *TableInfo, outputDir str
 // to a struct type by defining the type, registering it in Table.FieldTypes,
 // and editing the scaffolded methods (see the template comments).
 func (g *ModelGenerator) buildData(info *TableInfo) map[string]interface{} {
-	jsonFields := []FieldEntry{}
+	var jsonFields []*FieldInfo
 	for _, f := range info.Fields {
 		if f.IsJSON {
-			jsonFields = append(jsonFields, FieldEntry{
-				Name:     f.Name,
-				AttrName: f.AttrName,
-			})
+			jsonFields = append(jsonFields, f)
 		}
 	}
 	return map[string]interface{}{
-		"pkgName":    info.PkgName,
-		"tableName":  info.Name,
-		"structName": info.StructName,
-		"baseName":   info.BaseName,
-		"jsonFields": jsonFields,
+		"pkgName":      info.PkgName,
+		"tableName":    info.Name,
+		"tableComment": info.Remarks,
+		"structName":   info.StructName,
+		"baseName":     info.BaseName,
+		"jsonFields":   jsonFields,
 	}
 }

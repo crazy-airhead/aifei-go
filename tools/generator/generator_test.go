@@ -110,6 +110,7 @@ func TestTemplateRendering(t *testing.T) {
 	engine := NewEngine()
 
 	// Test base template
+	EnrichFields(info.Fields, &TemplateUtil{}, db.KeyFormatCamel)
 	baseData := baseGen.buildData(info)
 	content := engine.RenderTemplate(baseTemplateContent, baseData)
 	t.Logf("base.go content:\n%s", content)
@@ -241,7 +242,10 @@ func TestGenerator_Generate(t *testing.T) {
 	if !strings.Contains(string(loginlogBase), "type BaseLoginLog struct") {
 		t.Error("loginlog/base.go should contain BaseLoginLog struct")
 	}
-	if !strings.Contains(string(loginlogBase), "Name:        \"sys_login_log\"") {
+	// Verify the table name is the original (un-prefixed) one. We match the
+	// quoted value rather than exact column alignment, which shifts when new
+	// db.Table fields (e.g. GeneratedColumns) are added.
+	if !strings.Contains(string(loginlogBase), "\"sys_login_log\"") {
 		t.Error("loginlog/base.go should use original table name sys_login_log")
 	}
 
@@ -270,6 +274,8 @@ func TestJsonFieldGeneration(t *testing.T) {
 		},
 	}
 	engine := NewEngine()
+
+	EnrichFields(info.Fields, &TemplateUtil{}, db.KeyFormatCamel)
 
 	// base.go: JSON column getter/setter must be absent (moved to model.go).
 	baseContent := engine.RenderTemplate(baseTemplateContent, baseGen.buildData(info))
@@ -403,5 +409,77 @@ func TestWhitelistBlacklist(t *testing.T) {
 	}
 	if !reader2.shouldProcess("user") {
 		t.Error("user should be processed (not blacklisted)")
+	}
+}
+
+// fieldType finds the Go type of a column within a table read by MetaReader.
+func fieldType(infos []*TableInfo, table, column string) string {
+	for _, ti := range infos {
+		if ti.Name != table {
+			continue
+		}
+		for _, f := range ti.Fields {
+			if f.Name == column {
+				return f.GoType
+			}
+		}
+	}
+	return ""
+}
+
+func TestResolveNullable(t *testing.T) {
+	pool := setupTestDB(t) // user.email is a NULL-able TEXT column
+	defer pool.Close()
+
+	dialect := &SQLiteMetaDialect{}
+
+	// Default: plain Go types. The NULL-able 'email' column stays "string".
+	defInfos, err := NewMetaReader().Read(pool, dialect)
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+	if got := fieldType(defInfos, "user", "email"); got != "string" {
+		t.Errorf("default: user.email should be plain string, got %s", got)
+	}
+
+	// ResolveNullable=true: NULL-able column maps to sql.NullString.
+	nullableReader := NewMetaReader()
+	nullableReader.ResolveNullable = true
+	nullableInfos, err := nullableReader.Read(pool, dialect)
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+	if got := fieldType(nullableInfos, "user", "email"); got != "sql.NullString" {
+		t.Errorf("ResolveNullable: user.email should be sql.NullString, got %s", got)
+	}
+}
+
+func TestRemarksRendering(t *testing.T) {
+	info := &TableInfo{
+		Name:       "user",
+		PkgName:    "user",
+		StructName: "User",
+		BaseName:   "BaseUser",
+		Remarks:    "用户表",
+		PrimaryKey: []string{"id"},
+		Fields: []*FieldInfo{
+			{Name: "id", GoType: "int", AttrName: "Id", Remarks: "主键"},
+			{Name: "name", GoType: "string", AttrName: "Name"},
+		},
+	}
+	engine := NewEngine()
+	EnrichFields(info.Fields, &TemplateUtil{}, db.KeyFormatCamel)
+
+	baseContent := engine.RenderTemplate(baseTemplateContent, NewBaseGenerator().buildData(info))
+	if !strings.Contains(baseContent, "// 用户表") {
+		t.Errorf("base.go should emit the table comment, got:\n%s", baseContent)
+	}
+	if !strings.Contains(baseContent, "// 主键") {
+		t.Errorf("base.go should emit the column comment on the getter, got:\n%s", baseContent)
+	}
+
+	modelContent := engine.RenderTemplate(modelTemplateContent, NewModelGenerator().buildData(info))
+	if !strings.Contains(modelContent, "// 用户表") {
+		t.Errorf("model.go should emit the table comment, got:\n%s", modelContent)
 	}
 }
