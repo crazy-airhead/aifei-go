@@ -58,17 +58,34 @@ func (s *Scope) GetSharedObject(key string) interface{} {
 	return nil
 }
 
-// Set sets a variable in the current scope.
+// Set 自内向外查找已存在变量并就地改写；整条链都未命中时存入顶层作用域
+// （对照 Java Scope.set：HashMap 允许 null 值，故用 containsKey 判断而非判空）。
+// 与 SetLocal（仅写当前层）、SetGlobal（仅写顶层）相对。
 func (s *Scope) Set(key string, value interface{}) {
+	for cur := s; ; cur = cur.parent {
+		if cur.data != nil {
+			if _, ok := cur.data[key]; ok {
+				cur.data[key] = value
+				return
+			}
+		}
+		if cur.parent == nil {
+			if cur.data == nil { // 支持顶层 data 为 nil
+				cur.data = make(map[string]interface{})
+			}
+			cur.data[key] = value
+			return
+		}
+	}
+}
+
+// SetLocal 仅在当前作用域写入变量（对照 Java Scope.setLocal）。
+// 注意：不能复用 Set，否则会沿 parent 链向上改写或落到顶层。
+func (s *Scope) SetLocal(key string, value interface{}) {
 	if s.data == nil {
 		s.data = make(map[string]interface{})
 	}
 	s.data[key] = value
-}
-
-// SetLocal sets a variable in the current scope (same as Set).
-func (s *Scope) SetLocal(key string, value interface{}) {
-	s.Set(key, value)
 }
 
 // SetGlobal sets a variable in the global (root) scope.
@@ -76,13 +93,14 @@ func (s *Scope) SetGlobal(key string, value interface{}) {
 	s.global.Set(key, value)
 }
 
-// Exists checks if a variable exists in the current scope chain.
+// Exists 自内向外查找变量是否存在（对照 Java Scope.exists，含 containsKey 语义）。
 func (s *Scope) Exists(key string) bool {
-	if _, ok := s.data[key]; ok {
-		return true
-	}
-	if s.parent != nil {
-		return s.parent.Exists(key)
+	for cur := s; cur != nil; cur = cur.parent {
+		if cur.data != nil {
+			if _, ok := cur.data[key]; ok {
+				return true
+			}
+		}
 	}
 	return false
 }

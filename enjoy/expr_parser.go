@@ -38,15 +38,21 @@ func (p *exprParser) parseAssign() (Expr, error) {
 	}
 	if p.tok == ETokAssign {
 		p.next()
+		// 右结合递归，支持无限连写：id = a[i=0] = a[1] = 123（对照 Java Assign）。
 		right, err := p.parseAssign()
 		if err != nil {
 			return nil, err
 		}
-		id, ok := left.(*IDExpr)
-		if !ok {
-			return nil, fmt.Errorf("left side of assignment must be an identifier")
+		switch t := left.(type) {
+		case *IDExpr:
+			// 普通赋值：ID = expr
+			return &AssignExpr{Name: t.Name, Value: right}, nil
+		case *IndexExpr:
+			// 索引赋值：container[index] = expr（map[key] / list[i] / array[i]）
+			return &AssignExpr{Target: t, Value: right}, nil
+		default:
+			return nil, fmt.Errorf("left side of assignment must be an identifier or index expression")
 		}
-		return &AssignExpr{Name: id.Name, Value: right}, nil
 	}
 	return left, nil
 }

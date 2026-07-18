@@ -248,16 +248,90 @@ func (e *IndexExpr) Eval(scope *Scope, ctrl *Ctrl) interface{} {
 	return nil
 }
 
-// AssignExpr is name = value.
+// AssignExpr 是赋值表达式，对照 Java Assign 支持两种形态：
+//  1. 普通赋值 ID = expr（Target 为 nil，Name 为左标识符）：由 scope.Set 自内向外改写。
+//  2. 索引赋值 container[index] = expr（Target 为 *IndexExpr）：map[key] / list[i] / array[i]。
+//
+// 右结合递归解析支持无限连写：id = a[i=0] = a[1] = 123。
 type AssignExpr struct {
-	Name  string
-	Value Expr
+	Name   string // 普通赋值左侧标识符（Target 为 nil 时生效）
+	Target Expr   // 索引赋值左侧容器表达式（*IndexExpr），递归求址后写
+	Value  Expr
 }
 
 func (e *AssignExpr) Eval(scope *Scope, ctrl *Ctrl) interface{} {
-	v := e.Value.Eval(scope, ctrl)
-	scope.Set(e.Name, v)
+	// 普通赋值：ID = expr（对照 Java Assign.assignVariable，wisdom 走 scope.Set 向上改写）。
+	if e.Target == nil {
+		v := e.Value.Eval(scope, ctrl)
+		scope.Set(e.Name, v)
+		return v
+	}
+	// 索引赋值：container[index] = expr（对照 Java Assign.assignElement）。
+	if ix, ok := e.Target.(*IndexExpr); ok {
+		return assignElement(scope, ctrl, ix, e.Value)
+	}
+	// 解析期已拦截非 ID/Index 左侧，理论上不会到达。
+	return e.Value.Eval(scope, ctrl)
+}
+
+// assignElement 执行 container[index] = valueExpr 赋值。
+// 求值顺序对照 Java Assign.assignElement：先 container、再 index，最后 right value。
+// Go 版本宽松：container / index 为 nil 或类型不匹配时静默跳过（不抛异常）。
+func assignElement(scope *Scope, ctrl *Ctrl, ix *IndexExpr, valueExpr Expr) interface{} {
+	container := ix.Obj.Eval(scope, ctrl)
+	if container == nil {
+		return nil
+	}
+	idx := ix.Index.Eval(scope, ctrl)
+	if idx == nil {
+		return nil
+	}
+	v := valueExpr.Eval(scope, ctrl)
+	setIndex(container, idx, v)
 	return v
+}
+
+// setIndex 向 map / slice / array 的指定位置写入值（对照 Java Map.put / List.set / Array.set）。
+// 类型不匹配或不可寻址（值数组）时静默跳过，避免 reflect 写入 panic。
+func setIndex(container, idx, value interface{}) {
+	v := reflect.ValueOf(container)
+	switch v.Kind() {
+	case reflect.Map:
+		key := reflect.ValueOf(idx)
+		if !key.Type().AssignableTo(v.Type().Key()) {
+			return
+		}
+		elemType := v.Type().Elem()
+		var elem reflect.Value
+		if value == nil {
+			elem = reflect.Zero(elemType)
+		} else {
+			rv := reflect.ValueOf(value)
+			if !rv.Type().AssignableTo(elemType) {
+				return
+			}
+			elem = rv
+		}
+		v.SetMapIndex(key, elem)
+	case reflect.Slice, reflect.Array:
+		i := toInt(idx)
+		if i < 0 || i >= v.Len() {
+			return
+		}
+		elem := v.Index(i)
+		if !elem.CanSet() { // 值数组不可寻址，无法写入
+			return
+		}
+		if value == nil {
+			elem.Set(reflect.Zero(elem.Type()))
+			return
+		}
+		rv := reflect.ValueOf(value)
+		if !rv.Type().AssignableTo(elem.Type()) {
+			return
+		}
+		elem.Set(rv)
+	}
 }
 
 // IncDecExpr is ++/--.
@@ -334,30 +408,54 @@ func (e *RangeExpr) Eval(scope *Scope, ctrl *Ctrl) interface{} {
 
 // ---- helpers ----
 
+// getField 取对象字段，优先级对照 Java Field：
+//  1. getter 方法 GetXxx()（首字母大写，零参；值接收者与指针接收者均可）。
+//  2. public 字段（导出 struct 字段，按名匹配）。
+//  3. map.get(name)（对照 Java Map / Record / Model.get）。
+//
+// 方法查找在解引用前的原值上进行，以同时命中值接收者方法（struct 值）与
+// 指针接收者方法（struct 指针）；未命中再解引用取字段 / map key。
 func getField(obj interface{}, name string) interface{} {
 	v := reflect.ValueOf(obj)
-	if v.Kind() == reflect.Ptr {
-		if v.IsNil() {
-			return nil
-		}
-		v = v.Elem()
+	// 1: getter 方法 GetXxx()（对照 Java user.getName() 优先）。
+	getterName := "Get" + firstCharToUpperCase(name)
+	if m := v.MethodByName(getterName); m.IsValid() && m.Type().NumIn() == 0 {
+		return callReflect(m, nil)
 	}
-	if v.Kind() == reflect.Map {
-		key := reflect.ValueOf(name)
-		val := v.MapIndex(key)
-		if !val.IsValid() {
+
+	rv := v
+	if rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
 			return nil
 		}
-		return val.Interface()
+		rv = rv.Elem()
 	}
-	if v.Kind() == reflect.Struct {
-		f := v.FieldByName(name)
-		if !f.IsValid() {
-			return nil
+	switch rv.Kind() {
+	case reflect.Struct:
+		// 2: public 字段（对照 Java public field）。
+		if f := rv.FieldByName(name); f.IsValid() {
+			return f.Interface()
 		}
-		return f.Interface()
+	case reflect.Map:
+		// 3: map.get(name)（对照 Java Map / Record / Model.get）。
+		if val := rv.MapIndex(reflect.ValueOf(name)); val.IsValid() {
+			return val.Interface()
+		}
 	}
 	return nil
+}
+
+// firstCharToUpperCase 将首字母大写，其余不变（对照 Java StrUtil.firstCharToUpperCase），
+// 用于由字段名推导 getter 方法名：name → GetName。
+func firstCharToUpperCase(s string) string {
+	if s == "" {
+		return s
+	}
+	r := []rune(s)
+	if r[0] >= 'a' && r[0] <= 'z' {
+		r[0] -= 'a' - 'A'
+	}
+	return string(r)
 }
 
 func callFunc(fn interface{}, args []interface{}) interface{} {
@@ -578,8 +676,8 @@ func valEquals(a, b interface{}) bool {
 }
 
 // forEntry 封装 map 迭代产生的 key/value 项，模板中通过 entry.key / entry.value 取值
-// （对照 Java ForEntry.getKey()/getValue()）。用 map 而非 struct，是因为 FieldExpr 的
-// getField 只识别 map key 与（导出）struct 字段，无法回退到 getter 方法。
+// （对照 Java ForEntry.getKey()/getValue()）。用 map 暴露 key/value，getField 会按
+// map key 命中（亦支持 struct + GetKey()/GetValue() getter，见 getField）。
 func forEntry(k, v interface{}) map[string]interface{} {
 	return map[string]interface{}{"key": k, "value": v}
 }

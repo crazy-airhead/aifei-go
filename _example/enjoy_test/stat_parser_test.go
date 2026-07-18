@@ -243,14 +243,28 @@ func TestCallSeesOuterScope(t *testing.T) {
 	}
 }
 
-// 同一作用域内：define 函数体修改局部变量不影响外层（参数与局部赋值落在子作用域）。
-func TestCallLocalDoesNotLeak(t *testing.T) {
-	engine := enjoy.NewEngine("issue0010-local")
+// ISSUE-0011：define 函数体运行在 caller 子作用域，#set 走 wisdom（自内向外查找已存在变量并
+// 就地改写），故函数体内改写已存在的外层变量会外泄到调用方——与 #for 循环体一致，对照 Java
+// Define.call 的 new Scope(callerScope) + Scope.set。仅参数绑定（setLocal）是局部的。
+func TestCallSetLeaksToCaller(t *testing.T) {
+	engine := enjoy.NewEngine("issue0011-define-leak")
 	tpl := engine.GetTemplateByString(`#define(bump())#set(user = "inner")#end#@bump()[#(user)]`)
 
 	got := renderToString(t, tpl, map[string]interface{}{"user": "outer"})
-	if got != "[outer]" {
-		t.Fatalf("define 内 #set 应落在子作用域、不污染外层 user，期望 '[outer]'，got %q", got)
+	if got != "[inner]" {
+		t.Fatalf("define 内 #set 走 wisdom 应改写外层 user，期望 '[inner]'，got %q", got)
+	}
+}
+
+// define 参数仍为局部绑定（setLocal），与外层同名变量互不影响：函数体内读到的是参数值，
+// 调用结束后外层变量保持原值。对照 Java Define.call 的 scope.setLocal(parameterNames[i], ...)。
+func TestCallParamIsLocal(t *testing.T) {
+	engine := enjoy.NewEngine("issue0011-define-param-local")
+	tpl := engine.GetTemplateByString(`#define(bump(user))[#(user)]#end#@bump("inner")[#(user)]`)
+
+	got := renderToString(t, tpl, map[string]interface{}{"user": "outer"})
+	if got != "[inner][outer]" {
+		t.Fatalf("define 参数应局部绑定、不影响外层 user，期望 '[inner][outer]'，got %q", got)
 	}
 }
 

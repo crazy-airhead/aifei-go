@@ -98,8 +98,10 @@ func (s *ForStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 		}
 		ran = true
 		child := scope.NewChild()
-		child.Set(s.VarName, item)
-		child.Set("for", forIteratorStatus(outer, i, size))
+		// 循环变量与状态对象绑定在子作用域本地（对照 Java For 的 scope.setLocal），
+		// 不能用 Set：Set 现已向上改写，会把变量落到顶层。
+		child.SetLocal(s.VarName, item)
+		child.SetLocal("for", forIteratorStatus(outer, i, size))
 		s.Body.Exec(env, child, writer, ctrl)
 		if ctrl.Return {
 			return
@@ -119,21 +121,31 @@ func (s *ForStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 }
 
 // SetStat represents #set, #setLocal, #setGlobal.
+// 持有完整赋值表达式 Assign（普通 ID=expr 或索引 container[idx]=expr），对照 Java 把
+// #set 参数整体解析为 Assign 节点（而非按首个 '=' 拆字面名字，那样无法支持 m[k]=v）。
 type SetStat struct {
-	Name     string
-	Expr     Expr
+	Assign   *AssignExpr
 	ScopeTyp string
 }
 
 func (s *SetStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
-	v := s.Expr.Eval(scope, ctrl)
+	ae := s.Assign
+	// 索引赋值：#set(container[idx] = v) —— 赋值模式不作用于容器定位（恒走 scope.get），直接求址写入。
+	if ae.Target != nil {
+		if ix, ok := ae.Target.(*IndexExpr); ok {
+			assignElement(scope, ctrl, ix, ae.Value)
+		}
+		return
+	}
+	// 普通赋值：按 #set / #setLocal / #setGlobal 选择写入层级（对照 Java Ctrl 的 wisdom/local/global）。
+	v := ae.Value.Eval(scope, ctrl)
 	switch s.ScopeTyp {
 	case "local":
-		scope.SetLocal(s.Name, v)
+		scope.SetLocal(ae.Name, v)
 	case "global":
-		scope.SetGlobal(s.Name, v)
+		scope.SetGlobal(ae.Name, v)
 	default:
-		scope.Set(s.Name, v)
+		scope.Set(ae.Name, v)
 	}
 }
 
@@ -185,7 +197,8 @@ func callDefine(env *Env, def *DefineStat, argExprs []Expr, scope *Scope, writer
 	childScope := scope.NewChild()
 	for i, name := range def.Params {
 		if i < len(args) {
-			childScope.Set(name, args[i])
+			// 参数绑定在函数子作用域本地（对照 Java Define 的 scope.setLocal）。
+			childScope.SetLocal(name, args[i])
 		}
 	}
 	def.Body.Exec(env, childScope, writer, ctrl)
@@ -248,7 +261,8 @@ func (s *IncludeStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl
 	child.parent = scope
 	child.global = scope.global
 	for _, a := range s.assigns {
-		child.Set(a.Name, a.Value.Eval(scope, ctrl))
+		// 赋值参数绑定在子模板作用域本地（对照 Java Include 的 setLocalAssignment）。
+		child.SetLocal(a.Name, a.Value.Eval(scope, ctrl))
 	}
 	s.SubStat.Exec(env, child, writer, ctrl)
 }
@@ -633,17 +647,21 @@ func parseForStat(header string, lexer *Lexer, env *Env) (Stat, error) {
 }
 
 func parseSetStat(val string, scopeType string) (Stat, error) {
-	idx := strings.Index(val, "=")
-	if idx == -1 {
+	val = strings.TrimSpace(val)
+	if val == "" {
 		return &NullStat{}, nil
 	}
-	name := strings.TrimSpace(val[:idx])
-	exprStr := strings.TrimSpace(val[idx+1:])
-	ex, err := ParseExpr(exprStr)
+	// 整体解析为表达式：支持 ID=expr 与 container[idx]=expr，以及无限连写 a=b=1。
+	ex, err := ParseExpr(val)
 	if err != nil {
 		return nil, err
 	}
-	return &SetStat{Name: name, Expr: ex, ScopeTyp: scopeType}, nil
+	ae, ok := ex.(*AssignExpr)
+	if !ok {
+		// 非赋值表达式（如 #set(foo())）→ 无操作（对照原无 '=' 即 NullStat 的行为）。
+		return &NullStat{}, nil
+	}
+	return &SetStat{Assign: ae, ScopeTyp: scopeType}, nil
 }
 
 func parseDefineStat(header string, lexer *Lexer, env *Env) (Stat, error) {

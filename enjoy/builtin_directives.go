@@ -424,13 +424,13 @@ func (d *RenderDirective) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *
 		return
 	}
 
-	// 赋值参数绑定到子作用域，不污染父作用域（对照 Java new Scope(scope)）。
+	// 赋值参数绑定到子作用域本地，不污染父作用域（对照 Java new Scope(scope) + setLocalAssignment）。
 	child := NewScope(make(map[string]interface{}))
 	child.parent = scope
 	child.global = scope.global
 	for i := 1; i < d.exprList.Length(); i++ {
 		if ae, ok := d.exprList.GetExpr(i).(*AssignExpr); ok {
-			child.Set(ae.Name, ae.Value.Eval(scope, ctrl))
+			child.SetLocal(ae.Name, ae.Value.Eval(scope, ctrl))
 		}
 	}
 	subTpl.ast.Exec(env, child, writer, ctrl)
