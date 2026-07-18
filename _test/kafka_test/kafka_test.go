@@ -1,8 +1,8 @@
-// Package main holds integration tests for the kafka plugin against an in-memory
-// franz-go kfake broker, mirroring _test/cache_test (miniredis). It
+// Package kafka_test holds integration tests for the kafka plugin against an
+// in-memory franz-go kfake broker, mirroring _test/cache_test (miniredis). It
 // verifies produce→consume round-trips, multi-cluster routing, and the
 // at-least-once consumer semantics.
-package main
+package kafka_test
 
 import (
 	"context"

@@ -2,10 +2,21 @@ go 1.26
 
 use (
 	./_test/cache_test
+	./_test/config_test
+	./_test/dami_test
+	./_test/damigen_test
+	./_test/generator_test
 	./_test/db_test
 	./_test/demo
 	./_test/enjoy_test
+	./_test/json_test
 	./_test/kafka_test
+	./_test/log_test
+	./_test/nami_test
+	./_test/nacos_test
+	./_test/server_test
+	./_test/swagger_test
+	./_test/storage_test
 	./aifei
 	./config
 	./dami

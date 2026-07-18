@@ -6,22 +6,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Run all tests (workspace root is NOT a Go module, so "..." wildcards do not
-# expand from the repo root — list module paths explicitly, as below)
+# expand from the repo root — list module paths explicitly, as below).
+# All _test.go files live under _test/; the library paths below (aifei, config,
+# …) carry no tests and are listed only to compile-check them.
 go test ./aifei ./config ./dami ./db ./enjoy ./http ./json ./log ./nami ./server \
          ./tools/generator ./tools/damigen \
          ./plugins/cache ./plugins/dami ./plugins/kafka ./plugins/nacos ./plugins/storage ./plugins/swagger ./plugins/elasticsearch ./plugins/xxljob \
+         ./_test/json_test ./_test/log_test ./_test/config_test ./_test/dami_test \
+         ./_test/server_test ./_test/nami_test ./_test/storage_test ./_test/swagger_test \
+         ./_test/nacos_test ./_test/damigen_test ./_test/generator_test \
          ./_test/db_test ./_test/cache_test ./_test/kafka_test ./_test/enjoy_test
 
-# Run tests for a single module
-go test ./aifei
-go test ./enjoy
-go test ./db
-go test ./json
-go test ./log
-go test ./plugins/nacos
-go test ./tools/generator
-go test ./config
-go test ./dami
+# Run tests for a single area (tests live under _test/<area>_test)
+go test ./_test/db_test
+go test ./_test/enjoy_test
+go test ./_test/json_test
+go test ./_test/log_test
+go test ./_test/nacos_test
+go test ./_test/generator_test
+go test ./_test/config_test
+go test ./_test/dami_test
 
 # Run db integration tests (requires sqlite)
 go test ./_test/db_test
@@ -51,6 +55,17 @@ Each test area is its own Go module:
 | `_test/cache_test` | `plugins/cache` (local + Redis two-level cache) | `miniredis` |
 | `_test/kafka_test` | `plugins/kafka` (producer/consumer, at-least-once) | franz-go `kfake` broker |
 | `_test/enjoy_test` | `enjoy` template engine (black-box) | — |
+| `_test/json_test` | `json` marshal/unmarshal wrappers (black-box) | — |
+| `_test/log_test` | `log` logger interface + levels (black-box) | — |
+| `_test/config_test` | `config` layered loading, `Props`/`Store`/`Sub`/`Bind` (black-box) | — |
+| `_test/dami_test` | `dami` event bus (send/call/stream/lpc) + `plugins/dami` (black-box) | — |
+| `_test/server_test` | `server` bootstrap: `In`/`Out`, `IoHandler`, middleware (black-box) | — |
+| `_test/nami_test` | `nami` RPC client + `util`/`coder/json`/`channel/http` subpackages (black-box) | — |
+| `_test/storage_test` | `plugins/storage` local + S3 clients, `Manager` (black-box) | `minio-go` |
+| `_test/swagger_test` | `plugins/swagger` config loading (black-box) | — |
+| `_test/nacos_test` | `plugins/nacos` `NamiUpstream` (black-box) | — |
+| `_test/damigen_test` | `tools/damigen` dami-provider codegen (black-box) | — |
+| `_test/generator_test` | `tools/generator` schema→code (`MetaReader`, type mapping) (black-box) | `modernc.org/sqlite` |
 | `_test/demo` | full demo app (run with `go run`, not a test suite) | `modernc.org/sqlite` |
 
 Rules for adding tests:
@@ -70,7 +85,7 @@ This project uses a Go workspace (`go.work`) of independent modules, layered by 
 |-------|--------|------|--------------|
 | Core | `github.com/crazy-airhead/aifei-go` | `./aifei` | — |
 | Core library | `…/aifei-go/enjoy` | `./enjoy` | — |
-| Core library | `…/aifei-go/db` | `./db` | — |
+| Core library | `…/aifei-go/db` | `./db` | enjoy |
 | Core library | `…/aifei-go/json` | `./json` | — |
 | Core library | `…/aifei-go/log` | `./log` | — |
 | Core library | `…/aifei-go/config` | `./config` | `yaml.v3` |
@@ -78,7 +93,7 @@ This project uses a Go workspace (`go.work`) of independent modules, layered by 
 | Runtime | `…/aifei-go/server` | `./server` | aifei, http, db, enjoy, log |
 | Standalone framework | `…/aifei-go/nami` | `./nami` | — |
 | Standalone framework | `…/aifei-go/dami` | `./dami` | — |
-| Code generation | `…/aifei-go/tools/generator` | `./tools/generator` | db, enjoy + `modernc.org/sqlite` |
+| Code generation | `…/aifei-go/tools/generator` | `./tools/generator` | db, enjoy |
 | Code generation | `…/aifei-go/tools/damigen` | `./tools/damigen` | enjoy |
 | Plugin | `…/aifei-go/plugins/cache` | `./plugins/cache` | aifei, config, log + `jetcache-go`, `go-redis` |
 | Plugin | `…/aifei-go/plugins/dami` | `./plugins/dami` | aifei, dami, log |
@@ -91,6 +106,17 @@ This project uses a Go workspace (`go.work`) of independent modules, layered by 
 | Example | `_test/cache_test` | `./_test/cache_test` | `miniredis` |
 | Example | `_test/kafka_test` | `./_test/kafka_test` | `franz-go/kfake` |
 | Example | `_test/enjoy_test` | `./_test/enjoy_test` | enjoy |
+| Example | `_test/json_test` | `./_test/json_test` | json |
+| Example | `_test/log_test` | `./_test/log_test` | log |
+| Example | `_test/config_test` | `./_test/config_test` | config |
+| Example | `_test/dami_test` | `./_test/dami_test` | dami, plugins/dami |
+| Example | `_test/server_test` | `./_test/server_test` | server, aifei |
+| Example | `_test/nami_test` | `./_test/nami_test` | nami |
+| Example | `_test/storage_test` | `./_test/storage_test` | plugins/storage + `minio-go` |
+| Example | `_test/swagger_test` | `./_test/swagger_test` | plugins/swagger |
+| Example | `_test/nacos_test` | `./_test/nacos_test` | plugins/nacos |
+| Example | `_test/damigen_test` | `./_test/damigen_test` | tools/damigen |
+| Example | `_test/generator_test` | `./_test/generator_test` | tools/generator + `modernc.org/sqlite` |
 
 `…` = `github.com/crazy-airhead`. In the Dependencies column, bare names are internal modules; backticked names are external libraries; `—` means no dependencies.
 
