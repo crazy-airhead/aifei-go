@@ -151,7 +151,9 @@ func (r *Row) RemoveNullFields() *Row {
 	return r
 }
 
-// Keep keeps only the specified fields.
+// Keep keeps only the specified fields, dropping the rest from both data and
+// the change set. Keeping the change set in sync (like Remove/RemoveNullFields)
+// prevents a later Update from generating SQL for fields that no longer exist.
 func (r *Row) Keep(fields ...string) *Row {
 	keep := make(map[string]bool)
 	for _, f := range fields {
@@ -160,6 +162,11 @@ func (r *Row) Keep(fields ...string) *Row {
 	for k := range r.data {
 		if !keep[k] {
 			delete(r.data, k)
+		}
+	}
+	for k := range r.change {
+		if !keep[k] {
+			delete(r.change, k)
 		}
 	}
 	return r

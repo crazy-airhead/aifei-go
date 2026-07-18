@@ -1,12 +1,23 @@
-package db
+package db_sqlite_test
 
 import (
 	"reflect"
 	"testing"
+
+	"github.com/crazy-airhead/aifei-go/db"
+
+	_ "modernc.org/sqlite"
 )
 
+// Ported from the former db/db_test.go (ISSUE-0006). These Row behavior tests
+// live here as external tests (package db_sqlite_test) against the exported API.
+// Tests that previously touched unexported helpers (decodeRows,
+// normalizeSQLValue, the row.data map) are rewritten against exported methods,
+// or driven through a real SQLite round-trip where the helper had no exported
+// equivalent.
+
 func TestRowTypeConvert(t *testing.T) {
-	row := NewRow("user")
+	row := db.NewRow("user")
 	row.Set("name", "test")
 	row.Set("age", 25)
 	row.Set("score", 98.5)
@@ -34,7 +45,7 @@ func TestRowTypeConvert(t *testing.T) {
 }
 
 func TestRowJSON(t *testing.T) {
-	row := NewRow("user")
+	row := db.NewRow("user")
 	row.Set("name", "test")
 	row.Set("age", 25)
 
@@ -43,7 +54,7 @@ func TestRowJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	row2 := NewRow("user")
+	row2 := db.NewRow("user")
 	err = row2.UnmarshalJSON(data)
 	if err != nil {
 		t.Fatal(err)
@@ -55,7 +66,7 @@ func TestRowJSON(t *testing.T) {
 
 func TestRowUnmarshalJSONComplexTypes(t *testing.T) {
 	// JSON arrays should be serialized to JSON strings
-	row := NewRow("test")
+	row := db.NewRow("test")
 	err := row.UnmarshalJSON([]byte(`{"extra_feat":["1","2"],"scene_ids":[],"name":"test"}`))
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +91,7 @@ func TestRowUnmarshalJSONComplexTypes(t *testing.T) {
 }
 
 func TestRowUnmarshalJSONNestedObject(t *testing.T) {
-	row := NewRow("test")
+	row := db.NewRow("test")
 	err := row.UnmarshalJSON([]byte(`{"scope_data":{"checkedAll":true,"userList":[]}}`))
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +106,7 @@ func TestRowUnmarshalJSONNestedObject(t *testing.T) {
 
 func TestRowUnmarshalJSONRealWorld(t *testing.T) {
 	// Simulate the exact request body with registered table metadata
-	RegisterTable(&Table{
+	db.RegisterTable(&db.Table{
 		Name:   "oa_process",
 		Fields: "name,extra_feat,valid,scene_ids,scope_data,icon",
 		FieldTypes: map[string]reflect.Type{
@@ -108,7 +119,7 @@ func TestRowUnmarshalJSONRealWorld(t *testing.T) {
 	})
 
 	body := `{"name":"11","categoryId":1,"parentId":"","extraFeat":["1"],"valid":false,"sceneIds":[],"checkedAll":true,"scope":"所有人员","scopeData":"{\"checkedAll\":true,\"userList\":[],\"userInfoList\":[],\"departList\":[],\"departInfoList\":[]}","icon":""}`
-	row := NewRow("oa_process")
+	row := db.NewRow("oa_process")
 	err := row.UnmarshalJSON([]byte(body))
 	if err != nil {
 		t.Fatal(err)
@@ -145,16 +156,16 @@ func TestRowUnmarshalJSONRealWorld(t *testing.T) {
 	}
 
 	// No value should be []interface{} or map[string]interface{}
-	for k, v := range row.data {
+	row.ForEach(func(k string, v interface{}) {
 		switch v.(type) {
 		case []interface{}, map[string]interface{}:
 			t.Fatalf("field %q has unsupported type %T for SQL driver", k, v)
 		}
-	}
+	})
 }
 
 func TestRowUnmarshalJSONTypeAware(t *testing.T) {
-	RegisterTable(&Table{
+	db.RegisterTable(&db.Table{
 		Name:   "typed_table",
 		Fields: "json_col,int_col",
 		FieldTypes: map[string]reflect.Type{
@@ -163,7 +174,7 @@ func TestRowUnmarshalJSONTypeAware(t *testing.T) {
 		},
 	})
 
-	row := NewRow("typed_table")
+	row := db.NewRow("typed_table")
 	err := row.UnmarshalJSON([]byte(`{"jsonCol":[1,2,3],"intCol":[1,2,3]}`))
 	if err != nil {
 		t.Fatal(err)
@@ -186,7 +197,7 @@ func TestRowUnmarshalJSONTypeAware(t *testing.T) {
 
 func TestRowUnmarshalJSONNoTable(t *testing.T) {
 	// Without table metadata, fall back to safe default (convert to string)
-	row := NewRow("unknown_table")
+	row := db.NewRow("unknown_table")
 	err := row.UnmarshalJSON([]byte(`{"tags":["a","b"],"config":{"key":"val"}}`))
 	if err != nil {
 		t.Fatal(err)
@@ -215,7 +226,7 @@ type testProfile struct {
 // UnmarshalJSON input path, so typed accessors work on rows built from request
 // bodies — not only on rows read from the DB.
 func TestUnmarshalJSONCompositeFieldTypes(t *testing.T) {
-	RegisterTable(&Table{
+	db.RegisterTable(&db.Table{
 		Name:   "composite_table",
 		Fields: "tags,profile,name",
 		FieldTypes: map[string]reflect.Type{
@@ -225,7 +236,7 @@ func TestUnmarshalJSONCompositeFieldTypes(t *testing.T) {
 		},
 	})
 
-	row := NewRow("composite_table")
+	row := db.NewRow("composite_table")
 	err := row.UnmarshalJSON([]byte(`{"tags":["a","b"],"profile":{"name":"n","age":3},"name":"x"}`))
 	if err != nil {
 		t.Fatal(err)
@@ -255,22 +266,21 @@ func TestUnmarshalJSONCompositeFieldTypes(t *testing.T) {
 	}
 
 	// No raw []interface{}/map[string]interface{} should remain.
-	for k, v := range row.data {
+	row.ForEach(func(k string, v interface{}) {
 		switch v.(type) {
 		case []interface{}, map[string]interface{}:
 			t.Fatalf("field %q has unmaterialized type %T", k, v)
 		}
-	}
+	})
 
-	// Round-trip to SQL: a []string must serialize back to a JSON string.
-	if s, ok := normalizeSQLValue(row.Get("tags")).(string); !ok || s != `["a","b"]` {
-		t.Fatalf("tags should normalize to JSON string [\"a\",\"b\"], got %v", normalizeSQLValue(row.Get("tags")))
-	}
+	// The []string→JSON-string SQL serialization (formerly checked via the
+	// unexported normalizeSQLValue) is covered end-to-end by
+	// TestCompositeFieldTypeSQLRoundTrip below.
 }
 
 // DecodeJSONFields materializes declared composite types on the DB read path.
 func TestDecodeJSONFieldsComposite(t *testing.T) {
-	RegisterTable(&Table{
+	db.RegisterTable(&db.Table{
 		Name:   "composite_read_table",
 		Fields: "tags,profile",
 		FieldTypes: map[string]reflect.Type{
@@ -280,10 +290,10 @@ func TestDecodeJSONFieldsComposite(t *testing.T) {
 	})
 
 	// Values as they arrive from the DB driver: raw JSON strings.
-	row := NewRow("composite_read_table")
+	row := db.NewRow("composite_read_table")
 	row.Put("tags", `["a","b"]`)
 	row.Put("profile", `{"name":"n","age":3}`)
-	DecodeJSONFields(row)
+	db.DecodeJSONFields(row)
 
 	tags, ok := row.Get("tags").([]string)
 	if !ok {
@@ -305,7 +315,7 @@ func TestDecodeJSONFieldsComposite(t *testing.T) {
 // A declared composite field that receives an incompatible scalar falls through
 // to the default handling instead of failing the whole unmarshal.
 func TestUnmarshalJSONCompositeTypeMismatch(t *testing.T) {
-	RegisterTable(&Table{
+	db.RegisterTable(&db.Table{
 		Name:   "composite_mismatch_table",
 		Fields: "tags",
 		FieldTypes: map[string]reflect.Type{
@@ -313,7 +323,7 @@ func TestUnmarshalJSONCompositeTypeMismatch(t *testing.T) {
 		},
 	})
 
-	row := NewRow("composite_mismatch_table")
+	row := db.NewRow("composite_mismatch_table")
 	if err := row.UnmarshalJSON([]byte(`{"tags":"not-an-array"}`)); err != nil {
 		t.Fatal(err)
 	}
@@ -323,10 +333,70 @@ func TestUnmarshalJSONCompositeTypeMismatch(t *testing.T) {
 	}
 }
 
-// decodeRows binds table metadata and decodes JSON columns for raw-SQL result
-// rows. No-op for empty/unregistered tables; idempotent on already-typed rows.
+// A []string field unmarshaled from a request body must serialize back to a JSON
+// string for SQL and decode again on read. This replaces the former internal
+// normalizeSQLValue assertion, driven through a real SQLite round-trip.
+func TestCompositeFieldTypeSQLRoundTrip(t *testing.T) {
+	setupTestDB(t)
+	db.Use().RawSql("CREATE TABLE IF NOT EXISTS composite_table (id INTEGER PRIMARY KEY, tags TEXT, profile TEXT, name TEXT)").Update()
+	db.Use().RawSql("DELETE FROM composite_table").Update()
+	db.RegisterTable(&db.Table{
+		Name:        "composite_table",
+		Fields:      "id,tags,profile,name",
+		PrimaryKeys: []string{"id"},
+		FieldTypes: map[string]reflect.Type{
+			"id":      reflect.TypeOf(int64(0)),
+			"tags":    reflect.TypeOf([]string{}),
+			"profile": reflect.TypeOf(testProfile{}),
+			"name":    reflect.TypeFor[string](),
+		},
+	})
+
+	row := db.NewRow("composite_table")
+	if err := row.UnmarshalJSON([]byte(`{"tags":["a","b"],"profile":{"name":"n","age":3},"name":"x"}`)); err != nil {
+		t.Fatal(err)
+	}
+	row.Set("id", int64(1))
+	if _, err := db.Insert(row); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := db.FindByID("composite_table", int64(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil {
+		t.Fatal("expected to read back the inserted row")
+	}
+	tags, ok := got.Get("tags").([]string)
+	if !ok {
+		t.Fatalf("tags should round-trip to []string, got %T: %v", got.Get("tags"), got.Get("tags"))
+	}
+	if len(tags) != 2 || tags[0] != "a" || tags[1] != "b" {
+		t.Fatalf("tags should be [a b], got %v", tags)
+	}
+	profile, ok := got.Get("profile").(testProfile)
+	if !ok {
+		t.Fatalf("profile should round-trip to testProfile, got %T: %v", got.Get("profile"), got.Get("profile"))
+	}
+	if profile.Name != "n" || profile.Age != 3 {
+		t.Fatalf("profile should be {n 3}, got %+v", profile)
+	}
+}
+
+// On the read path the framework binds table/primary-key metadata to result
+// rows and decodes declared JSON columns (the former internal decodeRows). This
+// is verified end-to-end via FindByID; an existing-but-unregistered table gets
+// no binding.
 func TestDecodeRowsBindsTableAndDecodes(t *testing.T) {
-	RegisterTable(&Table{
+	setupTestDB(t)
+	db.Use().RawSql("CREATE TABLE IF NOT EXISTS decode_rows_table (id INTEGER PRIMARY KEY, tags TEXT)").Update()
+	db.Use().RawSql("DELETE FROM decode_rows_table").Update()
+	// An existing-but-unregistered table, to assert no binding happens.
+	db.Use().RawSql("CREATE TABLE IF NOT EXISTS plain_table (id INTEGER PRIMARY KEY, x INTEGER)").Update()
+	db.Use().RawSql("DELETE FROM plain_table").Update()
+
+	db.RegisterTable(&db.Table{
 		Name:        "decode_rows_table",
 		Fields:      "id,tags",
 		PrimaryKeys: []string{"id"},
@@ -336,10 +406,16 @@ func TestDecodeRowsBindsTableAndDecodes(t *testing.T) {
 		},
 	})
 
-	rows := []*Row{{data: map[string]interface{}{"id": int64(1), "tags": `["a","b"]`}}}
-	decodeRows(rows, "decode_rows_table")
+	db.Insert(db.NewRow("decode_rows_table").Set("id", int64(1)).Set("tags", `["a","b"]`))
+	db.Insert(db.NewRow("plain_table").Set("id", int64(1)).Set("x", 1))
 
-	r := rows[0]
+	r, err := db.FindByID("decode_rows_table", int64(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r == nil {
+		t.Fatal("expected to find decode_rows_table row")
+	}
 	if r.Table() != "decode_rows_table" {
 		t.Fatalf("table should be bound, got %q", r.Table())
 	}
@@ -348,23 +424,46 @@ func TestDecodeRowsBindsTableAndDecodes(t *testing.T) {
 	}
 	tags, ok := r.Get("tags").([]string)
 	if !ok {
-		t.Fatalf("tags should decode to []string, got %T", r.Get("tags"))
+		t.Fatalf("tags should decode to []string, got %T: %v", r.Get("tags"), r.Get("tags"))
 	}
 	if len(tags) != 2 || tags[0] != "a" || tags[1] != "b" {
 		t.Fatalf("tags should be [a b], got %v", tags)
 	}
 
-	// Idempotent: re-decoding an already-typed row is a no-op.
-	decodeRows(rows, "decode_rows_table")
-	if _, ok := r.Get("tags").([]string); !ok {
-		t.Fatalf("tags should stay []string after re-decode, got %T", r.Get("tags"))
+	// Idempotent: re-reading keeps tags materialized.
+	r2, err := db.FindByID("decode_rows_table", int64(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := r2.Get("tags").([]string); !ok {
+		t.Fatalf("tags should stay []string after re-decode, got %T", r2.Get("tags"))
 	}
 
-	// Unregistered / empty table → no-op, no binding.
-	noop := []*Row{{data: map[string]interface{}{"x": 1}}}
-	decodeRows(noop, "no_such_table")
-	if noop[0].Table() != "" {
-		t.Fatalf("unregistered table should not bind, got %q", noop[0].Table())
+	// Unregistered table → no binding, no decode.
+	plain, err := db.FindByID("plain_table", int64(1))
+	if err != nil {
+		t.Fatal(err)
 	}
-	decodeRows(noop, "")
+	if plain == nil {
+		t.Fatal("expected to find plain_table row")
+	}
+	if plain.Table() != "" {
+		t.Fatalf("unregistered table should not bind, got %q", plain.Table())
+	}
+}
+
+// Keep must drop removed fields from both data and the change set, so a later
+// Update does not generate SQL for fields that no longer exist. See ISSUE-0006.
+func TestRowKeepClearsChange(t *testing.T) {
+	row := db.NewRow("user").Set("a", 1).Set("b", 2).Keep("a")
+
+	// data keeps only "a"
+	if row.Size() != 1 || !row.Has("a") || row.Has("b") {
+		t.Fatalf("Keep should retain only field a, got size=%d hasA=%v hasB=%v", row.Size(), row.Has("a"), row.Has("b"))
+	}
+	// change set must also drop "b"
+	changed := row.ChangedFields()
+	if len(changed) != 1 || changed[0] != "a" {
+		t.Fatalf("change set should be [a] only, got %v", changed)
+	}
 }
