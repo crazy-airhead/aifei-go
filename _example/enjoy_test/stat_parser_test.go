@@ -229,3 +229,80 @@ func TestForElseNotRunWhenBreakOnFirst(t *testing.T) {
 		t.Fatalf("空集合应触发 #else，got %q", got)
 	}
 }
+
+// ISSUE-0010：#call 调用时以 caller scope 为 parent 构造子作用域，函数体内可见外层变量
+// （对照 Java Define.call 的 new Scope(scope)）。此前用 NewScope(empty) 无 parent，
+// 函数体读不到外层变量。
+func TestCallSeesOuterScope(t *testing.T) {
+	engine := enjoy.NewEngine("issue0010-scope")
+	tpl := engine.GetTemplateByString(`#define(greet())Hello #(user)#end#@greet()`)
+
+	got := renderToString(t, tpl, map[string]interface{}{"user": "Aifei"})
+	if got != "Hello Aifei" {
+		t.Fatalf("define 函数体应可见外层变量 user，期望 'Hello Aifei'，got %q", got)
+	}
+}
+
+// 同一作用域内：define 函数体修改局部变量不影响外层（参数与局部赋值落在子作用域）。
+func TestCallLocalDoesNotLeak(t *testing.T) {
+	engine := enjoy.NewEngine("issue0010-local")
+	tpl := engine.GetTemplateByString(`#define(bump())#set(user = "inner")#end#@bump()[#(user)]`)
+
+	got := renderToString(t, tpl, map[string]interface{}{"user": "outer"})
+	if got != "[outer]" {
+		t.Fatalf("define 内 #set 应落在子作用域、不污染外层 user，期望 '[outer]'，got %q", got)
+	}
+}
+
+// ISSUE-0010：#define 在 parse 阶段注册，支持前向引用——文档顺序靠后的 define 也能被
+// 前面的 call 调用（对照 Java Parser.statList: env.addFunction）。
+func TestCallForwardReference(t *testing.T) {
+	engine := enjoy.NewEngine("issue0010-fwdref")
+	tpl := engine.GetTemplateByString(`[#@greet("Sam")]|#define(greet(name))Hi #(name)#end`)
+
+	if got := renderToString(t, tpl, nil); got != "[Hi Sam]|" {
+		t.Fatalf("call 在 define 之前应能前向引用，期望 '[Hi Sam]|'，got %q", got)
+	}
+}
+
+// 前向引用同样适用于动态 #call(...) 指令。
+func TestCallDynamicForwardReference(t *testing.T) {
+	engine := enjoy.NewEngine("issue0010-fwdref-dyn")
+	tpl := engine.GetTemplateByString(`[#call("greet", "Sam")]|#define(greet(name))Hi #(name)#end`)
+
+	if got := renderToString(t, tpl, nil); got != "[Hi Sam]|" {
+		t.Fatalf("动态 #call 在 define 之前应能前向引用，期望 '[Hi Sam]|'，got %q", got)
+	}
+}
+
+// 嵌套 define：外层 define 体里的内层 define 也能被注册并调用。
+func TestCallNestedDefine(t *testing.T) {
+	engine := enjoy.NewEngine("issue0010-nested")
+	tpl := engine.GetTemplateByString(`#define(outer())#define(inner())I#end#@inner()#end#@outer()`)
+
+	if got := renderToString(t, tpl, nil); got != "I" {
+		t.Fatalf("嵌套 define 应可注册并调用，期望 'I'，got %q", got)
+	}
+}
+
+// ISSUE-0010：函数体内的 #return/#break/#continue 在 define 边界消化，不外泄到调用方
+// （对照 Java Define.call 末尾 setJumpNone）。#return 在函数体内只结束本次调用。
+func TestCallReturnConsumedInDefine(t *testing.T) {
+	engine := enjoy.NewEngine("issue0010-return")
+	tpl := engine.GetTemplateByString(`#define(f())A#return#end#@f()|TAIL`)
+
+	if got := renderToString(t, tpl, nil); got != "A|TAIL" {
+		t.Fatalf("define 内 #return 不应外泄，期望 'A|TAIL'，got %q", got)
+	}
+}
+
+// #break 在函数体内消化：不应跳出外层 #for 循环。
+func TestCallBreakConsumedInDefine(t *testing.T) {
+	engine := enjoy.NewEngine("issue0010-break")
+	tpl := engine.GetTemplateByString(`#define(f())X#break#end#for(i : list)#@f()#end`)
+
+	got := renderToString(t, tpl, map[string]interface{}{"list": []interface{}{1, 2, 3}})
+	if got != "XXX" {
+		t.Fatalf("define 内 #break 不应跳出外层循环，期望 'XXX'，got %q", got)
+	}
+}

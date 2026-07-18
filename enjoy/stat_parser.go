@@ -144,6 +144,10 @@ type DefineStat struct {
 	Body   Stat
 }
 
+// Exec 在运行期把 #define 注册到当前 env。注意：与 Java（Define.exec 为空、仅 parse 期
+// 注册）不同，Go 的 #include 走「子模板独立编译 + 在父 env 中执行」路径，被 include 模板
+// 里的 define 需在此处（exec 期、父 env）再次注册才能渗入父模板，故保留运行期注册。
+// 同模板内的前向引用由 parse 期注册（registerDefine）保证。
 func (s *DefineStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 	env.AddFunction(s.Name, s)
 }
@@ -168,18 +172,25 @@ func (s *CallStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 
 // callDefine binds evaluated args to the function's params in a child scope and
 // executes the function body (shared by #@name(args) 与 #call(...) 动态调用)。
+// 对照 Java Define.call：子作用域以 caller scope 为 parent（new Scope(scope)），
+// 故函数体内可见外层变量；body 执行后消化其内部 #return/#break/#continue（setJumpNone），
+// 使函数体内的跳转不外泄到调用方。
 func callDefine(env *Env, def *DefineStat, argExprs []Expr, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 	args := make([]interface{}, len(argExprs))
 	for i, a := range argExprs {
 		args[i] = a.Eval(scope, ctrl)
 	}
-	childScope := NewScope(make(map[string]interface{}))
+	// 以 caller scope 为 parent 构造子作用域：参数局部绑定，同时可见外层变量
+	// （对照 Java scope = new Scope(scope)）。
+	childScope := scope.NewChild()
 	for i, name := range def.Params {
 		if i < len(args) {
 			childScope.Set(name, args[i])
 		}
 	}
 	def.Body.Exec(env, childScope, writer, ctrl)
+	// 函数体内的 #return/#break/#continue 在此消化，不外泄（对照 Java setJumpNone）。
+	ctrl.Reset()
 }
 
 // BreakStat represents #break.
@@ -321,6 +332,7 @@ func parseStatList(lexer *Lexer, env *Env, endTok TokType) (Stat, error) {
 		if err != nil {
 			return nil, err
 		}
+		stat = registerDefine(stat, env)
 		if stat != nil {
 			stats = append(stats, stat)
 		}
@@ -332,6 +344,18 @@ func parseStatList(lexer *Lexer, env *Env, endTok TokType) (Stat, error) {
 		return stats[0], nil
 	}
 	return &StatList{Stats: stats}, nil
+}
+
+// registerDefine 在 parse 阶段把 #define 注册到 env，使模板支持前向引用（文档顺序靠后
+// 的 define 也能被前面的 call 调用，对照 Java Parser.statList: env.addFunction）。返回
+// stat 本身——与 Java 不同，Go 不把 DefineStat 从 stat 列表中剔除：#include 走「子模板
+// 独立编译 + 在父 env 中执行」路径，DefineStat.Exec 会在父 env 中再次注册，使被 include
+// 模板里的 define 能渗入父模板（覆盖 include 场景）；本处 parse 期注册覆盖同 env 前向引用。
+func registerDefine(stat Stat, env *Env) Stat {
+	if def, ok := stat.(*DefineStat); ok {
+		env.AddFunction(def.Name, def)
+	}
+	return stat
 }
 
 func parseOneStat(tok Token, lexer *Lexer, env *Env) (Stat, error) {
@@ -547,6 +571,11 @@ func collectUntil(lexer *Lexer, env *Env, stopToks ...TokType) (Stat, []Token, e
 		stat, err := parseOneStat(tok, lexer, env)
 		if err != nil {
 			return nil, nil, err
+		}
+		// #define 在 parse 期注册并剔除（同 parseStatList，对照 Java 递归 statList）。
+		stat = registerDefine(stat, env)
+		if stat == nil {
+			continue
 		}
 		if _, ok := stat.(*NullStat); !ok {
 			stats = append(stats, stat)
