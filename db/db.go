@@ -56,6 +56,52 @@ func AddSqlWithID(configID, sqlID, sql string) {
 	GetConfig(configID).GetSqlKit().AddSql(sqlID, sql)
 }
 
+// AddSqlFile registers an external SQL template file with the default config's SqlKit.
+// File content must use #sql directives (e.g. `#sql("id") ... #end`). Call ParseSqlFile
+// afterwards to load.
+func AddSqlFile(sqlFile string) {
+	GetConfig().GetSqlKit().AddSqlFile(sqlFile)
+}
+
+// AddSqlFileWithID registers an external SQL template file with a specific config's SqlKit.
+func AddSqlFileWithID(configID, sqlFile string) {
+	GetConfig(configID).GetSqlKit().AddSqlFile(sqlFile)
+}
+
+// AddSqlDir scans a directory for .sql files and registers them with the default config's
+// SqlKit (non-recursive). Call ParseSqlFile afterwards to load.
+func AddSqlDir(dir string) error {
+	return GetConfig().GetSqlKit().AddSqlDir(dir)
+}
+
+// AddSqlDirWithID scans a directory for .sql files and registers them with a specific
+// config's SqlKit (non-recursive).
+func AddSqlDirWithID(configID, dir string) error {
+	return GetConfig(configID).GetSqlKit().AddSqlDir(dir)
+}
+
+// ParseSqlFile parses all registered SQL files for the default config's SqlKit.
+func ParseSqlFile() error {
+	return GetConfig().GetSqlKit().ParseSqlFile()
+}
+
+// ParseSqlFileWithID parses all registered SQL files for a specific config's SqlKit.
+func ParseSqlFileWithID(configID string) error {
+	return GetConfig(configID).GetSqlKit().ParseSqlFile()
+}
+
+// SetBaseSqlFilePath sets the base path for resolving relative SQL file paths on the
+// default config's SqlKit.
+func SetBaseSqlFilePath(baseSqlFilePath string) {
+	GetConfig().GetSqlKit().SetBaseSqlFilePath(baseSqlFilePath)
+}
+
+// SetSqlFileHotReloading toggles hot reloading of external SQL files on the default
+// config's SqlKit (dev mode).
+func SetSqlFileHotReloading(enable bool) {
+	GetConfig().GetSqlKit().SetSqlFileHotReloading(enable)
+}
+
 // Select creates a Dao with the given select fields.
 func Select(fields string) *Dao {
 	return Use().Select(fields)

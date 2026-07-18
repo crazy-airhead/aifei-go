@@ -138,6 +138,10 @@ func (c *EngineConfig) GetBaseTemplatePath() string {
 	return c.baseTemplatePath
 }
 
+// IsDevMode reports whether dev mode is enabled (对照 Java Engine.isDevMode)。
+// devMode 下 GetTemplate 不走文件缓存（每次重新编译），用于模板/SQL 文件热重载判定。
+func (c *EngineConfig) IsDevMode() bool { return c.devMode }
+
 // IsStaticMethodExpressionEnabled reports whether `Cls::method()` static method
 // expressions are enabled (对照 Java isStaticMethodExpressionEnabled，默认 false)。
 func (c *EngineConfig) IsStaticMethodExpressionEnabled() bool { return c.staticMethodExpressionEnabled }

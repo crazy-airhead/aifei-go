@@ -84,7 +84,7 @@
 |----------|-----------|---------|------|
 | **4 种数据库方言** | 8 种 dialect | `db/dialect.go` 仅 MySQL/PostgreSQL/SQLite（`NewDialect` 识别 `mysql`/`postgres`/`pgx`/`sqlite`/`sqlite3`） | 缺 Oracle/SqlServer/H2/Informix（含各自分页窗口函数、Oracle `.nextval`）。详见 2.4 |
 | **原生连接逃逸口 `call(JdbcFun)`/FunExecutor** | `Dao.call(JdbcFun)` 暴露裸 `Connection`，附 `JdbcKit`（Enjoy-SQL 解析 + ResultSet→Row） | 无等价物；`TxBegin()` 仅返回 `*sql.Tx`，Dao 无 `Call`/`WithConn` 钩子 | 存储过程、同连接多语句、临时表优化无法实现 |
-| **外部 SQL 模板文件加载 + 热重载** | `SqlKit.addSqlFile(file)`、`setBaseSqlFilePath`、`setSqlFileHotReloading(true)` | `db/sql/kit.go:144` `ParseSqlFile()` 是**空操作 stub**（注释 "Already parsed inline"），只能 `AddSql(sqlID, sql)` 内联 | 无法批量加载 `.sql` 文件，工程化不便 |
+| **外部 SQL 模板文件加载 + 热重载** | `SqlKit.addSqlFile(file)`、`setBaseSqlFilePath`、`setSqlFileHotReloading(true)` | ✅ ISSUE-0014 已补齐：`AddSqlFile`/`AddSqlDir`(批量)/`SetBaseSqlFilePath`/`SetSqlFileHotReloading`/`ParseSqlFile`（文件内按 `#sql` 指令分段）+ devMode 热重载 | 批量加载 `.sql` 文件已支持 |
 
 ### 2.3 真正缺失（中/低优先级）
 
@@ -226,7 +226,7 @@
 
 ### 第三阶段：db 工程化
 
-去掉 SqlKit 空 stub，实现 `.sql` 文件加载 → 补 Oracle/SqlServer 方言 → Batch 回填主键/异构分组。
+~~去掉 SqlKit 空 stub，实现 `.sql` 文件加载~~（✅ ISSUE-0014 已完成）→ 补 Oracle/SqlServer 方言 → Batch 回填主键/异构分组。
 
 ---
 

@@ -50,7 +50,7 @@
 | 0011 | enjoy 作用域与取值缺陷（Set/赋值/Field getter） | 🟢 | enjoy | [0011-enjoy-作用域与取值缺陷](0011-enjoy-作用域与取值缺陷.md) |
 | 0012 | enjoy 语义差异与 EngineConfig 配置项杂项 | 🟢 | enjoy | [0012-enjoy-语义差异与配置项杂项](0012-enjoy-语义差异与配置项杂项.md) |
 | 0013 | db 缺 Oracle/SqlServer/H2/Informix 方言 | 🔴 | db | [0013-db-缺少4种方言](0013-db-缺少4种方言.md) |
-| 0014 | db SqlKit SQL 文件加载与热重载为空实现 | 🔴 | db | [0014-db-SqlKit文件加载为空实现](0014-db-SqlKit文件加载为空实现.md) |
+| 0014 | db SqlKit SQL 文件加载与热重载为空实现 | 🟢 | db | [0014-db-SqlKit文件加载为空实现](0014-db-SqlKit文件加载为空实现.md) |
 | 0015 | db 缺少原生连接逃逸口 call/FunExecutor | 🔴 | db | [0015-db-缺原生连接逃逸口](0015-db-缺原生连接逃逸口.md) |
 | 0016 | db 细节补强（Batch/TypeConverter/复合主键/事务返回值/杂项） | 🔴 | db | [0016-db-细节补强](0016-db-细节补强.md) |
 | 0017 | aifei 缺少路由表内省 API（Walk/Routes） | 🔴 | aifei | [0017-aifei-缺路由表内省API](0017-aifei-缺路由表内省API.md) |
