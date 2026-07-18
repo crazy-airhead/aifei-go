@@ -13,7 +13,7 @@ import (
 // 需要断言「渲染出错」的用例（如 TestForCStyleNotSupported）请直接调用 RenderToString。
 func renderToString(t *testing.T, tpl *enjoy.Template, data map[string]interface{}) string {
 	t.Helper()
-	out, err := tpl.RenderToString(data)
+	out, err := tpl.RenderToString0(data)
 	if err != nil {
 		t.Fatalf("render template: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestInclude(t *testing.T) {
 
 	subTpl := engine.GetTemplate("testdata/_sub.html")
 	// testdata 文件缺失时解析报错（现经 RenderToString 的 error 返回），跳过本用例。
-	if _, err := subTpl.RenderToString(nil); err != nil {
+	if _, err := subTpl.RenderToString0(nil); err != nil {
 		t.Skip("testdata/_sub.html not found, skipping include test")
 	}
 
@@ -297,7 +297,7 @@ func TestRenderToString0(t *testing.T) {
 
 	// 正常渲染：返回字符串、无 error 概念。
 	tpl := engine.GetTemplateByString("Hello, #(name)!")
-	if got := tpl.RenderToString0(map[string]interface{}{"name": "Aifei"}); got != "Hello, Aifei!" {
+	if got := tpl.RenderToString(map[string]interface{}{"name": "Aifei"}); got != "Hello, Aifei!" {
 		t.Fatalf("RenderToString0 正常渲染: got %q", got)
 	}
 
@@ -308,5 +308,5 @@ func TestRenderToString0(t *testing.T) {
 			t.Fatal("RenderToString0 渲染错误时应 panic")
 		}
 	}()
-	badTpl.RenderToString0(nil)
+	badTpl.RenderToString(nil)
 }

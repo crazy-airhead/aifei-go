@@ -48,7 +48,7 @@ func TestReturnIfSkipsFollowing(t *testing.T) {
 func TestReturnIfEmptyParam(t *testing.T) {
 	engine := enjoy.NewEngine("issue0003-empty")
 	for _, src := range []string{"#returnIf()", "#returnIf(   )"} {
-		out, err := engine.GetTemplateByString(src).RenderToString(nil)
+		out, err := engine.GetTemplateByString(src).RenderToString0(nil)
 		if err == nil {
 			t.Errorf("%q 空参数应解析报错，实际渲染成功输出 %q", src, out)
 		}
@@ -193,7 +193,7 @@ func TestForOuterNesting(t *testing.T) {
 func TestForCStyleNotSupported(t *testing.T) {
 	engine := enjoy.NewEngine("issue0009-no-cstyle")
 	tpl := engine.GetTemplateByString("#for(i=0; i<3; i++)X#end")
-	out, err := tpl.RenderToString(nil)
+	out, err := tpl.RenderToString0(nil)
 	if err == nil {
 		t.Fatalf("C 风格 for 应报语法错误，实际渲染成功输出 %q", out)
 	}

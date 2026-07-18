@@ -163,7 +163,7 @@ func TestCallAtSugarDirective(t *testing.T) {
 func TestDirectiveParsePanicBecomesError(t *testing.T) {
 	engine := enjoy.NewEngine("dir-parse-err")
 	tpl := engine.GetTemplateByString(`#date(ts, "yyyy-MM-dd", "extra")`)
-	if _, err := tpl.RenderToString(map[string]interface{}{"ts": time.Now()}); err == nil {
+	if _, err := tpl.RenderToString0(map[string]interface{}{"ts": time.Now()}); err == nil {
 		t.Fatal("#date 参数过多应解析报错并返回 error，而非渲染成功或打崩")
 	}
 }

@@ -33,7 +33,7 @@ func (e *Engine) RenderTemplate(content string, data map[string]interface{}) (st
 		tpl = e.enjoy.GetTemplateByString(content)
 		e.templateCache.Store(content, tpl)
 	}
-	return tpl.RenderToString(data)
+	return tpl.RenderToString0(data)
 }
 
 // Generator is the code generator entry point.

@@ -78,7 +78,7 @@ func TestIssue0012SafeCallSkip(t *testing.T) {
 func TestIssue0012CallUndefinedErrors(t *testing.T) {
 	engine := enjoy.NewEngine("i12-call-undefined")
 	tpl := engine.GetTemplateByString("#@noSuchFn()")
-	if _, err := tpl.RenderToString(nil); err == nil {
+	if _, err := tpl.RenderToString0(nil); err == nil {
 		t.Fatal("非 nullSafe 调用不存在的函数应报错")
 	}
 }
@@ -89,7 +89,7 @@ func TestIssue0012CallUndefinedErrors(t *testing.T) {
 func TestIssue0012StaticDisableSimple(t *testing.T) {
 	engine := enjoy.NewEngine("i12-static-simple")
 	tpl := engine.GetTemplateByString(`#(Str::isBlank("x"))`)
-	_, err := tpl.RenderToString(nil)
+	_, err := tpl.RenderToString0(nil)
 	if err == nil || !strings.Contains(err.Error(), "not enabled") {
 		t.Fatalf("Str::isBlank 应报 not enabled，got %v", err)
 	}
@@ -99,7 +99,7 @@ func TestIssue0012StaticDisableSimple(t *testing.T) {
 func TestIssue0012StaticDisableFqn(t *testing.T) {
 	engine := enjoy.NewEngine("i12-static-fqn")
 	tpl := engine.GetTemplateByString(`#(com.foo.Bar::isBlank("x"))`)
-	_, err := tpl.RenderToString(nil)
+	_, err := tpl.RenderToString0(nil)
 	if err == nil || !strings.Contains(err.Error(), "not enabled") {
 		t.Fatalf("com.foo.Bar::isBlank 应报 not enabled，got %v", err)
 	}
@@ -151,7 +151,7 @@ func TestIssue0012StaticEnableUnregisteredIsNil(t *testing.T) {
 func TestIssue0012CallArgcMismatch(t *testing.T) {
 	engine := enjoy.NewEngine("i12-call-argc")
 	tpl := engine.GetTemplateByString(`#define(f(a, b))#(a)-#(b)#end#@f(1)`)
-	if _, err := tpl.RenderToString(nil); err == nil ||
+	if _, err := tpl.RenderToString0(nil); err == nil ||
 		!strings.Contains(err.Error(), "parameter count mismatch") {
 		t.Fatalf("参数个数不匹配应报错，got %v", err)
 	}
@@ -186,7 +186,7 @@ func TestIssue0012IncludeRelativeToParent(t *testing.T) {
 func TestIssue0012ErrorLine(t *testing.T) {
 	engine := enjoy.NewEngine("i12-line")
 	tpl := engine.GetTemplateByString("#for(bad)")
-	_, err := tpl.RenderToString(nil)
+	_, err := tpl.RenderToString0(nil)
 	if err == nil || !strings.Contains(err.Error(), "line 1") {
 		t.Fatalf("#for 语法错应带 line 1，got %v", err)
 	}
@@ -196,7 +196,7 @@ func TestIssue0012ErrorLine(t *testing.T) {
 func TestIssue0012ErrorLineMulti(t *testing.T) {
 	engine := enjoy.NewEngine("i12-line-multi")
 	tpl := engine.GetTemplateByString("ok\n#for(bad)")
-	_, err := tpl.RenderToString(nil)
+	_, err := tpl.RenderToString0(nil)
 	if err == nil || !strings.Contains(err.Error(), "line 2") {
 		t.Fatalf("第二行错误应带 line 2，got %v", err)
 	}
@@ -206,7 +206,7 @@ func TestIssue0012ErrorLineMulti(t *testing.T) {
 func TestIssue0012DirectiveErrorLine(t *testing.T) {
 	engine := enjoy.NewEngine("i12-directive-line")
 	tpl := engine.GetTemplateByString("#number()")
-	_, err := tpl.RenderToString(nil)
+	_, err := tpl.RenderToString0(nil)
 	if err == nil || !strings.Contains(err.Error(), "line") {
 		t.Fatalf("#number() 错误应带行号，got %v", err)
 	}

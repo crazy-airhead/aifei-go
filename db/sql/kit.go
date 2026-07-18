@@ -46,7 +46,7 @@ func (sk *SqlKit) GetSqlPara(sql string, data map[string]interface{}) *SqlPara {
 	}
 
 	data[SqlParaKey] = sp
-	sp.SetSql(tpl.RenderToString0(data))
+	sp.SetSql(tpl.RenderToString(data))
 	delete(data, SqlParaKey)
 	return sp
 }
@@ -62,7 +62,7 @@ func (sk *SqlKit) GetSqlParaWithArgs(sql string, args ...interface{}) *SqlPara {
 		SqlParaKey:   sp,
 		ParaArrayKey: args,
 	}
-	sp.SetSql(tpl.RenderToString0(data))
+	sp.SetSql(tpl.RenderToString(data))
 	return sp
 }
 
@@ -75,7 +75,7 @@ func (sk *SqlKit) GetSqlParaByID(sqlID string, data map[string]interface{}) *Sql
 
 	sp := NewSqlPara().SetID(sqlID)
 	data[SqlParaKey] = sp
-	sp.SetSql(tpl.RenderToString0(data))
+	sp.SetSql(tpl.RenderToString(data))
 	delete(data, SqlParaKey)
 	return sp
 }
@@ -92,7 +92,7 @@ func (sk *SqlKit) GetSqlParaByIDWithArgs(sqlID string, args ...interface{}) *Sql
 		SqlParaKey:   sp,
 		ParaArrayKey: args,
 	}
-	sp.SetSql(tpl.RenderToString0(data))
+	sp.SetSql(tpl.RenderToString(data))
 	return sp
 }
 
@@ -116,7 +116,7 @@ func (sk *SqlKit) addSqlTemplate(sqlID string, sql string) {
 	data := map[string]interface{}{
 		SqlCacheKey: sqlCache,
 	}
-	tpl.RenderToString0(data)
+	tpl.RenderToString(data)
 
 	for id, t := range sqlCache {
 		sk.cache.Store(id, t)
@@ -137,7 +137,7 @@ func (sk *SqlKit) GetSql(sqlID string, data map[string]interface{}) string {
 	if tpl == nil {
 		return ""
 	}
-	return tpl.RenderToString0(data)
+	return tpl.RenderToString(data)
 }
 
 // ParseSqlFile parses all SQL templates and populates the cache.

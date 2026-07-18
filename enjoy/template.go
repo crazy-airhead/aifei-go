@@ -56,9 +56,9 @@ func (t *Template) Render(data map[string]interface{}, writer io.Writer) error {
 	return t.exec(scope, writer)
 }
 
-// RenderToString executes the template and returns the result as a string.
+// RenderToString0 executes the template and returns the result as a string.
 // 渲染出错时返回 ("", err)（半成品输出被丢弃），调用方据 err 区分正常结果与错误。
-func (t *Template) RenderToString(data map[string]interface{}) (string, error) {
+func (t *Template) RenderToString0(data map[string]interface{}) (string, error) {
 	var buf bytes.Buffer
 	scope := NewScopeWithShared(data, t.sharedObjectMap())
 	if err := t.exec(scope, &buf); err != nil {
@@ -67,11 +67,11 @@ func (t *Template) RenderToString(data map[string]interface{}) (string, error) {
 	return buf.String(), nil
 }
 
-// RenderToString0 是 RenderToString 的「不返回 error」便捷版本：内部调用 RenderToString，
+// RenderToString 是 RenderToString0 的「不返回 error」便捷版本：内部调用 RenderToString0，
 // 渲染出错时 panic（而非返回 error）。适合调用方确定模板无误、不想逐处处理 error 的场景
 // （如 db SqlKit 渲染 SQL、代码生成器）。注意：出错会 panic，调用方需自行决定是否 recover。
-func (t *Template) RenderToString0(data map[string]interface{}) string {
-	out, err := t.RenderToString(data)
+func (t *Template) RenderToString(data map[string]interface{}) string {
+	out, err := t.RenderToString0(data)
 	if err != nil {
 		panic(err)
 	}
