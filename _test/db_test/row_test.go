@@ -1,4 +1,4 @@
-package db_sqlite_test
+package db_test
 
 import (
 	"reflect"
@@ -10,7 +10,7 @@ import (
 )
 
 // Ported from the former db/db_test.go (ISSUE-0006). These Row behavior tests
-// live here as external tests (package db_sqlite_test) against the exported API.
+// live here as external tests (package db_test) against the exported API.
 // Tests that previously touched unexported helpers (decodeRows,
 // normalizeSQLValue, the row.data map) are rewritten against exported methods,
 // or driven through a real SQLite round-trip where the helper had no exported

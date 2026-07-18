@@ -3,8 +3,8 @@
 package internal
 
 import (
-	_ "github.com/crazy-airhead/aifei-go/_example/demo/internal/loginlog"
-	_ "github.com/crazy-airhead/aifei-go/_example/demo/internal/user"
+	_ "github.com/crazy-airhead/aifei-go/_test/demo/internal/loginlog"
+	_ "github.com/crazy-airhead/aifei-go/_test/demo/internal/user"
 )
 
 // Tables are registered via init() functions in each per-table package.

@@ -5,8 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Test
 
 ```bash
-# Run all tests (workspace mode)
-go test ./aifei ./config ./dami ./db ./enjoy ./http ./json ./log ./nami ./server ./tools/... ./plugins/... ./_example/...
+# Run all tests (workspace root is NOT a Go module, so "..." wildcards do not
+# expand from the repo root — list module paths explicitly, as below)
+go test ./aifei ./config ./dami ./db ./enjoy ./http ./json ./log ./nami ./server \
+         ./tools/generator ./tools/damigen \
+         ./plugins/cache ./plugins/dami ./plugins/kafka ./plugins/nacos ./plugins/storage ./plugins/swagger ./plugins/elasticsearch ./plugins/xxljob \
+         ./_test/db_test ./_test/cache_test ./_test/kafka_test ./_test/enjoy_test
 
 # Run tests for a single module
 go test ./aifei
@@ -20,24 +24,47 @@ go test ./config
 go test ./dami
 
 # Run db integration tests (requires sqlite)
-go test ./_example/db_sqlite_test
+go test ./_test/db_test
 
 # Run cache redis integration tests (embedded miniredis; no external redis)
-go test ./_example/cache_redis_test
+go test ./_test/cache_test
 
 # Run kafka integration tests (embedded franz-go kfake broker; no external kafka)
-go test ./_example/kafka_test
+go test ./_test/kafka_test
 
 # Run a single test
 go test ./enjoy -run TestOutputExpr
 
 # Run the demo
-go run ./_example/demo
+go run ./_test/demo
 ```
+
+## Testing Conventions
+
+**All test code lives under `_test/` — never co-locate `_test.go` files inside the library packages** (do not add tests to `db/`, `enjoy/`, `db/sql/`, etc.). When writing a new test, add it to the matching `_test/<area>_test/` module; if no module exists for that area, create one following the rules below. This is why the `db/sql` parser and `SqlKit` unit tests live in `_test/db_test`, imported as `dbsql "github.com/crazy-airhead/aifei-go/db/sql"` rather than as a `package sql` test inside `db/sql/`.
+
+Each test area is its own Go module:
+
+| Module | Covers | Embedded test dependency |
+|--------|--------|--------------------------|
+| `_test/db_test` | `db` + `db/sql` (CRUD, pagination, transactions, batch, Enjoy SQL directives, SQL parser) | `modernc.org/sqlite` |
+| `_test/cache_test` | `plugins/cache` (local + Redis two-level cache) | `miniredis` |
+| `_test/kafka_test` | `plugins/kafka` (producer/consumer, at-least-once) | franz-go `kfake` broker |
+| `_test/enjoy_test` | `enjoy` template engine (black-box) | — |
+| `_test/demo` | full demo app (run with `go run`, not a test suite) | `modernc.org/sqlite` |
+
+Rules for adding tests:
+
+- **External test package:** declare `package <area>_test` (matching the directory name) and test the **exported API only**. Import the library normally; alias sub-packages when convenient (e.g. `dbsql "github.com/crazy-airhead/aifei-go/db/sql"`). If you need to exercise unexported behavior, expose a test hook or assert via observable output/SQLite — do not drop a `package <lib>` test file into the library package.
+- **Own module per area:** `module github.com/crazy-airhead/aifei-go/_test/<area>_test`, with `replace` directives pointing at the local modules it needs (`../../db`, `../../enjoy`, …), and add `use ./_test/<area>_test` to `go.work`.
+- **Self-contained:** prefer embedded/in-process dependencies so `go test` needs no external services — SQLite via `modernc.org/sqlite`, `miniredis` for Redis, franz-go `kfake` for Kafka.
+- **Issue regressions:** name the file `issueNNNN_test.go` inside the relevant `_test/<area>_test/` module, matching the `docs/issues/NNNN-*.md` note number.
+
+> **Running tests:** the workspace root is not itself a Go module, so `...` wildcard patterns (e.g. `./_test/...`, `./plugins/...`) do **not** expand from the repo root. Run tests by explicit module path — `go test ./_test/db_test` — or `cd` into the module and run `go test ./...`.
 
 ## Module Structure (Go Workspace)
 
-This project uses a Go workspace (`go.work`) of independent modules, layered by role: **Core** (the `aifei` framework itself), **Core library** (zero-external-dep primitives usable standalone), **Runtime** (the default `net/http` adapter + production bootstrap for aifei), **Standalone framework** (sibling frameworks with no dependency on aifei), **Code generation** (`tools/`), **Plugin** (optional integrations that pull in third-party libraries), and **Example** (demos/integration tests under `_example/`, not published).
+This project uses a Go workspace (`go.work`) of independent modules, layered by role: **Core** (the `aifei` framework itself), **Core library** (zero-external-dep primitives usable standalone), **Runtime** (the default `net/http` adapter + production bootstrap for aifei), **Standalone framework** (sibling frameworks with no dependency on aifei), **Code generation** (`tools/`), **Plugin** (optional integrations that pull in third-party libraries), and **Example** (demos/integration tests under `_test/`, not published).
 
 | Layer | Module | Path | Dependencies |
 |-------|--------|------|--------------|
@@ -59,11 +86,11 @@ This project uses a Go workspace (`go.work`) of independent modules, layered by 
 | Plugin | `…/aifei-go/plugins/nacos` | `./plugins/nacos` | aifei, nami, log + `nacos-sdk-go` |
 | Plugin | `…/aifei-go/plugins/storage` | `./plugins/storage` | aifei, config, log + `minio-go` |
 | Plugin | `…/aifei-go/plugins/swagger` | `./plugins/swagger` | aifei, config, log + `swaggo/swag` |
-| Example | `_example/demo` | `./_example/demo` | core + db + generator + `modernc.org/sqlite` |
-| Example | `_example/db_sqlite_test` | `./_example/db_sqlite_test` | db + `modernc.org/sqlite` |
-| Example | `_example/cache_redis_test` | `./_example/cache_redis_test` | `miniredis` |
-| Example | `_example/kafka_test` | `./_example/kafka_test` | `franz-go/kfake` |
-| Example | `_example/enjoy_test` | `./_example/enjoy_test` | enjoy |
+| Example | `_test/demo` | `./_test/demo` | core + db + generator + `modernc.org/sqlite` |
+| Example | `_test/db_test` | `./_test/db_test` | db + `modernc.org/sqlite` |
+| Example | `_test/cache_test` | `./_test/cache_test` | `miniredis` |
+| Example | `_test/kafka_test` | `./_test/kafka_test` | `franz-go/kfake` |
+| Example | `_test/enjoy_test` | `./_test/enjoy_test` | enjoy |
 
 `…` = `github.com/crazy-airhead`. In the Dependencies column, bare names are internal modules; backticked names are external libraries; `—` means no dependencies.
 
@@ -159,12 +186,12 @@ Generates type-safe per-table packages from database schema:
 - **`./plugins/storage`** — Unified file-storage abstraction (ported from ficus `ficus-starter-storage`) with local filesystem and S3-compatible backends (AWS S3/Minio/OSS/COS) via minio-go. `Client` interface (`Exists`/`TempURL`/`Get`/`Put`/`Delete`/`DeleteBatch`, bucket-scoped) + `Media` model (`io.Reader` + content type/size, stdlib `mime` inference). `Manager` routes by bucket name with a default; `Plugin` (`aifei.Plugin`) reads `storage.*` from `config.Props` (`storage.default` + `storage.buckets.<name>.{driver,endpoint,regionId,accessKey,secretKey,autoCreateBucket}`) and installs the package-level default so top-level `storage.Put/Get/...` and `storage.Use(bucket)` work. Driver inferred from `driver` (`local`/`s3`) or endpoint scheme.
 - **`./plugins/swagger`** — Knife4j-vue3 OpenAPI docs plugin. Implements `aifei.Plugin` to serve the compiled knife4j-vue3 UI (`web/` is embedded via `//go:embed`) plus a generated `services.json` group config and the OpenAPI spec at a configurable base path (default `/swagger`). The UI is pure static frontend (no springboot) compiled with `VITE_RELEASE_APP_TYPE=Knife4jFront`; it requests `/services.json` from the server root (hardcoded), which points it to `{basePath}/swagger.json` served via `swag.ReadDoc()`. Provides `Handler() func(http.Handler) http.Handler` middleware that intercepts matching requests to serve raw HTML/JSON/CSS/JS outside the aifei `{code, msg, data}` envelope; users wire it via `server.WithHTTPHandler(swagPlugin.Handler())`. Configured via `swagger.*` in the global config (`enabled`, `basePath`, `groupName`). Users run `swag init` to generate docs from Go comments, import the generated `docs` package (which registers the spec), and add `swagger.NewPlugin(nil)` to the app. Dependencies: `github.com/swaggo/swag`.
 - **`./plugins/cache`** — Two-level (local + Redis) cache abstraction built on jetcache-go (inspired by ficus `CacheService`). `Cache` interface (`Get` returning a `found bool` distinct from miss, `Set`/`Delete`/`Exists`, and `GetOrStore` doing singleflight + cache-penetration protection) wraps jetcache-go, exposing FreeCache/TinyLFU L1 and go-redis L2; per-instance key prefixing isolates instances sharing one Redis. `Manager` routes by instance name with a default; `Plugin` (`aifei.Plugin`) reads `cache.*` from `config.Props` (`cache.default` + `cache.instances.<name>.{type,ttl,codec,keyPrefix,local,remote,refresh,syncLocal}`) and installs the package-level default so top-level `cache.Get/Set/Delete/Exists/GetOrStore` and `cache.Use(instance)` work. `Stop()` closes every instance (unlike storage, caches may run refresh goroutines). Type inferred from `type` (`local`/`remote`/`both`) or which of `local`/`remote` is configured; L1 driver `freecache`/`tinylfu`, L2 redis `addr` (single node) or `addrs` (ring). Advanced jetcache features (SetNX/Refresh/SyncLocal/...) are reachable via `Cache.JetCache()`.
-- **`./plugins/kafka`** — Kafka producer/consumer abstraction built on franz-go (`twmb/franz-go`). `Client` interface (per-cluster) exposes `ProduceSync` (sync ack)/`Produce` (async w/ `Promise`)/`Flush`/`Subscribe` over `Message`/`Header` records; each `Subscribe` spawns a dedicated consumer client running an at-least-once poll loop — `AutoCommitMarks` is enabled so records are only committed once their handler returns nil (failed records are not committed and are redelivered on the next rebalance/restart); `Subscription.Close` does a final `CommitMarkedOffsets`. `Manager` routes by cluster name with a default; `Plugin` (`aifei.Plugin`) reads `kafka.*` from `config.Props` (`kafka.default` + `kafka.clusters.<name>.{brokers,clientId,sasl.{mechanism,user,password},tls.{enabled,caFile,certFile,keyFile,insecureSkipVerify},producer.{acks,compression,lingerMs,maxAttempts},consumer.{groupId,offsetReset,balancer,autoCommit.{enable,intervalMs}}}`) and installs the package-level default so top-level `kafka.ProduceSync/Produce/Flush/Subscribe` and `kafka.Use(cluster)` work. `Stop()` stops every running subscription (committing marked offsets) and closes every producer client. Defaults: acks=all, compression=snappy, offsetReset=latest, balancer=cooperativeSticky, autoCommit enable=true/5s. SASL plain/scram-sha-256/512 and TLS (incl. mTLS) supported; all built from the root franz-go module. Advanced needs (transactions, manual commits, seek, admin via `kadm`) are reachable via `Client.KgoClient()`/`Subscription.KgoClient()`. Integration tested against the in-memory `kfake` broker in `_example/kafka_test`.
+- **`./plugins/kafka`** — Kafka producer/consumer abstraction built on franz-go (`twmb/franz-go`). `Client` interface (per-cluster) exposes `ProduceSync` (sync ack)/`Produce` (async w/ `Promise`)/`Flush`/`Subscribe` over `Message`/`Header` records; each `Subscribe` spawns a dedicated consumer client running an at-least-once poll loop — `AutoCommitMarks` is enabled so records are only committed once their handler returns nil (failed records are not committed and are redelivered on the next rebalance/restart); `Subscription.Close` does a final `CommitMarkedOffsets`. `Manager` routes by cluster name with a default; `Plugin` (`aifei.Plugin`) reads `kafka.*` from `config.Props` (`kafka.default` + `kafka.clusters.<name>.{brokers,clientId,sasl.{mechanism,user,password},tls.{enabled,caFile,certFile,keyFile,insecureSkipVerify},producer.{acks,compression,lingerMs,maxAttempts},consumer.{groupId,offsetReset,balancer,autoCommit.{enable,intervalMs}}}`) and installs the package-level default so top-level `kafka.ProduceSync/Produce/Flush/Subscribe` and `kafka.Use(cluster)` work. `Stop()` stops every running subscription (committing marked offsets) and closes every producer client. Defaults: acks=all, compression=snappy, offsetReset=latest, balancer=cooperativeSticky, autoCommit enable=true/5s. SASL plain/scram-sha-256/512 and TLS (incl. mTLS) supported; all built from the root franz-go module. Advanced needs (transactions, manual commits, seek, admin via `kadm`) are reachable via `Client.KgoClient()`/`Subscription.KgoClient()`. Integration tested against the in-memory `kfake` broker in `_test/kafka_test`.
 
 ### Examples
 
-- **`./_example/demo`** — Full web app demo using core + db + generator with SQLite driver.
-- **`./_example/db_sqlite_test`** — Database integration tests (971 lines, ~80 test cases).
+- **`./_test/demo`** — Full web app demo using core + db + generator with SQLite driver.
+- **`./_test/db_test`** — Database integration tests (971 lines, ~80 test cases).
 
 ## Design Decisions (Java → Go)
 

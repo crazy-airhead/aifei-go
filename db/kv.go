@@ -187,7 +187,7 @@ func (k Kv) Keep(keys ...string) Kv {
 // Map returns k as a plain map[string]interface{} (a view, not a copy). Kv is
 // already directly assignable to map[string]interface{}, so this is only for
 // callers that want the conversion to be explicit.
-func (k Kv) Map() map[string]interface{} { return map[string]interface{}(k) }
+func (k Kv) Map() map[string]interface{} { return k }
 
 // KvAs returns a value converted by fn (nil-safe: fn is NOT called when the
 // value is absent or nil — the zero T is returned). Mirrors Java Kv.getAs.

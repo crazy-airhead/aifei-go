@@ -1,4 +1,4 @@
-package db_sqlite_test
+package db_test
 
 import (
 	"strings"

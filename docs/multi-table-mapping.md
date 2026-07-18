@@ -387,7 +387,7 @@ Enjoy SQL 模板同样适用：`Sql(...)`/`SqlById(...)` 渲染后的 `sqlPara.S
 - 子查询派生表跳过、嵌套括号配对、注释跳过、大小写混用。
 - 边界：UNION 取首分支、`SELECT` 无 FROM（`SELECT 1`）、空串。
 
-`db` 包集成测（`_example/db_sqlite_test` 风格，使用已注册多表）：
+`db` 包集成测（`_test/db_test` 风格，使用已注册多表）：
 
 - 两表 JOIN，`d.config` JSON 列正确解码为 `dept` 声明类型。
 - 显式 `Tables()` vs 自动解析结果一致。

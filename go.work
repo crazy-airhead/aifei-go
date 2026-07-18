@@ -1,11 +1,11 @@
 go 1.26
 
 use (
-	./_example/cache_redis_test
-	./_example/db_sqlite_test
-	./_example/demo
-	./_example/enjoy_test
-	./_example/kafka_test
+	./_test/cache_test
+	./_test/db_test
+	./_test/demo
+	./_test/enjoy_test
+	./_test/kafka_test
 	./aifei
 	./config
 	./dami

@@ -24,7 +24,7 @@
 
 ## 模块结构
 
-模块按角色分层：**核心框架**（aifei 本体）、**核心库**（零外部依赖原语，可独立使用）、**默认运行时**（aifei 的 net/http 适配 + 生产引导）、**独立框架**（不依赖 aifei 的兄弟框架）、**代码生成**（`tools/`）、**插件**（按需引入第三方库的集成）、**示例**（`_example/`，不发布）。
+模块按角色分层：**核心框架**（aifei 本体）、**核心库**（零外部依赖原语，可独立使用）、**默认运行时**（aifei 的 net/http 适配 + 生产引导）、**独立框架**（不依赖 aifei 的兄弟框架）、**代码生成**（`tools/`）、**插件**（按需引入第三方库的集成）、**示例**（`_test/`，不发布）。
 
 | 层 | 模块 | 说明 | 依赖 |
 |----|------|------|------|
@@ -46,11 +46,11 @@
 | 插件 | `aifei-go/plugins/nacos` | 服务注册、配置中心、发现 | aifei, nami, log + nacos-sdk-go |
 | 插件 | `aifei-go/plugins/storage` | 文件存储（本地 + S3 兼容） | aifei, config, log + minio-go |
 | 插件 | `aifei-go/plugins/swagger` | OpenAPI 文档（knife4j-vue3） | aifei, config, log + swaggo/swag |
-| 示例 | `_example/demo` | 完整 Web 应用 Demo | core + db + generator + sqlite |
-| 示例 | `_example/db_sqlite_test` | 数据库集成测试 | db + sqlite |
-| 示例 | `_example/cache_redis_test` | 缓存集成测试 | miniredis |
-| 示例 | `_example/kafka_test` | Kafka 集成测试 | franz-go/kfake |
-| 示例 | `_example/enjoy_test` | Enjoy 引擎测试 | enjoy |
+| 示例 | `_test/demo` | 完整 Web 应用 Demo | core + db + generator + sqlite |
+| 示例 | `_test/db_test` | 数据库集成测试 | db + sqlite |
+| 示例 | `_test/cache_test` | 缓存集成测试 | miniredis |
+| 示例 | `_test/kafka_test` | Kafka 集成测试 | franz-go/kfake |
+| 示例 | `_test/enjoy_test` | Enjoy 引擎测试 | enjoy |
 
 Requires Go 1.26.
 
@@ -257,7 +257,7 @@ const ServicePrefix = "/api/v1/loginLogs"   // 手动改为复数
 | nami | ~1,700 | ~1,600 | 22 |
 | generator | ~1,290 | 371 | 14 |
 | config | ~1,060 | ~2,020 | 5 |
-| _example | ~1,020 | ~2,020 | 16 |
+| _test | ~1,020 | ~2,020 | 16 |
 | kafka | ~970 | 378 | 13 |
 | storage | ~870 | 432 | 13 |
 | cache | ~780 | 384 | 15 |

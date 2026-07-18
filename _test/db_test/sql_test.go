@@ -1,12 +1,14 @@
-package sql
+package db_test
 
 import (
 	"strings"
 	"testing"
+
+	dbsql "github.com/crazy-airhead/aifei-go/db/sql"
 )
 
 func TestGetSqlParaBasic(t *testing.T) {
-	sk := NewSqlKit("test_basic")
+	sk := dbsql.NewSqlKit("test_basic")
 
 	sp := sk.GetSqlPara("select * from user where id = #para(id)", map[string]interface{}{"id": 123})
 	if !strings.Contains(sp.Sql, "select * from user where id = ?") {
@@ -18,7 +20,7 @@ func TestGetSqlParaBasic(t *testing.T) {
 }
 
 func TestGetSqlParaPositional(t *testing.T) {
-	sk := NewSqlKit("test_pos")
+	sk := dbsql.NewSqlKit("test_pos")
 
 	sp := sk.GetSqlParaWithArgs("select * from user where id = #para(0) and name = #para(1)", 123, "test")
 	if !strings.Contains(sp.Sql, "id = ?") || !strings.Contains(sp.Sql, "name = ?") {
@@ -30,7 +32,7 @@ func TestGetSqlParaPositional(t *testing.T) {
 }
 
 func TestParaLike(t *testing.T) {
-	sk := NewSqlKit("test_like")
+	sk := dbsql.NewSqlKit("test_like")
 
 	sp := sk.GetSqlPara("select * from user where name like #para(name, 'like')", map[string]interface{}{"name": "test"})
 	if !strings.Contains(sp.Sql, "name like ?") {
@@ -46,7 +48,7 @@ func TestParaLike(t *testing.T) {
 }
 
 func TestWhereEqual(t *testing.T) {
-	sk := NewSqlKit("test_where_eq")
+	sk := dbsql.NewSqlKit("test_where_eq")
 
 	sql := "select * from user #where(age, '=', age)"
 	sp := sk.GetSqlPara(sql, map[string]interface{}{"age": 18})
@@ -59,7 +61,7 @@ func TestWhereEqual(t *testing.T) {
 }
 
 func TestWhereEqualNil(t *testing.T) {
-	sk := NewSqlKit("test_where_nil")
+	sk := dbsql.NewSqlKit("test_where_nil")
 
 	// When value is nil, no WHERE clause generated
 	sql := "select * from user #where(age, '=', age)"
@@ -73,7 +75,7 @@ func TestWhereEqualNil(t *testing.T) {
 }
 
 func TestWhereIsNull(t *testing.T) {
-	sk := NewSqlKit("test_where_null")
+	sk := dbsql.NewSqlKit("test_where_null")
 
 	sql := "select * from user #where(nickname, 'is null')"
 	sp := sk.GetSqlPara(sql, map[string]interface{}{"nickname": true})
@@ -83,7 +85,7 @@ func TestWhereIsNull(t *testing.T) {
 }
 
 func TestWhereAnd(t *testing.T) {
-	sk := NewSqlKit("test_where_and")
+	sk := dbsql.NewSqlKit("test_where_and")
 
 	sql := "select * from user #where(age, '>', age) #and(name, 'like', name)"
 	filter := map[string]interface{}{"age": 18, "name": "test"}
@@ -98,7 +100,7 @@ func TestWhereAnd(t *testing.T) {
 }
 
 func TestWhereOr(t *testing.T) {
-	sk := NewSqlKit("test_where_or")
+	sk := dbsql.NewSqlKit("test_where_or")
 
 	sql := "select * from user #where(age, '>', age) #or(status, 'in', status)"
 	filter := map[string]interface{}{"age": 18, "status": []string{"active", "pending"}}
@@ -113,7 +115,7 @@ func TestWhereOr(t *testing.T) {
 }
 
 func TestWhereAndOrMixed(t *testing.T) {
-	sk := NewSqlKit("test_where_and_or")
+	sk := dbsql.NewSqlKit("test_where_and_or")
 
 	sql := "select * from user #where(age, '>', age) #and(name, 'like', name) #or(status, '=', status)"
 	filter := map[string]interface{}{"age": 18, "name": "test", "status": "active"}
@@ -128,7 +130,7 @@ func TestWhereAndOrMixed(t *testing.T) {
 }
 
 func TestWhereIn(t *testing.T) {
-	sk := NewSqlKit("test_where_in")
+	sk := dbsql.NewSqlKit("test_where_in")
 
 	sql := "select * from user #where(status, 'in', status)"
 	// Pass a slice
@@ -144,7 +146,7 @@ func TestWhereIn(t *testing.T) {
 }
 
 func TestWhereBetween(t *testing.T) {
-	sk := NewSqlKit("test_where_between")
+	sk := dbsql.NewSqlKit("test_where_between")
 
 	sql := "select * from user #where(age, 'between', age)"
 	sp := sk.GetSqlPara(sql, map[string]interface{}{
@@ -159,7 +161,7 @@ func TestWhereBetween(t *testing.T) {
 }
 
 func TestWhereContains(t *testing.T) {
-	sk := NewSqlKit("test_where_contains")
+	sk := dbsql.NewSqlKit("test_where_contains")
 
 	sql := "select * from user #where(name, 'contains', name)"
 	sp := sk.GetSqlPara(sql, map[string]interface{}{"name": "test"})
@@ -172,7 +174,7 @@ func TestWhereContains(t *testing.T) {
 }
 
 func TestAddSql(t *testing.T) {
-	sk := NewSqlKit("test_add_sql")
+	sk := dbsql.NewSqlKit("test_add_sql")
 
 	sql := `#sql("findUser")
 select * from user where id = #para(0)
@@ -193,7 +195,7 @@ select * from user where id = #para(0)
 }
 
 func TestAddSqlWithWhere(t *testing.T) {
-	sk := NewSqlKit("test_add_sql_where")
+	sk := dbsql.NewSqlKit("test_add_sql_where")
 
 	sql := `#sql("findByFilter")
 select * from user #where(age, '>', age) #and(name, 'like', name)
@@ -213,7 +215,7 @@ select * from user #where(age, '>', age) #and(name, 'like', name)
 }
 
 func TestOrderBy(t *testing.T) {
-	sk := NewSqlKit("test_orderby")
+	sk := dbsql.NewSqlKit("test_orderby")
 
 	sql := "select * from user #orderBy(updated, age)"
 	sp := sk.GetSqlPara(sql, map[string]interface{}{
@@ -228,7 +230,7 @@ func TestOrderBy(t *testing.T) {
 }
 
 func TestOrderByCustomName(t *testing.T) {
-	sk := NewSqlKit("test_orderby_custom")
+	sk := dbsql.NewSqlKit("test_orderby_custom")
 
 	sql := "select * from user #orderBy($sort, updated)"
 	sp := sk.GetSqlPara(sql, map[string]interface{}{
@@ -243,7 +245,7 @@ func TestOrderByCustomName(t *testing.T) {
 }
 
 func TestOrderByFieldMapping(t *testing.T) {
-	sk := NewSqlKit("test_orderby_mapping")
+	sk := dbsql.NewSqlKit("test_orderby_mapping")
 
 	sql := "select * from user #orderBy('updated_time:updateTime')"
 	sp := sk.GetSqlPara(sql, map[string]interface{}{

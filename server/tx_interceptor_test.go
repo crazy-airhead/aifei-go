@@ -13,7 +13,7 @@ type txcTestKey struct{}
 // path: setInContext replaces the request context of an *In (via the embedded
 // HttpContext.SetContext) so that a service method's in.Context() observes the
 // tx context installed by TxInterceptor. The real transaction behavior is
-// covered by _example/db_sqlite_test (TransactionCtx); this test pins the
+// covered by _test/db_test (TransactionCtx); this test pins the
 // injection glue that connects them.
 func TestSetInContextInjectsCtx(t *testing.T) {
 	in := NewIn(httptest.NewRequest(http.MethodGet, "/", nil))

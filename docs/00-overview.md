@@ -138,12 +138,12 @@ aifei-go/
 ├── log/
 │   └── log.go                    # 日志接口 + 默认实现
 │
-└── _example/
+└── _test/
     ├── demo/                     # 完整示例应用
     │   ├── main.go
     │   ├── generated_test.go     # 生成代码集成测试
     │   └── internal/user/        # 生成的 user 表代码 (base.go, user.go, dao.go, service.go)
-    └── db_sqlite_test/           # SQLite 集成测试 (971行)
+    └── db_test/           # SQLite 集成测试 (971行)
         └── db_test.go
 ```
 

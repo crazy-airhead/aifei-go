@@ -1,4 +1,4 @@
-module github.com/crazy-airhead/aifei-go/_example/kafka_test
+module github.com/crazy-airhead/aifei-go/_test/kafka_test
 
 go 1.26
 

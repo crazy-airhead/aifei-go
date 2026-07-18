@@ -8,8 +8,8 @@ import (
 	"github.com/crazy-airhead/aifei-go/server"
 
 	// Per-table package: registers Table metadata and Service routes via init().
-	_ "github.com/crazy-airhead/aifei-go/_example/demo/internal/loginlog"
-	_ "github.com/crazy-airhead/aifei-go/_example/demo/internal/user"
+	_ "github.com/crazy-airhead/aifei-go/_test/demo/internal/loginlog"
+	_ "github.com/crazy-airhead/aifei-go/_test/demo/internal/user"
 
 	_ "modernc.org/sqlite"
 )

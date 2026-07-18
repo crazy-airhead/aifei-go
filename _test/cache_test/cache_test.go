@@ -1,7 +1,7 @@
-// Package cache_redis_test exercises the cache module's Redis (L2 / "both")
+// Package cache_test exercises the cache module's Redis (L2 / "both")
 // code paths against an embedded miniredis, so the cache module itself stays
 // free of any Redis test dependency.
-package cache_redis_test
+package cache_test
 
 import (
 	"context"

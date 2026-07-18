@@ -47,7 +47,7 @@ func main() {
 
 	// Generate code into ./internal
 	outputDir, _ := filepath.Abs("./internal")
-	importRoot := "github.com/crazy-airhead/aifei-go/_example/demo/internal"
+	importRoot := "github.com/crazy-airhead/aifei-go/_test/demo/internal"
 
 	gen := generator.New(pool, dialect, outputDir, importRoot)
 	gen.TablePrefix = "sys_"

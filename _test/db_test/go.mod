@@ -1,4 +1,4 @@
-module github.com/crazy-airhead/aifei-go/_example/db_sqlite_test
+module github.com/crazy-airhead/aifei-go/_test/db_test
 
 go 1.26
 

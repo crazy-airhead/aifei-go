@@ -1,4 +1,4 @@
-module github.com/crazy-airhead/aifei-go/_example/cache_redis_test
+module github.com/crazy-airhead/aifei-go/_test/cache_test
 
 go 1.26
 

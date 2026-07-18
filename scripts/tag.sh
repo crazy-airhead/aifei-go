@@ -5,7 +5,7 @@
 #   - Every module lives in a subdir <mod>/, its go.mod declares
 #     module github.com/crazy-airhead/aifei-go/<mod>, and its version
 #     tag is <mod>/vX.Y.Z.
-#   - _example/* are not importable libraries and are deliberately excluded.
+#   - _test/* are not importable libraries and are deliberately excluded.
 #
 # Usage:
 #   ./scripts/tag.sh v0.1.0           # dry-run (print what would be tagged)

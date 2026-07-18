@@ -1,4 +1,4 @@
-module github.com/crazy-airhead/aifei-go/_example/demo
+module github.com/crazy-airhead/aifei-go/_test/demo
 
 go 1.26
 

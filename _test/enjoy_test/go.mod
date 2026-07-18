@@ -1,4 +1,4 @@
-module github.com/crazy-airhead/aifei-go/_example/enjoy_test
+module github.com/crazy-airhead/aifei-go/_test/enjoy_test
 
 go 1.26
 

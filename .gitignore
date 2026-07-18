@@ -1,6 +1,6 @@
 /.idea/
 /.claude/
-/_example/demo/demo.db
+/_test/demo/demo.db
 /demo
 *.db
 /gen

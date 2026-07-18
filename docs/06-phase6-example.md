@@ -5,7 +5,7 @@
 ## 1. 示例项目结构
 
 ```
-_example/
+_test/
 └── demo/
     ├── main.go                    # 应用入口
     ├── generated_test.go          # 生成代码集成测试
@@ -30,7 +30,7 @@ import (
     "github.com/crazy-airhead/aifei-go/server"
 
     // 生成的 per-table 包：通过 init() 注册 Table 元数据和 Service 路由
-    _ "github.com/crazy-airhead/aifei-go/_example/demo/internal/user"
+    _ "github.com/crazy-airhead/aifei-go/_test/demo/internal/user"
 
     _ "modernc.org/sqlite"
 )
@@ -270,8 +270,8 @@ go 1.26
 | `json/json_test.go` | 45 | Marshal/Unmarshal |
 | `log/log_test.go` | 114 | 日志级别和输出 |
 | `generator/generator_test.go` | 314 | 代码生成器和模板 |
-| `_example/demo/generated_test.go` | 152 | 生成代码集成测试 |
-| `_example/db_sqlite_test/db_test.go` | 971 | CRUD、分页、事务、批量、Enjoy SQL 全指令 |
+| `_test/demo/generated_test.go` | 152 | 生成代码集成测试 |
+| `_test/db_test/db_test.go` | 971 | CRUD、分页、事务、批量、Enjoy SQL 全指令 |
 
 ### 集成测试示例（SQLite 内存数据库）
 
