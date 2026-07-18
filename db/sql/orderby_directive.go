@@ -3,6 +3,7 @@ package sql
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/crazy-airhead/aifei-go/enjoy"
 )
@@ -37,7 +38,7 @@ func (d *OrderByDirective) SetExprList(exprList *enjoy.ExprList) {
 			str = e.Name
 		case *enjoy.ConstExpr:
 			if e.Type == "string" {
-				str = e.Value.(string)
+				str = strings.TrimSpace(e.Value.(string))
 			} else {
 				panic("#orderBy() arguments must be identifiers or string literals")
 			}
@@ -68,8 +69,8 @@ func (d *OrderByDirective) SetExprList(exprList *enjoy.ExprList) {
 		if idx == -1 {
 			d.fieldWhiteMap[str] = str
 		} else {
-			sqlField := str[:idx]
-			clientField := str[idx+1:]
+			sqlField := strings.TrimSpace(str[:idx])
+			clientField := strings.TrimSpace(str[idx+1:])
 			if sqlField == "" || clientField == "" {
 				panic(fmt.Sprintf("#orderBy() invalid whitelist format, expected sqlField:clientField: %s", str))
 			}
@@ -163,12 +164,12 @@ func (d *OrderByDirective) generateOrderByItem(item map[string]interface{}, writ
 	}
 
 	// Whitelist check
-	clientField := fmt.Sprintf("%v", fieldFromClient)
+	clientField := strings.TrimSpace(fmt.Sprintf("%v", fieldFromClient))
 	field, ok := d.fieldWhiteMap[clientField]
 	if !ok {
 		panic(fmt.Sprintf("orderBy field not in whitelist: %s", clientField))
 	}
-	order, ok := orderWhitelist[fmt.Sprintf("%v", orderFromClient)]
+	order, ok := orderWhitelist[strings.TrimSpace(fmt.Sprintf("%v", orderFromClient))]
 	if !ok {
 		panic(fmt.Sprintf("orderBy order must be asc or desc, but got: %v", orderFromClient))
 	}

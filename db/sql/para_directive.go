@@ -25,6 +25,17 @@ const (
 	paraTypeIn        = 4
 )
 
+// checkParaAssigned controls whether #para(name) panics when name is not
+// assigned in the scope (对照 Java ParaDirective.checkParaAssigned，默认 true）。
+// 关闭后 #para(name) 引用未赋值变量时不再抛异常，而是按 nil 输出占位符 —— 便于可选参数场景。
+var checkParaAssigned = true
+
+// SetCheckParaAssigned toggles the global #para(name) assignment check
+// (对照 Java ParaDirective.setCheckParaAssigned）。
+func SetCheckParaAssigned(check bool) {
+	checkParaAssigned = check
+}
+
 func (d *ParaDirective) SetExprList(exprList *enjoy.ExprList) {
 	d.exprList = exprList
 
@@ -61,7 +72,7 @@ func (d *ParaDirective) SetExprList(exprList *enjoy.ExprList) {
 		}
 	}
 
-	if d.index == -1 {
+	if d.index == -1 && checkParaAssigned {
 		if id, ok := exprList.GetExpr(0).(*enjoy.IDExpr); ok {
 			d.paraName = id.Name
 		}
@@ -79,7 +90,7 @@ func (d *ParaDirective) Exec(env *enjoy.Env, scope *enjoy.Scope, writer *enjoy.I
 	sqlPara.SetEnjoySql(true)
 
 	if d.index == -1 {
-		if d.paraName != "" && !scope.Exists(d.paraName) {
+		if checkParaAssigned && d.paraName != "" && !scope.Exists(d.paraName) {
 			panic(fmt.Sprintf("The parameter %q must be assigned", d.paraName))
 		}
 		d.handleSqlPara(writer, sqlPara, d.exprList.GetExpr(0).Eval(scope, ctrl))

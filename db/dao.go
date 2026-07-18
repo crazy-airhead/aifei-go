@@ -233,11 +233,27 @@ func (d *Dao) CountBy(table, whereOrField string, args ...interface{}) (int64, e
 // ---- Advanced query methods ----
 
 func (d *Dao) FindOne() (*Row, error) {
-	return execFindOne(d, false)
+	return execFindOne(d, false, nil)
+}
+
+// FindOneWithMsg is like FindOne but builds the not-one error message from msgFn,
+// invoked with the actual result count (对照 Java Dao.findOne(Function)).
+//
+//	Db.sql("select * from orders where id = ?", id).FindOneWithMsg(func(n int) string {
+//	    return fmt.Sprintf("订单数必须为 1，不能为 %d", n)
+//	})
+func (d *Dao) FindOneWithMsg(msgFn func(int) string) (*Row, error) {
+	return execFindOne(d, false, msgFn)
 }
 
 func (d *Dao) FindOneOrNull() (*Row, error) {
-	return execFindOne(d, true)
+	return execFindOne(d, true, nil)
+}
+
+// FindOneOrNullWithMsg is like FindOneOrNull but builds the too-many error message
+// from msgFn (invoked with the count). Zero results still return (nil, nil).
+func (d *Dao) FindOneOrNullWithMsg(msgFn func(int) string) (*Row, error) {
+	return execFindOne(d, true, msgFn)
 }
 
 func (d *Dao) FindExists() (bool, error) {
@@ -282,6 +298,16 @@ func (d *Dao) QueryOneOrNull() (interface{}, error) {
 
 func (d *Dao) QueryField() (interface{}, error) {
 	return execQueryField(d)
+}
+
+// QueryFieldOr is like QueryField but returns def when the query yields no value
+// (对照 Java Dao.queryField(T defaultValue)).
+func (d *Dao) QueryFieldOr(def interface{}) (interface{}, error) {
+	v, err := d.QueryField()
+	if err != nil || v == nil {
+		return def, err
+	}
+	return v, nil
 }
 
 func (d *Dao) QueryStr() (string, error) {
@@ -342,6 +368,18 @@ func (d *Dao) FindByCompositeId(table, key1, key2 string, id1, id2 interface{}) 
 	return execFindByCompositeId(d, table, []string{key1, key2}, []interface{}{id1, id2})
 }
 
+// FindByCompositeIds finds a row by a composite primary key of arbitrary arity
+// (对照 Java Dao.findByCompositeId(String, String[], Object[])). keys and ids must
+// have equal, non-zero length.
+func (d *Dao) FindByCompositeIds(table string, keys []string, ids ...interface{}) (*Row, error) {
+	return execFindByCompositeId(d, table, keys, ids)
+}
+
+// DeleteByCompositeIds deletes by a composite primary key of arbitrary arity.
+func (d *Dao) DeleteByCompositeIds(table string, keys []string, ids ...interface{}) (bool, error) {
+	return execDeleteByCompositeId(d, table, keys, ids)
+}
+
 func (d *Dao) DeleteInIds(table string, ids ...interface{}) (int64, error) {
 	return execDeleteInIds(d, table, ids)
 }
@@ -359,4 +397,13 @@ func (d *Dao) FindInIds(table string, ids ...interface{}) ([]*Row, error) {
 // for full semantics.
 func (d *Dao) Transaction(fn func(ctx context.Context, d *Dao) error) error {
 	return execTransaction(d, fn)
+}
+
+// DaoTransactionOf is the generic counterpart of Dao.Transaction: it returns the
+// atom's typed business result and honors active rollback (tx.Rollback() or a
+// RollbackDecision result). Because Go does not permit generic methods, it is a
+// free function taking the Dao. For most call sites prefer the package-level
+// db.TransactionOf with db.WithCtx(ctx).
+func DaoTransactionOf[R any](d *Dao, fn func(ctx context.Context, d *Dao, tx *Tx) (R, error)) (R, error) {
+	return execTransactionOf(d, fn)
 }

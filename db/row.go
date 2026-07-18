@@ -112,6 +112,28 @@ func (r *Row) SetIfNotBlank(field, value string) *Row {
 	return r
 }
 
+// SetOrPut sets a field with change-tracking if it already exists in the row,
+// otherwise stores it WITHOUT change-tracking (Put). This is useful when merging
+// external data: columns already loaded get marked dirty for UPDATE, while ad-hoc
+// fields that are not part of the row do not.
+//
+// 注意：Java AifeiRow.setOrPut 按 table 列定义（columnDefined）判定；Go 的基础 Row
+// 无列注册表，这里以“字段是否已存在于 data”近似——已存在则 Set，否则 Put。
+func (r *Row) SetOrPut(field string, value interface{}) *Row {
+	if r.Has(field) {
+		return r.Set(field, value)
+	}
+	return r.Put(field, value)
+}
+
+// SetOrPutMap is the batch form of SetOrPut.
+func (r *Row) SetOrPutMap(data map[string]interface{}) *Row {
+	for k, v := range data {
+		r.SetOrPut(k, v)
+	}
+	return r
+}
+
 // ---- Put (no change tracking) ----
 
 // Put sets a field without tracking change.
@@ -204,6 +226,33 @@ func (r *Row) Get(field string) interface{} {
 		return nil
 	}
 	return r.data[field]
+}
+
+// RowAs returns a field value converted by fn. The converter receives the raw
+// value (nil-safe: fn is NOT called when the field is absent or nil). Mirrors
+// Java Kv.getAs(key, Function) for ad-hoc typed reads.
+func RowAs[T any](r *Row, field string, fn func(interface{}) T) T {
+	v := r.Get(field)
+	if v == nil {
+		var zero T
+		return zero
+	}
+	return fn(v)
+}
+
+// Data returns the underlying field map (live reference, as in Java Row.data()).
+// Mutations are visible to the row; pair with SetData for batch read/write.
+func (r *Row) Data() map[string]interface{} {
+	if r.data == nil {
+		r.data = make(map[string]interface{})
+	}
+	return r.data
+}
+
+// SetData replaces all fields (no change tracking), for batch writes.
+func (r *Row) SetData(data map[string]interface{}) *Row {
+	r.data = data
+	return r
 }
 
 // GetDefault returns a field value with default.

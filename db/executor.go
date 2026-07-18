@@ -625,8 +625,10 @@ func execCountBy(dao *Dao, table, whereOrField string, args []interface{}) (int6
 
 // ---- Advanced query executors ----
 
-// execFindOne returns exactly one row, or an error.
-func execFindOne(dao *Dao, allowNull bool) (*Row, error) {
+// execFindOne returns exactly one row, or an error. When the result count is not
+// 1 (or not 0/1 when allowNull), the error message is built by msgFn applied to
+// the count; msgFn may be nil, in which case default messages are used.
+func execFindOne(dao *Dao, allowNull bool, msgFn func(int) string) (*Row, error) {
 	rows, err := execFind(dao, dao.isRawSQL())
 	if err != nil {
 		return nil, err
@@ -638,8 +640,14 @@ func execFindOne(dao *Dao, allowNull bool) (*Row, error) {
 		if allowNull {
 			return nil, nil
 		}
+		if msgFn != nil {
+			return nil, fmt.Errorf("%s", msgFn(0))
+		}
 		return nil, fmt.Errorf("expected exactly one result, but found 0")
 	default:
+		if msgFn != nil {
+			return nil, fmt.Errorf("%s", msgFn(len(rows)))
+		}
 		return nil, fmt.Errorf("expected exactly one result, but found %d. Consider using FindFirst instead", len(rows))
 	}
 }
@@ -934,9 +942,12 @@ func execQueryBytes(dao *Dao) ([]byte, error) {
 
 // ---- ByID extensions ----
 
-// execDeleteByCompositeId deletes by composite primary keys.
+// execDeleteByCompositeId deletes by composite primary keys of any arity.
 func execDeleteByCompositeId(dao *Dao, table string, pks []string, idValues []interface{}) (bool, error) {
-	row := NewRowWithCompositePK(table, pks[0], pks[1])
+	if len(pks) == 0 || len(pks) != len(idValues) {
+		return false, fmt.Errorf("composite id requires equal, non-zero counts of keys and values: %d keys vs %d values", len(pks), len(idValues))
+	}
+	row := NewRow(table).SetPrimaryKeys(pks...)
 	for i, pk := range pks {
 		row.Put(pk, idValues[i])
 	}
@@ -945,6 +956,9 @@ func execDeleteByCompositeId(dao *Dao, table string, pks []string, idValues []in
 
 // execFindByCompositeId finds by composite primary keys.
 func execFindByCompositeId(dao *Dao, table string, pks []string, idValues []interface{}) (*Row, error) {
+	if len(pks) == 0 || len(pks) != len(idValues) {
+		return nil, fmt.Errorf("composite id requires equal, non-zero counts of keys and values: %d keys vs %d values", len(pks), len(idValues))
+	}
 	dao.table = table
 	sqlStr := dao.config.Dialect.ForFindByID(table, pks)
 	dao.setSqlPara(&dbsql.SqlPara{Sql: sqlStr, Paras: idValues})
@@ -1000,6 +1014,57 @@ func execTransaction(dao *Dao, fn func(ctx context.Context, d *Dao) error) error
 		return err
 	}
 	return tx.Commit()
+}
+
+// execTransactionOf is the generic counterpart of execTransaction: it returns the
+// atom's typed business result and honors active rollback (tx.Rollback() or a
+// RollbackDecision result). See TransactionOf for the full semantics.
+func execTransactionOf[R any](dao *Dao, fn func(ctx context.Context, d *Dao, tx *Tx) (R, error)) (R, error) {
+	run := func(ctx context.Context, d *Dao) (R, bool, error) {
+		t := &Tx{}
+		result, err := fn(ctx, d, t)
+		if err != nil {
+			return result, false, err
+		}
+		if t.rollback {
+			return result, false, nil
+		}
+		if rd, ok := any(result).(RollbackDecision); ok && rd.ShouldRollback() {
+			return result, false, nil
+		}
+		return result, true, nil
+	}
+	// Nested call: join the outer transaction instead of beginning a new one.
+	if _, ok := txFromContext(dao.ctx); ok {
+		result, _, err := run(dao.ctx, dao)
+		return result, err
+	}
+	config := dao.config
+	pool, err := config.Pool()
+	if err != nil {
+		var zero R
+		return zero, err
+	}
+	tx, err := pool.Begin()
+	if err != nil {
+		var zero R
+		return zero, err
+	}
+	txCtx := withTx(dao.ctx, tx)
+	txDao := *dao
+	txDao.ctx = txCtx
+	result, commit, err := run(txCtx, &txDao)
+	if err != nil || !commit {
+		tx.Rollback()
+		if err != nil {
+			return result, err
+		}
+		return result, ErrRollback
+	}
+	if err := tx.Commit(); err != nil {
+		return result, err
+	}
+	return result, nil
 }
 
 // ---- Internal helpers ----

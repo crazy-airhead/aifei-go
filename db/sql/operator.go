@@ -1,6 +1,9 @@
 package sql
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // LikeMode determines how LIKE values are wrapped.
 type LikeMode int
@@ -52,6 +55,9 @@ func init() {
 		{key: "endsWith", sql: "LIKE", likeMode: LikeLeft},
 	} {
 		sqlOperators[op.key] = op
+		// 对照 Java Operator.createCache：同时注册全小写别名，使 key 支持全大写与全小写
+		// （如 notContains→notcontains、startsWith→startswith、endsWith→endswith）。
+		sqlOperators[strings.ToLower(op.key)] = op
 	}
 }
 

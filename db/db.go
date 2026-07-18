@@ -157,6 +157,26 @@ func FindBy(table, whereOrField string, args ...interface{}) ([]*Row, error) {
 	return Use().FindBy(table, whereOrField, args...)
 }
 
+// FindByCompositeId finds a row by a 2-column composite primary key.
+func FindByCompositeId(table, key1, key2 string, id1, id2 interface{}) (*Row, error) {
+	return Use().FindByCompositeId(table, key1, key2, id1, id2)
+}
+
+// FindByCompositeIds finds a row by a composite primary key of arbitrary arity.
+func FindByCompositeIds(table string, keys []string, ids ...interface{}) (*Row, error) {
+	return Use().FindByCompositeIds(table, keys, ids...)
+}
+
+// DeleteByCompositeId deletes by a 2-column composite primary key.
+func DeleteByCompositeId(table, key1, key2 string, id1, id2 interface{}) (bool, error) {
+	return Use().DeleteByCompositeId(table, key1, key2, id1, id2)
+}
+
+// DeleteByCompositeIds deletes by a composite primary key of arbitrary arity.
+func DeleteByCompositeIds(table string, keys []string, ids ...interface{}) (bool, error) {
+	return Use().DeleteByCompositeIds(table, keys, ids...)
+}
+
 // FindFirstBy finds the first row by condition.
 func FindFirstBy(table, whereOrField string, args ...interface{}) (*Row, error) {
 	return Use().FindFirstBy(table, whereOrField, args...)
