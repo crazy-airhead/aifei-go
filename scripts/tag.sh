@@ -68,23 +68,11 @@ MODULES=(
   plugins/xxljob  # github.com/crazy-airhead/aifei-go/plugins/xxljob  (./plugins/xxljob/go.mod)  → aifei, config, log
 )
 
-# Internal dependency map: "module:deps" pairs (compatible with bash 3.2).
-# Format: "<module>:<space-separated list of repo modules it depends on>"
-# Only modules that depend on other modules in this repo need entries here.
-MODULE_DEPS=(
-  "http:aifei"
-  "tools/generator:db enjoy"
-  "tools/damigen:enjoy"
-  "server:aifei http"
-  "plugins/nacos:aifei config log nami"
-  "plugins/storage:aifei config log"
-  "plugins/cache:aifei config log"
-  "plugins/kafka:aifei config log"
-  "plugins/swagger:aifei config log"
-  "plugins/dami:aifei dami log"
-  "plugins/elasticsearch:aifei config log"
-  "plugins/xxljob:aifei config log"
-)
+# Internal dependencies are auto-discovered from each module's go.mod in the
+# update loop below — there is no hand-maintained dependency map to keep in
+# sync, so adding a new internal require to any go.mod is picked up
+# automatically. (Previous versions had a MODULE_DEPS map that drifted out of
+# sync with the real go.mod files, leaving some requires un-bumped.)
 
 # Remotes to push to (github publishes to the Go module proxy).
 REMOTES=(github origin)
@@ -128,24 +116,20 @@ if [[ "$DO" == "--do" || "$DO" == "--push" ]]; then
   echo "=== Updating internal dependency versions to $VERSION ==="
   UPDATED_ANY=0
 
-  for entry in "${MODULE_DEPS[@]}"; do
-    mod="${entry%%:*}"
-    DEPS="${entry#*:}"
+  for mod in "${MODULES[@]}"; do
     MOD_FILE="$mod/go.mod"
     MODIFIED=0
 
-    for dep in $DEPS; do
-      DEP_PATH="github.com/crazy-airhead/aifei-go/${dep}"
-
-      # Update require line: replace old version with new version
-      if grep -q "${DEP_PATH} v" "$MOD_FILE"; then
-        sed -i '' "s|\\(${DEP_PATH}\\) v[0-9][0-9.]*|\\1 ${VERSION}|g" "$MOD_FILE"
-        echo "  ${mod}/go.mod: ${dep} → ${VERSION}"
-        MODIFIED=1
-      else
-        echo "  WARNING: ${mod}/go.mod does not require ${DEP_PATH} (skip)"
-      fi
-    done
+    # Auto-discover every internal require in this module's go.mod.
+    # Matching "<path> v<digit>" excludes `replace … => ../dir` lines (no
+    # version) and works for both block and single-line require forms.
+    while IFS= read -r DEP_PATH; do
+      [[ -z "$DEP_PATH" ]] && continue
+      sed -i '' "s|\\(${DEP_PATH}\\) v[0-9][0-9.]*|\\1 ${VERSION}|g" "$MOD_FILE"
+      echo "  ${mod}/go.mod: ${DEP_PATH#github.com/crazy-airhead/aifei-go/} → ${VERSION}"
+      MODIFIED=1
+    done < <(grep -oE 'github.com/crazy-airhead/aifei-go/[a-z/]+ v[0-9]' "$MOD_FILE" \
+            | awk '{print $1}' | sort -u)
 
     if [[ "$MODIFIED" == "1" ]]; then
       # Run go mod tidy to sync go.sum (go.work resolves local modules)
