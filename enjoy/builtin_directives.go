@@ -2,6 +2,8 @@ package enjoy
 
 import (
 	"bytes"
+	"fmt"
+	"math"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -237,13 +239,17 @@ func (d *NumberDirective) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *
 			pattern = s
 		}
 	}
-	writer.WriteString(formatNumber(value, pattern))
+	roundingMode := RoundingModeHalfEven
+	if cfg := env.GetEngineConfig(); cfg != nil {
+		roundingMode = cfg.GetRoundingMode()
+	}
+	writer.WriteString(formatNumber(value, pattern, roundingMode))
 }
 
 // formatNumber formats a numeric value with a Java DecimalFormat-style pattern
-// (subset)。Go 的 FormatFloat 采用 round-half-to-even，与 Java DecimalFormat 默认
-// RoundingMode HALF_EVEN 一致。
-func formatNumber(value interface{}, pattern string) string {
+// (subset)。roundingMode 控制舍入：HALF_EVEN（Go FormatFloat 默认，对照 Java DecimalFormat
+// 默认）/ HALF_UP（math.Round 远离 0 四舍五入）；其余模式回退 HALF_EVEN。
+func formatNumber(value interface{}, pattern string, roundingMode string) string {
 	f := toFloat64(value)
 	if pattern == "" {
 		return strconv.FormatFloat(f, 'f', -1, 64)
@@ -295,6 +301,13 @@ func formatNumber(value interface{}, pattern string) string {
 	af := f
 	if neg {
 		af = -af
+	}
+
+	// HALF_UP：先按 maxFrac 位四舍五入（math.Round 远离 0，对正数即 HALF_UP），
+	// 再交给 FormatFloat 定位；HALF_EVEN（默认）与其他模式直接用 FormatFloat 的 round-half-even。
+	if roundingMode == RoundingModeHalfUp && maxFrac >= 0 {
+		pow := math.Pow(10, float64(maxFrac))
+		af = math.Round(af*pow) / pow
 	}
 
 	// FormatFloat 以 maxFrac 固定小数位（含四舍五入），再按 # 的可选语义裁剪尾零。
@@ -526,7 +539,11 @@ func (d *CallDirective) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ct
 	name, _ := d.funcExpr.Eval(scope, ctrl).(string)
 	def := env.GetFunction(name) // name 为 "" 时返回 nil
 	if def == nil {
-		return // Go 版本宽松：函数不存在则跳过（Java 非 nullSafe 时抛异常）
+		if d.nullSafe {
+			return // nullSafe（首参 true）：函数不存在跳过
+		}
+		// 非 nullSafe：函数不存在抛异常（对照 Java CallDirective）。
+		panic(fmt.Sprintf("template function not defined: %s", name))
 	}
 	callDefine(env, def, d.args, scope, writer, ctrl)
 }

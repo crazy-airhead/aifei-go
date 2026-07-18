@@ -2,6 +2,7 @@ package enjoy
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -177,7 +178,11 @@ type CallStat struct {
 func (s *CallStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 	def := env.GetFunction(s.FuncName)
 	if def == nil {
-		return // Go 版本宽松：函数不存在则跳过（Java 非_nullSafe 时会抛异常）
+		if s.NullSafe {
+			return // nullSafe（#@name?）：函数不存在跳过（对照 Java callIfDefined）
+		}
+		// 非 nullSafe（#@name）：函数不存在抛异常（对照 Java Define.call）。
+		panic(fmt.Sprintf("template function not defined: %s", s.FuncName))
 	}
 	callDefine(env, def, s.Args, scope, writer, ctrl)
 }
@@ -188,6 +193,10 @@ func (s *CallStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 // 故函数体内可见外层变量；body 执行后消化其内部 #return/#break/#continue（setJumpNone），
 // 使函数体内的跳转不外泄到调用方。
 func callDefine(env *Env, def *DefineStat, argExprs []Expr, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	// 参数个数严格校验（对照 Java Define.call 的形参/实参匹配，不匹配抛异常）。
+	if len(argExprs) != len(def.Params) {
+		panic(fmt.Sprintf("template function %q parameter count mismatch: expected %d, got %d", def.Name, len(def.Params), len(argExprs)))
+	}
 	args := make([]interface{}, len(argExprs))
 	for i, a := range argExprs {
 		args[i] = a.Eval(scope, ctrl)
@@ -372,12 +381,51 @@ func registerDefine(stat Stat, env *Env) Stat {
 	return stat
 }
 
-func parseOneStat(tok Token, lexer *Lexer, env *Env) (Stat, error) {
+// locateError 给解析期错误附加「文件名: 行号」（对照 Java Location / ParseException）。
+type locateError struct {
+	file string
+	line int
+	err  error
+}
+
+func (e *locateError) Error() string {
+	if e.file == "" {
+		return fmt.Sprintf("line %d: %s", e.line, e.err)
+	}
+	return fmt.Sprintf("%s: line %d: %s", e.file, e.line, e.err)
+}
+
+func (e *locateError) Unwrap() error { return e.err }
+
+// locErr 给 err 附加文件名+行号；已是 locateError 则原样返回，防止嵌套 parseOneStat 重复包装。
+func locErr(env *Env, line int, err error) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := err.(*locateError); ok {
+		return err
+	}
+	file := ""
+	if env != nil {
+		file = env.GetFileName()
+	}
+	return &locateError{file: file, line: line, err: err}
+}
+
+func parseOneStat(tok Token, lexer *Lexer, env *Env) (stat Stat, err error) {
+	// 所有解析期 error 自动附加当前指令的文件名+行号（对照 Java ParseException 的 Location）。
+	// 嵌套 parseOneStat 已包装过的 locErr 不重复加（见 locErr）。
+	defer func() {
+		if err != nil {
+			err = locErr(env, tok.Line, err)
+		}
+	}()
+	cfg := env.GetEngineConfig()
 	switch tok.Type {
 	case TokText:
 		return &Text{Content: tok.Val}, nil
 	case TokOutput:
-		ex, err := ParseExpr(tok.Val)
+		ex, err := parseExprWithConfig(tok.Val, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("output expression error: %w", err)
 		}
@@ -387,15 +435,15 @@ func parseOneStat(tok Token, lexer *Lexer, env *Env) (Stat, error) {
 	case TokFor:
 		return parseForStat(tok.Val, lexer, env)
 	case TokSet:
-		return parseSetStat(tok.Val, "")
+		return parseSetStat(tok.Val, "", cfg)
 	case TokSetLocal:
-		return parseSetStat(tok.Val, "local")
+		return parseSetStat(tok.Val, "local", cfg)
 	case TokSetGlobal:
-		return parseSetStat(tok.Val, "global")
+		return parseSetStat(tok.Val, "global", cfg)
 	case TokDefine:
 		return parseDefineStat(tok.Val, lexer, env)
 	case TokCall, TokCallIfDefined:
-		return parseCallStat(tok)
+		return parseCallStat(tok, cfg)
 	case TokBreak:
 		return &BreakStat{}, nil
 	case TokContinue:
@@ -407,9 +455,9 @@ func parseOneStat(tok Token, lexer *Lexer, env *Env) (Stat, error) {
 	case TokCase, TokDefault:
 		return nil, nil
 	case TokReturn:
-		return parseReturnStat(tok.Val)
+		return parseReturnStat(tok.Val, cfg)
 	case TokReturnIf:
-		return parseReturnIfStat(tok.Val)
+		return parseReturnIfStat(tok.Val, cfg)
 	case TokID:
 		return parseDirectiveStat(tok, lexer, env)
 	default:
@@ -427,7 +475,15 @@ func (s *DirectiveStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ct
 	s.Directive.Exec(env, scope, writer, ctrl)
 }
 
-func parseDirectiveStat(tok Token, lexer *Lexer, env *Env) (Stat, error) {
+func parseDirectiveStat(tok Token, lexer *Lexer, env *Env) (stat Stat, err error) {
+	// 指令参数校验（#date/#number/#string/#render/#call 的 SetExprList）以 panic 表达，
+	// 此处捕获并转为带行号的 error（对照 Java ParseException 带 Location）。
+	defer func() {
+		if r := recover(); r != nil {
+			stat = nil
+			err = locErr(env, tok.Line, fmt.Errorf("%v", r))
+		}
+	}()
 	config := env.GetEngineConfig()
 	if config == nil || config.directiveMap == nil {
 		return &NullStat{}, nil
@@ -443,7 +499,7 @@ func parseDirectiveStat(tok Token, lexer *Lexer, env *Env) (Stat, error) {
 	// Parse parameters into ExprList
 	exprList := NewExprList()
 	if tok.Val != "" {
-		exprs, err := parseExprList(tok.Val)
+		exprs, err := parseExprList(tok.Val, config)
 		if err != nil {
 			return nil, fmt.Errorf("directive #%s parameter error: %w", tok.Name, err)
 		}
@@ -466,7 +522,7 @@ func parseDirectiveStat(tok Token, lexer *Lexer, env *Env) (Stat, error) {
 }
 
 // parseExprList parses a comma-separated list of expressions.
-func parseExprList(s string) (*ExprList, error) {
+func parseExprList(s string, cfg *EngineConfig) (*ExprList, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return NewExprList(), nil
@@ -479,7 +535,7 @@ func parseExprList(s string) (*ExprList, error) {
 		if part == "" {
 			continue
 		}
-		ex, err := ParseExpr(part)
+		ex, err := parseExprWithConfig(part, cfg)
 		if err != nil {
 			return nil, err
 		}
@@ -522,7 +578,7 @@ func splitByComma(s string) []string {
 }
 
 func parseIfStat(condStr string, lexer *Lexer, env *Env) (Stat, error) {
-	cond, err := ParseExpr(condStr)
+	cond, err := parseExprWithConfig(condStr, env.GetEngineConfig())
 	if err != nil {
 		return nil, err
 	}
@@ -537,7 +593,7 @@ func parseIfStat(condStr string, lexer *Lexer, env *Env) (Stat, error) {
 
 	for _, t := range thenTokens {
 		if t.Type == TokElseIf {
-			eiCond, _ := ParseExpr(t.Val)
+			eiCond, _ := parseExprWithConfig(t.Val, env.GetEngineConfig())
 			eiBody, eiTokens, err := collectUntil(lexer, env, TokElseIf, TokElse, TokEnd)
 			if err != nil {
 				return nil, err
@@ -639,20 +695,20 @@ func parseForStat(header string, lexer *Lexer, env *Env) (Stat, error) {
 	} else {
 		return nil, fmt.Errorf("#for syntax error: only iterator form '#for(id : expr)' or '#for(id in expr)' is supported, C-style 'for(init; cond; update)' is not: %q", header)
 	}
-	iterExpr, err := ParseExpr(iterStr)
+	iterExpr, err := parseExprWithConfig(iterStr, env.GetEngineConfig())
 	if err != nil {
 		return nil, err
 	}
 	return &ForStat{VarName: varName, IterExpr: iterExpr, Body: body, Else: elseStat}, nil
 }
 
-func parseSetStat(val string, scopeType string) (Stat, error) {
+func parseSetStat(val string, scopeType string, cfg *EngineConfig) (Stat, error) {
 	val = strings.TrimSpace(val)
 	if val == "" {
 		return &NullStat{}, nil
 	}
 	// 整体解析为表达式：支持 ID=expr 与 container[idx]=expr，以及无限连写 a=b=1。
-	ex, err := ParseExpr(val)
+	ex, err := parseExprWithConfig(val, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -693,11 +749,11 @@ func parseDefineStat(header string, lexer *Lexer, env *Env) (Stat, error) {
 
 // parseCallStat parses the #@name(args) static call sugar. The function name is
 // the literal identifier captured by the lexer (tok.Name)，无需启发式判定。
-func parseCallStat(tok Token) (Stat, error) {
+func parseCallStat(tok Token, cfg *EngineConfig) (Stat, error) {
 	val := strings.TrimSpace(tok.Val)
 	var args []Expr
 	if val != "" {
-		exprs, err := parseExprList(val)
+		exprs, err := parseExprList(val, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("#@%s parameter error: %w", tok.Name, err)
 		}
@@ -708,12 +764,12 @@ func parseCallStat(tok Token) (Stat, error) {
 	return &CallStat{FuncName: tok.Name, NullSafe: tok.Type == TokCallIfDefined, Args: args}, nil
 }
 
-func parseReturnStat(val string) (Stat, error) {
+func parseReturnStat(val string, cfg *EngineConfig) (Stat, error) {
 	val = strings.TrimSpace(val)
 	if val == "" {
 		return &ReturnStat{}, nil
 	}
-	ex, err := ParseExpr(val)
+	ex, err := parseExprWithConfig(val, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -722,12 +778,12 @@ func parseReturnStat(val string) (Stat, error) {
 
 // parseReturnIfStat parses #returnIf(cond): cond is the return condition
 // (对照 Java ReturnIf.java，空参数报错，expr 作为条件而非返回值)。
-func parseReturnIfStat(val string) (Stat, error) {
+func parseReturnIfStat(val string, cfg *EngineConfig) (Stat, error) {
 	val = strings.TrimSpace(val)
 	if val == "" {
 		return nil, fmt.Errorf("the parameter of #returnIf directive can not be blank")
 	}
-	ex, err := ParseExpr(val)
+	ex, err := parseExprWithConfig(val, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -735,7 +791,7 @@ func parseReturnIfStat(val string) (Stat, error) {
 }
 
 func parseIncludeStat(para string, env *Env) (Stat, error) {
-	exprs, err := parseExprList(para)
+	exprs, err := parseExprList(para, env.GetEngineConfig())
 	if err != nil {
 		return nil, fmt.Errorf("#include parameter error: %w", err)
 	}
@@ -756,12 +812,16 @@ func parseIncludeStat(para string, env *Env) (Stat, error) {
 	}
 
 	if !strings.HasPrefix(subPath, "/") {
-		basePath := ""
-		if engine.config != nil {
-			basePath = engine.config.baseTemplatePath
-		}
-		if basePath != "" {
-			subPath = basePath + "/" + subPath
+		// 相对路径：优先相对父模板文件目录（对照 Java #include 相对父文件目录）。
+		// 仅文件模板设置了 currentFile；字符串模板无父目录，回退 baseTemplatePath。
+		if cf := env.GetCurrentFile(); cf != "" {
+			if dir := filepath.Dir(cf); dir != "." && dir != "" {
+				subPath = filepath.Join(dir, subPath)
+			}
+		} else if engine.config != nil {
+			if basePath := engine.config.GetBaseTemplatePath(); basePath != "" {
+				subPath = basePath + "/" + subPath
+			}
 		}
 	}
 
@@ -783,7 +843,7 @@ func parseIncludeStat(para string, env *Env) (Stat, error) {
 }
 
 func parseSwitchStat(para string, lexer *Lexer, env *Env) (Stat, error) {
-	exprs, err := parseExprList(para)
+	exprs, err := parseExprList(para, env.GetEngineConfig())
 	if err != nil {
 		return nil, fmt.Errorf("#switch parameter error: %w", err)
 	}
@@ -802,7 +862,7 @@ func parseSwitchStat(para string, lexer *Lexer, env *Env) (Stat, error) {
 		}
 
 		if tok.Type == TokCase {
-			caseExprs, err := parseExprList(tok.Val)
+			caseExprs, err := parseExprList(tok.Val, env.GetEngineConfig())
 			if err != nil {
 				return nil, fmt.Errorf("#case parameter error: %w", err)
 			}

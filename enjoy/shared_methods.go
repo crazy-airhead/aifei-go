@@ -76,6 +76,63 @@ func (k *SharedMethodKit) Call(name string, args []interface{}) (interface{}, bo
 	return fn(args), true
 }
 
+// StaticMethodKit 管理 `Alias::method(args)` 静态调用的「命名空间」注册表（对照 Java 静态方法）。
+//
+// Go 没有 Class.forName / 结构体静态方法，也无法整体反射一个 import 包的包级函数（包不是运行时
+// value）。故 Java `Cls::method`（类静态方法）在 Go 的落地是：注册一个 struct 实例为命名空间
+// alias，反射其所有导出方法——`alias::method(args)` 动态查 alias 对应对象的方法并调用。这是
+// 「导入整个工具类，公开方法自动可用」的 Go 等价。与共享对象访问 `obj.method`（`.` 语法、需把
+// 实例注入 scope）刻意区分：`::` 是静态语法糖，命名空间注册一次即对所有模板可用，不占 scope。
+// 要导出标准库的包级函数（如 strings.ToUpper），需用一个 struct 包一层（Go 无法反射 import 包）。
+type StaticMethodKit struct {
+	mu       sync.RWMutex
+	packages map[string]interface{} // alias → 对象，反射调用其导出方法
+}
+
+// NewStaticMethodKit 创建一个空的静态方法注册表。
+func NewStaticMethodKit() *StaticMethodKit {
+	return &StaticMethodKit{packages: make(map[string]interface{})}
+}
+
+// Add 在 alias 命名空间下注册一个对象，其所有导出方法即可在模板中 `alias::method(args)` 调用
+// （对照 Java 导入工具类）。建议传 `&Obj{}`（指针）以同时覆盖值/指针接收者方法。
+func (k *StaticMethodKit) Add(alias string, obj interface{}) {
+	if k == nil || obj == nil {
+		return
+	}
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.packages[alias] = obj
+}
+
+// Remove 移除 alias 命名空间。
+func (k *StaticMethodKit) Remove(alias string) {
+	if k == nil {
+		return
+	}
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	delete(k.packages, alias)
+}
+
+// Call 在 alias 命名空间上反射调用 name 方法；命名空间或方法不存在返回 (nil, false)。
+func (k *StaticMethodKit) Call(alias, name string, args []interface{}) (interface{}, bool) {
+	if k == nil {
+		return nil, false
+	}
+	k.mu.RLock()
+	obj, ok := k.packages[alias]
+	k.mu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+	m := reflect.ValueOf(obj).MethodByName(name)
+	if !m.IsValid() {
+		return nil, false
+	}
+	return callFunc(m.Interface(), args), true
+}
+
 // ExtensionMethodKit 按 reflect.Kind + 方法名注册的扩展方法集合（对照 Java MethodKit
 // 的 extension method 部分，Java 按 Class 注册，Go 按 Kind 归并：所有整型/浮点 kind 共享
 // 同一组数值转换方法，等价覆盖 Java 的 Integer/Long/Short/Byte/Float/Double Ext）。
@@ -141,6 +198,10 @@ var (
 	// extensionMethodKit 是模板求值时 `obj.method(args)` 的扩展方法库
 	// （对照 Java MethodKit static 块，默认含 String 与全部数值 kind 的转换方法）。
 	extensionMethodKit = newDefaultExtensionMethodKit()
+	// staticMethodKit 是 `Cls::method(args)` 静态调用查询的全局函数注册表
+	// （对照 Java 静态方法；Go 以注册的包级函数为等价）。仅 SetStaticMethodExpressionEnabled(true)
+	// 后模板内 `::` 才会到达此处（默认禁用时 `::` 在解析期预扫描即报错）。
+	staticMethodKit = NewStaticMethodKit()
 )
 
 // AddSharedMethod 向进程级共享方法库注册一个共享方法（对照 Java addSharedMethod）。
@@ -148,6 +209,13 @@ func AddSharedMethod(name string, fn SharedMethod) { sharedMethodKit.Add(name, f
 
 // RemoveSharedMethod 按名移除进程级共享方法库中的一个方法（对照 Java removeSharedMethod）。
 func RemoveSharedMethod(name string) { sharedMethodKit.Remove(name) }
+
+// AddStatic 向进程级静态方法注册表注册一个命名空间对象，其所有导出方法即可在模板中
+// `alias::method(args)` 调用（对照 Java 导入工具类的静态方法）。建议传 `&Obj{}`。
+func AddStatic(alias string, obj interface{}) { staticMethodKit.Add(alias, obj) }
+
+// RemoveStatic 移除进程级静态方法注册表中的 alias 命名空间。
+func RemoveStatic(alias string) { staticMethodKit.Remove(alias) }
 
 // AddExtensionMethod 向进程级扩展方法库在指定 Kind 上注册一个扩展方法
 // （对照 Java MethodKit.addExtensionMethod）。

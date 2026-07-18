@@ -2,20 +2,49 @@ package enjoy
 
 // Lexer tokenizes template content.
 type Lexer struct {
-	input  string
-	pos    int
-	length int
+	input         string
+	pos           int
+	length        int
+	lineStarts    []int // 每行首字符的 pos（lineStarts[0]=0 对应第 1 行），用于 Token.Line 查表
+	keepLineBlank bool  // 是否保留行首指令后的空行（对照 Java keepLineBlankDirectives，默认 false）
 }
 
 // NewLexer creates a new template lexer.
 func NewLexer(input string) *Lexer {
-	return &Lexer{input: input, length: len(input)}
+	l := &Lexer{input: input, length: len(input)}
+	l.lineStarts = []int{0}
+	for i := 0; i < len(input); i++ {
+		if input[i] == '\n' {
+			l.lineStarts = append(l.lineStarts, i+1)
+		}
+	}
+	return l
+}
+
+// SetKeepLineBlank 配置是否保留行首指令后的空行（对照 Java keepLineBlankDirectives）。
+func (l *Lexer) SetKeepLineBlank(b bool) { l.keepLineBlank = b }
+
+// lineOf 返回 pos 所在行号（从 1 起），基于预计算的 lineStarts 二分查找（对照 Java Location.row）。
+func (l *Lexer) lineOf(pos int) int {
+	if pos < 0 {
+		pos = 0
+	}
+	lo, hi := 0, len(l.lineStarts)-1
+	for lo < hi {
+		mid := (lo + hi + 1) / 2
+		if l.lineStarts[mid] <= pos {
+			lo = mid
+		} else {
+			hi = mid - 1
+		}
+	}
+	return lo + 1
 }
 
 // Scan returns the next token.
 func (l *Lexer) Scan() Token {
 	if l.pos >= l.length {
-		return Token{TokEOF, "", ""}
+		return Token{TokEOF, "", "", l.lineOf(l.pos)}
 	}
 
 	if l.pos < l.length && l.input[l.pos] != '#' {
@@ -23,8 +52,10 @@ func (l *Lexer) Scan() Token {
 	}
 
 	if l.pos >= l.length {
-		return Token{TokEOF, "", ""}
+		return Token{TokEOF, "", "", l.lineOf(l.pos)}
 	}
+
+	entryPos := l.pos
 
 	// Comment: #-- ... --#
 	if l.pos+3 < l.length && l.input[l.pos:l.pos+3] == "#--" {
@@ -36,7 +67,7 @@ func (l *Lexer) Scan() Token {
 			}
 			l.pos++
 		}
-		return Token{TokEOF, "", ""}
+		return Token{TokEOF, "", "", l.lineOf(entryPos)}
 	}
 
 	// Raw block: #[[ ... ]]#
@@ -47,11 +78,11 @@ func (l *Lexer) Scan() Token {
 			if l.input[l.pos:l.pos+3] == "]]#" {
 				val := l.input[start:l.pos]
 				l.pos += 3
-				return Token{TokText, val, ""}
+				return Token{TokText, val, "", l.lineOf(entryPos)}
 			}
 			l.pos++
 		}
-		return Token{TokText, l.input[start:], ""}
+		return Token{TokText, l.input[start:], "", l.lineOf(entryPos)}
 	}
 
 	// Single-line comment: ###
@@ -87,10 +118,11 @@ func (l *Lexer) scanText() Token {
 		}
 		l.pos++
 	}
-	return Token{TokText, l.input[start:l.pos], ""}
+	return Token{TokText, l.input[start:l.pos], "", l.lineOf(start)}
 }
 
 func (l *Lexer) scanOutput() Token {
+	startLine := l.lineOf(l.pos)
 	l.pos += 2
 	depth := 1
 	start := l.pos
@@ -119,11 +151,12 @@ func (l *Lexer) scanOutput() Token {
 	if l.pos < l.length {
 		l.pos++
 	}
-	return Token{TokOutput, val, ""}
+	return Token{TokOutput, val, "", startLine}
 }
 
 func (l *Lexer) scanDirective() Token {
 	hashPos := l.pos
+	startLine := l.lineOf(hashPos)
 	l.pos++
 
 	if l.pos < l.length && l.input[l.pos] == '@' {
@@ -143,7 +176,8 @@ func (l *Lexer) scanDirective() Token {
 		// （解析器从不读取其 para，原先会吞掉 #else<文本> 的尾部文本，导致分支体丢失）。
 		// 行首（独占一行）时顺带吃掉尾随水平空白与换行，避免输出多余空行；
 		// 行内时保留尾部文本，交由后续 TokText 输出。
-		if l.isAtLineStart(hashPos) {
+		// keepLineBlankDirectives=true 时保留尾随换行（对照 Java，默认 false 仍吃掉）。
+		if !l.keepLineBlank && l.isAtLineStart(hashPos) {
 			for l.pos < l.length && (l.input[l.pos] == ' ' || l.input[l.pos] == '\t') {
 				l.pos++
 			}
@@ -189,7 +223,8 @@ func (l *Lexer) scanDirective() Token {
 
 	// Consume trailing newline if the directive starts at the beginning of its line
 	// (only whitespace between the last \n and #). This prevents blank lines in output.
-	if l.pos < l.length && l.isAtLineStart(hashPos) {
+	// keepLineBlankDirectives=true 时保留该空行（对照 Java，默认 false 仍吃掉）。
+	if !l.keepLineBlank && l.pos < l.length && l.isAtLineStart(hashPos) {
 		if l.input[l.pos] == '\n' {
 			l.pos++
 		} else if l.pos+1 < l.length && l.input[l.pos] == '\r' && l.input[l.pos+1] == '\n' {
@@ -197,7 +232,7 @@ func (l *Lexer) scanDirective() Token {
 		}
 	}
 
-	return Token{tokType, para, name}
+	return Token{tokType, para, name, startLine}
 }
 
 // isParameterLessDirective 报告该指令是否不接受任何参数。
@@ -275,6 +310,7 @@ func isDirectiveChar(ch byte) bool {
 // state 20)。它推进 l.pos 越过 '@'、函数名、可选 '?' 与参数括号，避免被当作文本重扫
 // （修复旧实现只前进一步导致 #@ 内容被重扫的缺陷）。函数名通过 Token.Name 传递。
 func (l *Lexer) scanAtCall(hashPos int) Token {
+	startLine := l.lineOf(hashPos)
 	l.pos++ // past '@'
 	l.skipBlanks()
 
@@ -315,7 +351,8 @@ func (l *Lexer) scanAtCall(hashPos int) Token {
 	}
 
 	// Consume trailing newline when the directive starts its line.
-	if l.pos < l.length && l.isAtLineStart(hashPos) {
+	// keepLineBlankDirectives=true 时保留该空行（对照 Java，默认 false 仍吃掉）。
+	if !l.keepLineBlank && l.pos < l.length && l.isAtLineStart(hashPos) {
 		if l.input[l.pos] == '\n' {
 			l.pos++
 		} else if l.pos+1 < l.length && l.input[l.pos] == '\r' && l.input[l.pos+1] == '\n' {
@@ -323,7 +360,7 @@ func (l *Lexer) scanAtCall(hashPos int) Token {
 		}
 	}
 
-	return Token{tokType, para, id}
+	return Token{tokType, para, id, startLine}
 }
 
 func (l *Lexer) skipBlanks() {

@@ -186,14 +186,16 @@
 
 ### 3.4 低优先级差异
 
-- `??` 优先级：Java 低优先级（可链式 `a ?? b ?? c`）；Go 当 postfix 高优先级。
+> 注：以下多项已由 ISSUE-0012 第一轮对齐 Java，标注 ✅；其余为仍存差异或 Go 限制。
+
+- ✅ `??` 优先级：Java `nullSafe()` 位于 mulDivMod(* / %) 与 unary 之间、左结合链式；Go 已对齐（旧为 postfix 高优先级）。
 - Map 字面量 key：Java 允许 number/bool/null/ID/STR；Go 只允许 ID/STR。
-- `#@name?()` 安全调用：Go 把 `?` 并入函数名导致 `GetFunction("name?")` 失败、静默跳过。
-- `::` 静态访问：Java 真正 `StaticMethod/StaticField`（按类名反射，默认关闭）；Go 当 `IDExpr` 上的 field/method，且默认开启（伪实现）。
-- `#include` 相对路径：Java 相对父文件目录；Go 只相对 baseTemplatePath。
-- Call 参数个数：Java 抛异常；Go 静默忽略。
+- ✅ `#@name?()` 安全调用：词法器正确剥离 `?`→`TokCallIfDefined`，函数名干净；nullSafe 跳过、非 nullSafe 抛异常（对齐 Java）。
+- ✅ `::` 静态访问：模板路径默认禁用对齐 Java（`isStaticMethodExpressionEnabled=false`）；**Go 限制：无 Class.forName / 结构体静态方法，且无法整体反射 import 包的包级函数**——开启后以 `AddStatic(alias, obj)` 注册一个 struct 实例作命名空间，反射其所有导出方法，`alias::method(args)` 即可调用（作 Java 导入工具类静态方法的等价；要导标准库包级函数需用 struct 包一层）。
+- ✅ `#include` 相对路径：相对父文件目录解析，无父目录回退 baseTemplatePath（对齐 Java）。
+- ✅ Call 参数个数：不匹配抛异常（对齐 Java）；nullSafe 仍跳过。
 - `ClassPathSource`：Java 有 classpath/file/string；Go 只有 file/string。
-- 错误无行号定位：Java `Location`/`ParseException` 带文件名+行号；Go `errorStat`（`template.go:148-155`）只输出错误字符串。
+- ✅ 错误行号定位：解析期 + directive 参数期 error 带「文件名:行号」（`locateError`，对照 Java `Location`/`ParseException`）；`errorStat` 已在前序 issue 移除，错误改为 error 返回。渲染期节点级精确行号遗留。
 
 ### 3.5 有意省略（非缺口）
 

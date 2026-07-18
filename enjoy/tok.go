@@ -34,4 +34,5 @@ type Token struct {
 	Type TokType
 	Val  string
 	Name string // directive name when Type is TokID
+	Line int    // token 所在行号（从 1 起），用于错误定位（对照 Java Location.row）
 }

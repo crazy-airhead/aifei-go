@@ -6,11 +6,41 @@ import (
 )
 
 // ParseExpr parses an expression string into an Expr AST.
+// 独立解析（无 EngineConfig）：`::` 静态访问按伪实现处理（向后兼容 db SqlKit 等）。
 func ParseExpr(input string) (Expr, error) {
+	return parseExprWithConfig(input, nil)
+}
+
+// parseExprWithConfig 解析表达式；模板路径传入 EngineConfig 以启用 `::` 默认禁用检查
+// （对照 Java ExprParser 构造时持有 engineConfig）。config==nil 时跳过该检查。
+func parseExprWithConfig(input string, cfg *EngineConfig) (Expr, error) {
+	// `::` 静态访问：Java 用 Class.forName 反射、默认关闭；Go 无运行时按全限定名反射。
+	// 模板路径（cfg != nil）下默认禁用——预扫描整个表达式是否含 `::` token
+	// （词法器正确跳过字符串字面量内的 "::"），覆盖 a::b 与 a.b.c::d 两种形式，
+	// 消除旧伪实现（:: 当 IDExpr 的 field/method）静默失效或误命中同名变量。
+	// config==nil（独立 ParseExpr）保持伪实现以向后兼容。
+	if cfg != nil && !cfg.IsStaticMethodExpressionEnabled() && !cfg.IsStaticFieldExpressionEnabled() && exprContainsStatic(input) {
+		return nil, fmt.Errorf("static method/field expression is not enabled (Go lacks runtime Class.forName; use AddSharedMethod instead)")
+	}
 	lexer := NewExprLexer(input)
 	p := &exprParser{lexer: lexer}
 	p.next()
 	return p.parseAssign()
+}
+
+// exprContainsStatic 用 ExprLexer 扫描表达式，报告是否含 `::`(ETokStatic) token。
+// 词法器会跳过字符串字面量，故 "#('a::b')" 中的 :: 不会误判。
+func exprContainsStatic(input string) bool {
+	l := NewExprLexer(input)
+	for {
+		tok, _ := l.Scan()
+		if tok == ETokEOF {
+			return false
+		}
+		if tok == ETokStatic {
+			return true
+		}
+	}
 }
 
 type exprParser struct {
@@ -164,18 +194,37 @@ func (p *exprParser) parseAdd() (Expr, error) {
 }
 
 func (p *exprParser) parseMul() (Expr, error) {
-	left, err := p.parseUnary()
+	left, err := p.parseNullSafe()
 	if err != nil {
 		return nil, err
 	}
 	for p.tok == ETokMul || p.tok == ETokDiv || p.tok == ETokMod {
 		op := p.val
 		p.next()
-		right, err := p.parseUnary()
+		right, err := p.parseNullSafe()
 		if err != nil {
 			return nil, err
 		}
 		left = &ArithExpr{Op: op, Left: left, Right: right}
+	}
+	return left, nil
+}
+
+// parseNullSafe 解析 null 合并 `??`（对照 Java ExprParser.nullSafe）。
+// 优先级位于 mulDivMod(* / %) 与 unary 之间，for 循环左结合，支持链式 a ?? b ?? c → (a??b)??c。
+// 旧实现把 ?? 放在 parsePostfix（与 . / [] / () 同层、优先级过高）属语义错误，已对齐 Java。
+func (p *exprParser) parseNullSafe() (Expr, error) {
+	left, err := p.parseUnary()
+	if err != nil {
+		return nil, err
+	}
+	for p.tok == ETokNullCoalesce {
+		p.next()
+		right, err := p.parseUnary()
+		if err != nil {
+			return nil, err
+		}
+		left = &NullCoalesceExpr{Left: left, Right: right}
 	}
 	return left, nil
 }
@@ -274,13 +323,6 @@ func (p *exprParser) parsePostfix() (Expr, error) {
 			} else {
 				expr = &MethodExpr{Obj: expr, Name: "", Args: args}
 			}
-		case ETokNullCoalesce:
-			p.next()
-			right, err := p.parsePostfix()
-			if err != nil {
-				return nil, err
-			}
-			expr = &NullCoalesceExpr{Left: expr, Right: right}
 		case ETokInc:
 			p.next()
 			return &IncDecExpr{Name: exprName(expr), Op: "++"}, nil
@@ -299,20 +341,25 @@ func (p *exprParser) parseAtom() (Expr, error) {
 		name := p.val
 		p.next()
 		if p.tok == ETokStatic {
+			// `::` 静态调用（Cls::method / Cls::field）。模板路径下默认禁用的拦截已在
+			// parseExprWithConfig 预扫描统一处理；此处生成 StaticMethodExpr——开启后查进程级
+			// staticMethodKit 注册的全局函数（Java 静态方法的 Go 等价，不依赖实例）。
+			// 有 `(` 为 method 形式带参；无 `(` 为 field 形式（无参调用注册的函数）。
 			p.next()
 			if p.tok != ETokID {
 				return nil, fmt.Errorf("expected name after '::'")
 			}
 			member := p.val
 			p.next()
+			var args []Expr
 			if p.tok == ETokLParen {
-				args, err := p.parseCallArgs()
+				var err error
+				args, err = p.parseCallArgs()
 				if err != nil {
 					return nil, err
 				}
-				return &MethodExpr{Obj: &IDExpr{Name: name}, Name: member, Args: args}, nil
 			}
-			return &FieldExpr{Obj: &IDExpr{Name: name}, Name: member}, nil
+			return &StaticMethodExpr{Cls: name, Name: member, Args: args}, nil
 		}
 		return &IDExpr{Name: name}, nil
 	case ETokStr:

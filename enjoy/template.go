@@ -34,7 +34,16 @@ func (t *Template) exec(scope *Scope, writer io.Writer) (err error) {
 	ctrl := NewCtrl()
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("template render: %v", r)
+			// 渲染期 panic 带文件名（节点未持 Location，故无精确行号；解析期错误见 parseErr）。
+			file := ""
+			if t.env != nil {
+				file = t.env.fileName
+			}
+			if file == "" {
+				err = fmt.Errorf("template render: %v", r)
+			} else {
+				err = fmt.Errorf("template render %q: %v", file, r)
+			}
 		}
 	}()
 	t.ast.Exec(t.env, scope, &IOAdapter{w: writer}, ctrl)
@@ -122,21 +131,28 @@ func (e *Engine) GetTemplate(fileName string) *Template {
 		}
 	}
 
-	src := source.NewFileSource(fileName)
-	return e.compileSource(fileName, src)
+	src := e.config.GetSourceFactory()(fileName)
+	return e.compileSource(fileName, src, true)
 }
 
 // GetTemplateByString compiles a template from a string.
 func (e *Engine) GetTemplateByString(content string) *Template {
 	src := source.NewStringSource(content)
-	return e.compileSource(content, src)
+	return e.compileSource(content, src, false)
 }
 
-func (e *Engine) compileSource(key string, src source.Source) *Template {
+func (e *Engine) compileSource(key string, src source.Source, isFile bool) *Template {
 	content := src.GetContent()
 	lexer := NewLexer(content)
+	lexer.SetKeepLineBlank(e.config.KeepLineBlankDirectives())
 	env := NewEnv(e.config)
 	env.engine = e
+	if isFile {
+		// 文件模板：fileName 用于错误定位（路径: 行号），currentFile 用于 #include 相对父目录。
+		env.fileName = key
+		env.currentFile = key
+	}
+	// 字符串模板：fileName 留空，错误只标行号（对照 Java "String template line N"）。
 
 	ast, err := parseTemplateRecovered(lexer, env)
 	if err != nil {
@@ -201,6 +217,12 @@ func (e *Engine) AddSharedMethod(name string, fn SharedMethod) { AddSharedMethod
 func (e *Engine) AddExtensionMethod(kind reflect.Kind, name string, fn ExtensionMethod) {
 	AddExtensionMethod(kind, name, fn)
 }
+
+// AddStatic registers a namespace object whose exported methods are callable as
+// `alias::method(args)` in templates (对照 Java 导入工具类的静态方法)。需先
+// SetStaticMethodExpressionEnabled(true)（默认禁用）。Go 无静态方法/Class.forName，以反射一个
+// struct 实例的导出方法为等价——建议传 `&Obj{}`。进程级注册，对所有 engine 生效。
+func (e *Engine) AddStatic(alias string, obj interface{}) { AddStatic(alias, obj) }
 
 // RemoveAllTemplateCache clears the template cache.
 func (e *Engine) RemoveAllTemplateCache() {

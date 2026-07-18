@@ -152,6 +152,28 @@ func (e *NullSafeExpr) Eval(scope *Scope, ctrl *Ctrl) interface{} {
 	return e.Inner.Eval(scope, ctrl)
 }
 
+// StaticMethodExpr 是 `Cls::method(args)` 静态调用（对照 Java StaticMethod / StaticField）。
+// Go 无 Class.forName / 静态方法，开启静态方法表达式后，`Cls::method` 查进程级 staticMethodKit
+// （键 "Cls.method"）注册的全局函数并反射调用（Java 静态方法的 Go 等价：以包级函数落地）。
+// 与共享对象访问 `obj.method`（需注入实例）刻意区分——`::` 不依赖实例，纯粹按全限定名调函数。
+// 未注册时返回 nil（宽松，对照 Go 一贯不抛）。
+type StaticMethodExpr struct {
+	Cls  string
+	Name string
+	Args []Expr // nil 表示 Cls::field 形式（无参调用注册的函数）
+}
+
+func (e *StaticMethodExpr) Eval(scope *Scope, ctrl *Ctrl) interface{} {
+	args := make([]interface{}, len(e.Args))
+	for i, a := range e.Args {
+		args[i] = a.Eval(scope, ctrl)
+	}
+	if r, ok := staticMethodKit.Call(e.Cls, e.Name, args); ok {
+		return r
+	}
+	return nil
+}
+
 // FieldExpr is obj.field.
 type FieldExpr struct {
 	Obj  Expr
