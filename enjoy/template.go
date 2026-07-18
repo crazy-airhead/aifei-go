@@ -19,7 +19,7 @@ type Template struct {
 
 // Render executes the template with the given data and writes to writer.
 func (t *Template) Render(data map[string]interface{}, writer io.Writer) error {
-	scope := NewScope(data)
+	scope := NewScopeWithShared(data, t.sharedObjectMap())
 	ctrl := NewCtrl()
 	t.ast.Exec(t.env, scope, &IOAdapter{w: writer}, ctrl)
 	return nil
@@ -28,10 +28,22 @@ func (t *Template) Render(data map[string]interface{}, writer io.Writer) error {
 // RenderToString executes the template and returns the result as a string.
 func (t *Template) RenderToString(data map[string]interface{}) string {
 	var buf bytes.Buffer
-	scope := NewScope(data)
+	scope := NewScopeWithShared(data, t.sharedObjectMap())
 	ctrl := NewCtrl()
 	t.ast.Exec(t.env, scope, &IOAdapter{w: &buf}, ctrl)
 	return buf.String()
+}
+
+// sharedObjectMap returns the engine-level shared objects bound to this template's
+// env, or nil when the template has no env/config (对照 Java env.engineConfig.sharedObjectMap)。
+func (t *Template) sharedObjectMap() map[string]interface{} {
+	if t.env == nil {
+		return nil
+	}
+	if cfg := t.env.GetEngineConfig(); cfg != nil {
+		return cfg.sharedObjectMap
+	}
+	return nil
 }
 
 // IsModified checks if the template source has been modified.
