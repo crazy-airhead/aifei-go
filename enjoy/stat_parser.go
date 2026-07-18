@@ -8,6 +8,7 @@ import (
 
 // StatList is a list of statements.
 type StatList struct {
+	nodeLoc
 	Stats []Stat
 }
 
@@ -16,12 +17,23 @@ func (s *StatList) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 		if ctrl.Return || ctrl.Break || ctrl.Continue {
 			return
 		}
-		stat.Exec(env, scope, writer, ctrl)
+		execStat(stat, env, scope, writer, ctrl)
 	}
+}
+
+// execStat 先把 stat 的行号记入 ctrl.curLine（渲染期 panic 定位用），再执行。
+// 嵌套 stat（IfStat.Then/ForStat.Body 经 collectUntil 多为 StatList）在其自身的 StatList.Exec
+// 中继续更新 curLine，故渲染期 panic 总能定位到最近一个 stat 的源码行。
+func execStat(stat Stat, env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	if line := statLine(stat); line > 0 {
+		ctrl.curLine = line
+	}
+	stat.Exec(env, scope, writer, ctrl)
 }
 
 // Text outputs raw text.
 type Text struct {
+	nodeLoc
 	Content string
 }
 
@@ -31,6 +43,7 @@ func (s *Text) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 
 // Output evaluates and outputs an expression: #(expr).
 type Output struct {
+	nodeLoc
 	Expr Expr
 }
 
@@ -43,6 +56,7 @@ func (s *Output) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 
 // If represents #if / #elseif / #else / #end.
 type IfStat struct {
+	nodeLoc
 	Cond     Expr
 	Then     Stat
 	ElseIfs  []ElseIfStat
@@ -77,6 +91,7 @@ func (s *IfStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 // 循环状态聚合为作用域内的 `for` 对象，模板用 for.index/count/first/last/odd/even/size/outer
 // 对象式访问（对照 Java ForIteratorStatus）。#else 体在循环一次未执行（空集合）时运行。
 type ForStat struct {
+	nodeLoc
 	VarName  string
 	IterExpr Expr
 	Body     Stat
@@ -125,6 +140,7 @@ func (s *ForStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 // 持有完整赋值表达式 Assign（普通 ID=expr 或索引 container[idx]=expr），对照 Java 把
 // #set 参数整体解析为 Assign 节点（而非按首个 '=' 拆字面名字，那样无法支持 m[k]=v）。
 type SetStat struct {
+	nodeLoc
 	Assign   *AssignExpr
 	ScopeTyp string
 }
@@ -152,6 +168,7 @@ func (s *SetStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 
 // DefineStat represents #define.
 type DefineStat struct {
+	nodeLoc
 	Name   string
 	Params []string
 	Body   Stat
@@ -170,6 +187,7 @@ func (s *DefineStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl)
 // nullSafe 对应 #@name?(args) 的 callIfDefined 形态。动态调用 #call(funcName, args)
 // 由 CallDirective 指令处理（对照 Java CallDirective）。
 type CallStat struct {
+	nodeLoc
 	FuncName string
 	NullSafe bool
 	Args     []Expr
@@ -216,14 +234,18 @@ func callDefine(env *Env, def *DefineStat, argExprs []Expr, scope *Scope, writer
 }
 
 // BreakStat represents #break.
-type BreakStat struct{}
+type BreakStat struct {
+	nodeLoc
+}
 
 func (s *BreakStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 	ctrl.Break = true
 }
 
 // ContinueStat represents #continue.
-type ContinueStat struct{}
+type ContinueStat struct {
+	nodeLoc
+}
 
 func (s *ContinueStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 	ctrl.Continue = true
@@ -231,6 +253,7 @@ func (s *ContinueStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctr
 
 // ReturnStat represents #return.
 type ReturnStat struct {
+	nodeLoc
 	Expr Expr
 }
 
@@ -245,6 +268,7 @@ func (s *ReturnStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl)
 // template / define only when cond evaluates to true (对照 Java ReturnIf.java)。
 // cond 是「返回条件」而非返回值，且不写入 ctrl.Attachment。
 type ReturnIfStat struct {
+	nodeLoc
 	Cond Expr
 }
 
@@ -255,12 +279,15 @@ func (s *ReturnIfStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctr
 }
 
 // NullStat is an empty statement.
-type NullStat struct{}
+type NullStat struct {
+	nodeLoc
+}
 
 func (s *NullStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {}
 
 // IncludeStat represents #include(path, arg1=val1, ...).
 type IncludeStat struct {
+	nodeLoc
 	SubStat Stat
 	assigns []AssignExpr
 }
@@ -278,6 +305,7 @@ func (s *IncludeStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl
 
 // SwitchStat represents #switch(expr).
 type SwitchStat struct {
+	nodeLoc
 	Expr      Expr
 	FirstCase *CaseStat
 	Default   *DefaultStat
@@ -297,6 +325,7 @@ func (s *SwitchStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl)
 
 // CaseStat represents #case(v1, v2, ...).
 type CaseStat struct {
+	nodeLoc
 	Exprs    []Expr
 	Body     Stat
 	NextCase *CaseStat
@@ -320,6 +349,7 @@ func (s *CaseStat) execIfMatch(switchValue interface{}, env *Env, scope *Scope, 
 
 // DefaultStat represents #default.
 type DefaultStat struct {
+	nodeLoc
 	Body Stat
 }
 
@@ -415,7 +445,12 @@ func locErr(env *Env, line int, err error) error {
 func parseOneStat(tok Token, lexer *Lexer, env *Env) (stat Stat, err error) {
 	// 所有解析期 error 自动附加当前指令的文件名+行号（对照 Java ParseException 的 Location）。
 	// 嵌套 parseOneStat 已包装过的 locErr 不重复加（见 locErr）。
+	// 同时为返回的 stat 填充行号（节点级 location，渲染期 panic 定位用）——所有顶层与嵌套
+	// stat（经 collectUntil→parseStatList→parseOneStat）都在此统一设，无需改各解析函数签名。
 	defer func() {
+		if stat != nil {
+			setStatLoc(stat, tok.Line)
+		}
 		if err != nil {
 			err = locErr(env, tok.Line, err)
 		}
@@ -423,7 +458,14 @@ func parseOneStat(tok Token, lexer *Lexer, env *Env) (stat Stat, err error) {
 	cfg := env.GetEngineConfig()
 	switch tok.Type {
 	case TokText:
-		return &Text{Content: tok.Val}, nil
+		// 编译期压缩静态文本（对照 Java Compressor：只压静态 Text、指令输出不压、缓存只压一次）。
+		content := tok.Val
+		if cfg != nil {
+			if cp := cfg.GetCompressor(); cp != nil {
+				content = cp.Compress(content)
+			}
+		}
+		return &Text{Content: content}, nil
 	case TokOutput:
 		ex, err := parseExprWithConfig(tok.Val, cfg)
 		if err != nil {
@@ -467,6 +509,7 @@ func parseOneStat(tok Token, lexer *Lexer, env *Env) (stat Stat, err error) {
 
 // DirectiveStat wraps a custom directive for execution.
 type DirectiveStat struct {
+	nodeLoc
 	Directive Directive
 	Body      Stat
 }
@@ -683,7 +726,6 @@ func parseForStat(header string, lexer *Lexer, env *Env) (Stat, error) {
 	header = strings.TrimSpace(header)
 
 	// 仅支持迭代型 #for(id : expr) / #for(id in expr)（对照 Java For 的 forIterator）。
-	// 不支持 C 风格 for(init; cond; update) —— header 不匹配迭代型语法时报语法错误，
 	// 经 errorStat 在渲染期输出错误标记，而非静默忽略（避免循环体被悄悄丢弃）。
 	var varName, iterStr string
 	if idx := strings.Index(header, " : "); idx != -1 {
@@ -693,7 +735,7 @@ func parseForStat(header string, lexer *Lexer, env *Env) (Stat, error) {
 		varName = strings.TrimSpace(header[:idx])
 		iterStr = strings.TrimSpace(header[idx+4:])
 	} else {
-		return nil, fmt.Errorf("#for syntax error: only iterator form '#for(id : expr)' or '#for(id in expr)' is supported, C-style 'for(init; cond; update)' is not: %q", header)
+		return nil, fmt.Errorf("#for syntax error: only iterator form '#for(id : expr)' or '#for(id in expr)' is supported : %q", header)
 	}
 	iterExpr, err := parseExprWithConfig(iterStr, env.GetEngineConfig())
 	if err != nil {

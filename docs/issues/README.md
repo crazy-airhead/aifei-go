@@ -48,7 +48,7 @@
 | 0009 | enjoy `#for` 缺 else 分支与循环状态变量 | 🟢 | enjoy | [0009-enjoy-for缺else与循环状态变量](0009-enjoy-for缺else与循环状态变量.md) |
 | 0010 | enjoy `#call`/`#define` 作用域隔离与前向引用 | 🟢 | enjoy | [0010-enjoy-call-define作用域与前向引用](0010-enjoy-call-define作用域与前向引用.md) |
 | 0011 | enjoy 作用域与取值缺陷（Set/赋值/Field getter） | 🟢 | enjoy | [0011-enjoy-作用域与取值缺陷](0011-enjoy-作用域与取值缺陷.md) |
-| 0012 | enjoy 语义差异与 EngineConfig 配置项杂项 | 🟡 | enjoy | [0012-enjoy-语义差异与配置项杂项](0012-enjoy-语义差异与配置项杂项.md) |
+| 0012 | enjoy 语义差异与 EngineConfig 配置项杂项 | 🟢 | enjoy | [0012-enjoy-语义差异与配置项杂项](0012-enjoy-语义差异与配置项杂项.md) |
 | 0013 | db 缺 Oracle/SqlServer/H2/Informix 方言 | 🔴 | db | [0013-db-缺少4种方言](0013-db-缺少4种方言.md) |
 | 0014 | db SqlKit SQL 文件加载与热重载为空实现 | 🔴 | db | [0014-db-SqlKit文件加载为空实现](0014-db-SqlKit文件加载为空实现.md) |
 | 0015 | db 缺少原生连接逃逸口 call/FunExecutor | 🔴 | db | [0015-db-缺原生连接逃逸口](0015-db-缺原生连接逃逸口.md) |

@@ -8,6 +8,7 @@ type Ctrl struct {
 	Wisdom     bool
 	NullSafe   bool
 	Attachment interface{}
+	curLine    int // 当前执行到的 Stat 行号（渲染期 panic 定位用，对照 Java Location.row）
 }
 
 // NewCtrl creates a new Ctrl.

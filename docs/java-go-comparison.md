@@ -195,7 +195,7 @@
 - ✅ `#include` 相对路径：相对父文件目录解析，无父目录回退 baseTemplatePath（对齐 Java）。
 - ✅ Call 参数个数：不匹配抛异常（对齐 Java）；nullSafe 仍跳过。
 - `ClassPathSource`：Java 有 classpath/file/string；Go 只有 file/string。
-- ✅ 错误行号定位：解析期 + directive 参数期 error 带「文件名:行号」（`locateError`，对照 Java `Location`/`ParseException`）；`errorStat` 已在前序 issue 移除，错误改为 error 返回。渲染期节点级精确行号遗留。
+- ✅ 错误行号定位：解析期 + directive 参数期 + 渲染期 error 均带「文件名:行号」（`locateError`/`renderError`，节点持 `nodeLoc`、`StatList.Exec` 跟踪 `ctrl.curLine`，对照 Java `Location`/`ParseException`/`TemplateException`）；`errorStat` 已在前序 issue 移除。
 
 ### 3.5 有意省略（非缺口）
 

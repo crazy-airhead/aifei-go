@@ -2,6 +2,7 @@ package enjoy
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/crazy-airhead/aifei-go/enjoy/source"
 )
@@ -17,10 +18,58 @@ const (
 )
 
 // Compressor 压缩模板输出空白（对照 Java EngineConfig.compressor / LineCompressor）。
-// 当前为预留扩展点：默认 nil 不压缩。Java 用 CharTable/LineCompressor 做性能优化，
-// Go 统一流式写入 writer，暂不接线；用户可注入自定义实现供后续渲染管线使用。
+// 作用于编译期的静态 Text 节点（指令输出不压缩，对照 Java「只压静态文本、缓存只压一次」）。
 type Compressor interface {
 	Compress(text string) string
+}
+
+// LineCompressor 是内置的空白压缩器（对照 Java stat.Compressor 的基础算法）：
+//   - 连续空白字符（空格/制表/换行等，<= ' '）合并为一段；
+//   - 含换行的空白段压缩为 Separator（默认 '\n'），纯空格/制表段压缩为单个空格；
+//   - 非空白字符原样保留。
+//
+// 用 EngineConfig.SetCompressor(NewLineCompressor()) 启用。注意：多个连续空格会被压成单空格，
+// 需保留多空格的场景（如 <input value="a  ">）不要启用。
+type LineCompressor struct {
+	Separator byte // 含换行的空白段的压缩结果，默认 '\n'；可设为 ' '（无 JS 时）
+}
+
+// NewLineCompressor 创建默认分隔符为 '\n' 的 LineCompressor。
+func NewLineCompressor() *LineCompressor { return &LineCompressor{Separator: '\n'} }
+
+// Compress 按上述规则压缩静态文本（端口自 Java stat.Compressor.compress）。
+func (c *LineCompressor) Compress(content string) string {
+	sep := c.Separator
+	if sep == 0 {
+		sep = '\n'
+	}
+	var b strings.Builder
+	b.Grow(len(content))
+	i, n := 0, len(content)
+	for i < n {
+		// 扫描空白段：空格/制表/换行等（<= ' '）
+		hasLF := false
+		start := i
+		for i < n && content[i] <= ' ' {
+			if content[i] == '\n' {
+				hasLF = true
+			}
+			i++
+		}
+		if i > start {
+			if hasLF {
+				b.WriteByte(sep)
+			} else {
+				b.WriteByte(' ')
+			}
+		}
+		// 复制非空白段
+		for i < n && content[i] > ' ' {
+			b.WriteByte(content[i])
+			i++
+		}
+	}
+	return b.String()
 }
 
 // EngineConfig holds configuration for a template engine.

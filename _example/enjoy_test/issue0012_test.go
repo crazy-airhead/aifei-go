@@ -248,3 +248,44 @@ func TestIssue0012RoundingMode(t *testing.T) {
 		t.Fatalf("默认 HALF_EVEN 下 2.5 应为 2，got %q", got)
 	}
 }
+
+// --- 8. 渲染期节点级行号定位 ---
+
+// 渲染期 panic（如 reflect 调用类型不匹配）带精确行号（Stat 节点持 location，
+// StatList.Exec 跟踪 ctrl.curLine）。对照 Java TemplateException 的 Location。
+func TestIssue0012RenderErrorLine(t *testing.T) {
+	engine := enjoy.NewEngine("i12-render-line")
+	engine.AddSharedObject("fn", func(s string) string { return s })
+	tpl := engine.GetTemplateByString("a\nb\n#(fn(123))") // fn(123) 在第 3 行触发 reflect panic
+	_, err := tpl.RenderToString0(nil)
+	if err == nil || !strings.Contains(err.Error(), "line 3") {
+		t.Fatalf("渲染期 panic 应带 line 3，got %v", err)
+	}
+}
+
+// --- 9. compressor 编译期压缩静态文本 ---
+
+// SetCompressor(NewLineCompressor()) 后，编译期对静态 Text 压缩空白（对照 Java stat.Compressor：
+// 只压静态文本、指令输出不压）。连续空格→单空格，空白+换行→分隔符。
+func TestIssue0012Compressor(t *testing.T) {
+	engine := enjoy.NewEngine("i12-compressor")
+	engine.GetConfig().SetCompressor(enjoy.NewLineCompressor())
+	tpl := engine.GetTemplateByString("hello   world\n\n\nfoo")
+	got := renderToString(t, tpl, nil)
+	if got != "hello world\nfoo" {
+		t.Fatalf("compressor 应压缩空白得 'hello world\\nfoo'，got %q", got)
+	}
+}
+
+// compressor 不压缩指令输出，只压静态文本（对照 Java）。
+func TestIssue0012CompressorSkipsDirectiveOutput(t *testing.T) {
+	engine := enjoy.NewEngine("i12-compressor-skip")
+	engine.GetConfig().SetCompressor(enjoy.NewLineCompressor())
+	// #(x) 输出 "a   b"（含多空格）不应被压缩；其前后的静态文本空白被压缩。
+	tpl := engine.GetTemplateByString("x   #(x)   y")
+	got := renderToString(t, tpl, map[string]interface{}{"x": "a   b"})
+	// "x "(压缩自 "x   ") + "a   b"(指令输出原样) + " y"(压缩自 "   y")
+	if got != "x a   b y" {
+		t.Fatalf("指令输出不应压缩，got %q", got)
+	}
+}

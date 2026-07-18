@@ -1,6 +1,6 @@
 # ISSUE-0012 — enjoy 语义差异与 EngineConfig 配置项杂项
 
-> **编号**：0012　**状态**：🟡 进行中（第一轮）　**严重程度**：💡 体验
+> **编号**：0012　**状态**：🟢 已修复（第二轮收敛）　**严重程度**：💡 体验
 > **发现日期**：2026-07-16　**相关任务**：enjoy 模块（对照 `docs/java-go-comparison.md` §3.2 / §3.4）
 
 ## 问题描述
@@ -14,7 +14,7 @@ enjoy 多项低优先级语义差异与 `EngineConfig` 配置项缺失，影响�
 - [x] `::` 静态访问：Java 真正 `StaticMethod`/`StaticField`（按类名反射，默认关闭）；Go 当 `IDExpr` 上的 field/method 且默认开启（伪实现） — 第一轮默认禁用对齐 Java（**Go 限制：无 Class.forName，真反射不可行**）
 - [x] `#include` 相对路径：Java 相对父文件目录；Go 只相对 baseTemplatePath — 第一轮改为相对父文件目录，回退 basePath
 - [x] Call 参数个数不匹配：Java 抛异常；Go 静默忽略 — 第一轮严格化对齐 Java
-- [x] 错误无行号定位：Java `Location`/`ParseException` 带文件名+行号；Go `errorStat` 只输出错误字符串 — 第一轮解析期 + directive 参数期带「文件名:行号」（渲染期节点级 location 遗留下轮）
+- [x] 错误无行号定位：Java `Location`/`ParseException` 带文件名+行号；Go `errorStat` 只输出错误字符串 — 第一轮解析期 + directive 参数期带「文件名:行号」；第二轮补齐渲染期节点级 location（Stat 持行号、StatList.Exec 跟踪 curLine）
 - [x] `EngineConfig` 配置项：缺 `compressor` / `outputDirectiveFactory` / `sourceFactory` / `sharedMethodKit` / `keepLineBlankDirectives` / `roundingMode` / `staticMethod` / `Field` / `addSharedFunction(file)` — 第一轮补齐（见解决记录逐项）
 
 ## 实际行为（Go 现状）
@@ -57,3 +57,21 @@ enjoy 多项低优先级语义差异与 `EngineConfig` 配置项缺失，影响�
 - 校验：`go build`/`go vet`（`enjoy`、`_example/enjoy_test`）0 新错；`go test ./_example/enjoy_test` 全绿（含 0012 新 18 用例 + 现有回归）；`go test ./db ./_example/db_sqlite_test` 确认 `ParseExpr` 兼容。
 - 验收：`#(1 ?? 2 + 3)`→`4`（Java `(1??2)+3`）；`#(nil ?? -5)`→`-5`（右操作数支持一元）；`#@missing?()`→``（跳过）、`#@missing()`→error；`#(Str::isBlank("x"))`→error「not enabled」，开启后 `AddStatic("Str", i12StrUtil{})` + `#(Str::Upper("hi"))`→`HI`、`#(Str::Lower("HI"))`→`hi`（整包导入，未注册静默 nil）；`#@f(1)`（define f(a,b)）→error「mismatch」；`#for(bad)`→error「line 1: ...」；include `testdata/sub/_parent.html`→`#include("_child.html")` 相对父目录解析；`#number(2.5,"#")` 默认→`2`（HALF_EVEN）、`HALF_UP`→`3`。
 - 遗留（交下轮）：渲染期节点级 location——当前 `Stat`/`Expr` 节点未持 `Location`，渲染期 panic（如 reflect 调用异常）只能带文件名、无精确行号；若需精确，需给节点加 location 字段并在解析期填充（系统性机械改动）。`compressor` 接线。
+
+---
+
+### 第二轮（渲染期节点级 location + compressor 接线）
+
+- **反馈 / 触发**：用户要求继续修第一轮遗留——渲染期 panic 只带文件名无精确行号；`compressor` 仅为预留接口未接线。
+- **根因**：① `Stat`/`Expr` 节点不持 location，渲染期 panic 经顶层 `exec` recover 时丢失源码行；② `compressor` 字段存在但无内置实现、未接入解析/渲染管线。
+- **处理（文件 / 符号级）**：
+  - `enjoy/stat.go` — 新增 `nodeLoc{line}` + `setLine`（指针 receiver，写）/ `Line`（值 receiver，读）+ `locater`/`lineSetter` 接口 + `setStatLoc`/`statLine` 辅助。Stat 接口**未改**（db/sql 等外部实现无需改造），用可选 `locater` 断言访问。
+  - `enjoy/stat_parser.go` — 所有有 `Exec` 的 Stat struct 嵌入 `nodeLoc`（StatList/Text/Output/IfStat/ForStat/SetStat/DefineStat/CallStat/Break/Continue/Return/ReturnIf/Null/Include/Switch/Case/Default/DirectiveStat）；`parseOneStat` 的 defer 统一 `setStatLoc(stat, tok.Line)`——所有顶层与嵌套 stat（经 collectUntil→parseStatList→parseOneStat）都在此设行号，**无需改各解析函数签名**。`StatList.Exec` 改调 `execStat`：执行前把当前 stat 行号记入 `ctrl.curLine`，嵌套 StatList 继续更新，故 panic 总能定位到最近 stat 行。
+  - `enjoy/ctrl.go` — `Ctrl` 增 `curLine int`。
+  - `enjoy/template.go` — `exec` recover 改用 `renderError(env, ctrl.curLine, r)` 输出「文件名:行号」；新增 `renderError` 辅助。
+  - `enjoy/engine_config.go` — `Compressor` 接口补文档（编译期压静态 Text）；新增内置 `LineCompressor`（端口 Java `stat.Compressor.compress`：连续空白合并，含换行→Separator 默认 `\n`、纯空格→单空格，非空白原样）+ `NewLineCompressor()`。
+  - `enjoy/stat_parser.go` — `parseOneStat` 的 `TokText` 分支在 `cfg.GetCompressor() != nil` 时对 `tok.Val` 压缩（编译期、只压静态文本，对照 Java「指令输出不压、缓存只压一次」）。
+  - `_example/enjoy_test/issue0012_test.go` — 新增 `TestIssue0012RenderErrorLine`（reflect panic 带 line 3）、`TestIssue0012Compressor`（静态空白压缩）、`TestIssue0012CompressorSkipsDirectiveOutput`（指令输出不压缩）。
+- **校验**：`gofmt -l` 干净；`go build`/`go vet`（`enjoy`、`_example/enjoy_test`）0 新错；`go test ./_example/enjoy_test` 全绿（含第二轮新用例）；`go test ./db ./server ./tools/{generator,damigen}` 全绿（节点嵌入 nodeLoc 不破坏 db/sql 的 Stat 实现）。
+- **验收**：`#(fn(123))`（fn 签名 `func(string)string`）→ error「template render: line N: reflect: Call using int64 as type string」（N 为所在行）；`SetCompressor(NewLineCompressor())` 后 `"hello   world\n\n\nfoo"`→`"hello world\nfoo"`，指令 `#(x)` 输出（x="a   b"）原样不压缩。
+- **遗留**：无。本轮两项遗留全部收敛，ISSUE-0012 状态 🟢。（compressor 仅接线编译期 Text 压缩；流式 `Render(writer)` 不单独压缩——Java 亦为编译期压缩，行为一致。）

@@ -34,20 +34,32 @@ func (t *Template) exec(scope *Scope, writer io.Writer) (err error) {
 	ctrl := NewCtrl()
 	defer func() {
 		if r := recover(); r != nil {
-			// 渲染期 panic 带文件名（节点未持 Location，故无精确行号；解析期错误见 parseErr）。
-			file := ""
-			if t.env != nil {
-				file = t.env.fileName
-			}
-			if file == "" {
-				err = fmt.Errorf("template render: %v", r)
-			} else {
-				err = fmt.Errorf("template render %q: %v", file, r)
-			}
+			// 渲染期 panic 带「文件名:行号」——行号来自 StatList.Exec 跟踪的 ctrl.curLine
+			// （最近执行的 stat 行，对照 Java TemplateException 的 Location）。
+			err = renderError(t.env, ctrl.curLine, r)
 		}
 	}()
 	t.ast.Exec(t.env, scope, &IOAdapter{w: writer}, ctrl)
 	return nil
+}
+
+// renderError 构造渲染期错误信息，附加文件名与行号（行号 0 表示未知，如节点未持 location）。
+func renderError(env *Env, line int, r interface{}) error {
+	file := ""
+	if env != nil {
+		file = env.fileName
+	}
+	msg := fmt.Sprintf("%v", r)
+	switch {
+	case line > 0 && file != "":
+		return fmt.Errorf("template render %q: line %d: %s", file, line, msg)
+	case line > 0:
+		return fmt.Errorf("template render: line %d: %s", line, msg)
+	case file != "":
+		return fmt.Errorf("template render %q: %s", file, msg)
+	default:
+		return fmt.Errorf("template render: %s", msg)
+	}
 }
 
 // Render executes the template with the given data and writes to writer.
