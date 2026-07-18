@@ -5,7 +5,6 @@ import (
 	"math"
 	"reflect"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -181,11 +180,15 @@ func (e *MethodExpr) Eval(scope *Scope, ctrl *Ctrl) interface{} {
 	}
 
 	if e.Obj == nil {
-		fn := scope.Get(e.Name)
-		if fn == nil {
-			return nil
+		// 裸调用 `name(args)`：先查变量 / 共享对象，未命中再查共享方法库 isEmpty/notEmpty 等
+		// （对照 Java：ID 取值 → SharedMethodKit.getSharedMethodInfo）。
+		if fn := scope.Get(e.Name); fn != nil {
+			return callFunc(fn, args)
 		}
-		return callFunc(fn, args)
+		if r, ok := sharedMethodKit.Call(e.Name, args); ok {
+			return r
+		}
+		return nil
 	}
 
 	obj := e.Obj.Eval(scope, ctrl)
@@ -199,10 +202,13 @@ func (e *MethodExpr) Eval(scope *Scope, ctrl *Ctrl) interface{} {
 		}
 	}
 
-	if s, ok := obj.(string); ok {
-		return stringMethod(s, e.Name, args)
+	// 扩展方法：string 的 length/trim/.../toInt、数值的 toInt/toLong/toBoolean/... 等
+	// （对照 Java MethodKit extension methods，已由硬编码迁入可注册的 ExtensionMethodKit）。
+	if r, ok := extensionMethodKit.Call(obj, e.Name, args); ok {
+		return r
 	}
 
+	// 反射：任意对象自身的真实方法（如注入工具对象后 #(tool.Up(...))）。
 	v := reflect.ValueOf(obj)
 	method := v.MethodByName(e.Name)
 	if !method.IsValid() {
@@ -376,58 +382,6 @@ func callReflect(method reflect.Value, args []interface{}) interface{} {
 		return nil
 	}
 	return result[0].Interface()
-}
-
-func stringMethod(s string, name string, args []interface{}) interface{} {
-	switch name {
-	case "length", "len", "size":
-		return len(s)
-	case "trim":
-		return strings.TrimSpace(s)
-	case "upper", "toUpperCase":
-		return strings.ToUpper(s)
-	case "lower", "toLowerCase":
-		return strings.ToLower(s)
-	case "contains":
-		if len(args) > 0 {
-			return strings.Contains(s, fmt.Sprintf("%v", args[0]))
-		}
-	case "startsWith":
-		if len(args) > 0 {
-			return strings.HasPrefix(s, fmt.Sprintf("%v", args[0]))
-		}
-	case "endsWith":
-		if len(args) > 0 {
-			return strings.HasSuffix(s, fmt.Sprintf("%v", args[0]))
-		}
-	case "indexOf":
-		if len(args) > 0 {
-			return strings.Index(s, fmt.Sprintf("%v", args[0]))
-		}
-	case "substring", "sub":
-		if len(args) >= 2 {
-			return s[toInt(args[0]):toInt(args[1])]
-		}
-		if len(args) == 1 {
-			return s[toInt(args[0]):]
-		}
-	case "replace":
-		if len(args) >= 2 {
-			return strings.ReplaceAll(s, fmt.Sprintf("%v", args[0]), fmt.Sprintf("%v", args[1]))
-		}
-	case "split":
-		if len(args) > 0 {
-			parts := strings.Split(s, fmt.Sprintf("%v", args[0]))
-			result := make([]interface{}, len(parts))
-			for i, p := range parts {
-				result[i] = p
-			}
-			return result
-		}
-	case "isEmpty":
-		return s == ""
-	}
-	return nil
 }
 
 // 数值种类：整数 / 浮点 / 非数值。

@@ -44,7 +44,7 @@
 | 0005 | enjoy `sharedObjectMap` 为死代码 | 🟢 | enjoy | [0005-enjoy-sharedObjectMap死代码](0005-enjoy-sharedObjectMap死代码.md) |
 | 0006 | db `Row.Keep()` 未清理 change 集合 | 🔴 | db | [0006-db-Row-Keep未清理change](0006-db-Row-Keep未清理change.md) |
 | 0007 | enjoy 内置指令全部缺失（#escape/#date/#number/#random/#render/#string） | 🟢 | enjoy | [0007-enjoy-内置指令全部缺失](0007-enjoy-内置指令全部缺失.md) |
-| 0008 | enjoy 缺共享方法库与类型扩展方法 | 🔴 | enjoy | [0008-enjoy-缺共享方法与扩展方法](0008-enjoy-缺共享方法与扩展方法.md) |
+| 0008 | enjoy 缺共享方法库与类型扩展方法 | 🟢 | enjoy | [0008-enjoy-缺共享方法与扩展方法](0008-enjoy-缺共享方法与扩展方法.md) |
 | 0009 | enjoy `#for` 缺 else 分支与循环状态变量 | 🔴 | enjoy | [0009-enjoy-for缺else与循环状态变量](0009-enjoy-for缺else与循环状态变量.md) |
 | 0010 | enjoy `#call`/`#define` 作用域隔离与前向引用 | 🔴 | enjoy | [0010-enjoy-call-define作用域与前向引用](0010-enjoy-call-define作用域与前向引用.md) |
 | 0011 | enjoy 作用域与取值缺陷（Set/赋值/Field getter） | 🔴 | enjoy | [0011-enjoy-作用域与取值缺陷](0011-enjoy-作用域与取值缺陷.md) |
@@ -55,4 +55,5 @@
 | 0016 | db 细节补强（Batch/TypeConverter/复合主键/事务返回值/杂项） | 🔴 | db | [0016-db-细节补强](0016-db-细节补强.md) |
 | 0017 | aifei 缺少路由表内省 API（Walk/Routes） | 🔴 | aifei | [0017-aifei-缺路由表内省API](0017-aifei-缺路由表内省API.md) |
 | 0018 | aifei Input 缺少时间类型访问器 | 🔴 | aifei | [0018-aifei-Input缺时间访问器](0018-aifei-Input缺时间访问器.md) |
+| 0019 | enjoy 无参指令（#else/#end/#break/#continue/#default）吞行内文本 | 🟢 | enjoy | [0019-enjoy-无参指令吞行内文本](0019-enjoy-无参指令吞行内文本.md) |
 

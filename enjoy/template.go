@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"reflect"
 	"sync"
 
 	"github.com/crazy-airhead/aifei-go/enjoy/source"
@@ -137,6 +138,19 @@ func (e *Engine) AddDirective(name string, factory DirectiveFactory) {
 // AddSharedObject registers a shared object available in all templates.
 func (e *Engine) AddSharedObject(name string, obj interface{}) {
 	e.config.sharedObjectMap[name] = obj
+}
+
+// AddSharedMethod registers a shared method callable as a bare `name(args)` in templates
+// (对照 Java EngineConfig.sharedMethodKit.addSharedMethod)。默认已注册 isEmpty/notEmpty。
+// 注意：共享方法为进程级注册（与 Java 扩展方法一致），对所有 engine 生效。
+func (e *Engine) AddSharedMethod(name string, fn SharedMethod) { AddSharedMethod(name, fn) }
+
+// AddExtensionMethod registers an extension method on the given reflect.Kind, callable as
+// `value.method(args)` in templates (对照 Java MethodKit.addExtensionMethod)。默认已注册
+// String 与全部数值 kind 的 toInt/toLong/toBoolean/... 等。
+// 注意：扩展方法为进程级注册，对所有 engine 生效。
+func (e *Engine) AddExtensionMethod(kind reflect.Kind, name string, fn ExtensionMethod) {
+	AddExtensionMethod(kind, name, fn)
 }
 
 // RemoveAllTemplateCache clears the template cache.

@@ -135,41 +135,57 @@ func (l *Lexer) scanDirective() Token {
 		l.pos++
 	}
 	name := l.input[start:l.pos]
+	tokType := l.mapDirective(name)
 
 	para := ""
-	// Skip whitespace between directive name and parameter.
-	// e.g. #for (f : fields) → skip the space, then enter paren path.
-	for l.pos < l.length && l.input[l.pos] == ' ' {
-		l.pos++
-	}
-	if l.pos < l.length && l.input[l.pos] == '(' {
-		l.pos++
-		depth := 1
-		pstart := l.pos
-		for l.pos < l.length && depth > 0 {
-			if l.input[l.pos] == '(' {
-				depth++
-			} else if l.input[l.pos] == ')' {
-				depth--
-				if depth == 0 {
-					break
-				}
+	if isParameterLessDirective(tokType) {
+		// 无参指令（#else/#end/#break/#continue/#default）：不把尾部文本当作参数消费
+		// （解析器从不读取其 para，原先会吞掉 #else<文本> 的尾部文本，导致分支体丢失）。
+		// 行首（独占一行）时顺带吃掉尾随水平空白与换行，避免输出多余空行；
+		// 行内时保留尾部文本，交由后续 TokText 输出。
+		if l.isAtLineStart(hashPos) {
+			for l.pos < l.length && (l.input[l.pos] == ' ' || l.input[l.pos] == '\t') {
+				l.pos++
 			}
-			l.pos++
-		}
-		para = l.input[pstart:l.pos]
-		if l.pos < l.length {
-			l.pos++
+			if l.pos < l.length && l.input[l.pos] == '\n' {
+				l.pos++
+			} else if l.pos+1 < l.length && l.input[l.pos] == '\r' && l.input[l.pos+1] == '\n' {
+				l.pos += 2
+			}
 		}
 	} else {
-		pstart := l.pos
-		for l.pos < l.length && l.input[l.pos] != '\n' && l.input[l.pos] != '#' {
+		// Skip whitespace between directive name and parameter.
+		// e.g. #for (f : fields) → skip the space, then enter paren path.
+		for l.pos < l.length && l.input[l.pos] == ' ' {
 			l.pos++
 		}
-		para = trimRight(l.input[pstart:l.pos])
+		if l.pos < l.length && l.input[l.pos] == '(' {
+			l.pos++
+			depth := 1
+			pstart := l.pos
+			for l.pos < l.length && depth > 0 {
+				if l.input[l.pos] == '(' {
+					depth++
+				} else if l.input[l.pos] == ')' {
+					depth--
+					if depth == 0 {
+						break
+					}
+				}
+				l.pos++
+			}
+			para = l.input[pstart:l.pos]
+			if l.pos < l.length {
+				l.pos++
+			}
+		} else {
+			pstart := l.pos
+			for l.pos < l.length && l.input[l.pos] != '\n' && l.input[l.pos] != '#' {
+				l.pos++
+			}
+			para = trimRight(l.input[pstart:l.pos])
+		}
 	}
-
-	tokType := l.mapDirective(name)
 
 	// Consume trailing newline if the directive starts at the beginning of its line
 	// (only whitespace between the last \n and #). This prevents blank lines in output.
@@ -182,6 +198,17 @@ func (l *Lexer) scanDirective() Token {
 	}
 
 	return Token{tokType, para, name}
+}
+
+// isParameterLessDirective 报告该指令是否不接受任何参数。
+// 这类指令（#else/#end/#break/#continue/#default）不得消费其后的行内文本，
+// 否则会把 #else<文本> 的尾部文本吞进 para（解析器从不读取它）从而丢失分支体。
+func isParameterLessDirective(t TokType) bool {
+	switch t {
+	case TokElse, TokEnd, TokBreak, TokContinue, TokDefault:
+		return true
+	}
+	return false
 }
 
 // isAtLineStart checks if position pos is at the start of a line
