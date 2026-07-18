@@ -43,7 +43,7 @@
 | 0004 | enjoy `#for` 无法迭代 Map | 🟢 | enjoy | [0004-enjoy-for无法迭代map](0004-enjoy-for无法迭代map.md) |
 | 0005 | enjoy `sharedObjectMap` 为死代码 | 🟢 | enjoy | [0005-enjoy-sharedObjectMap死代码](0005-enjoy-sharedObjectMap死代码.md) |
 | 0006 | db `Row.Keep()` 未清理 change 集合 | 🔴 | db | [0006-db-Row-Keep未清理change](0006-db-Row-Keep未清理change.md) |
-| 0007 | enjoy 内置指令全部缺失（#escape/#date/#number/#random/#render/#string） | 🔴 | enjoy | [0007-enjoy-内置指令全部缺失](0007-enjoy-内置指令全部缺失.md) |
+| 0007 | enjoy 内置指令全部缺失（#escape/#date/#number/#random/#render/#string） | 🟢 | enjoy | [0007-enjoy-内置指令全部缺失](0007-enjoy-内置指令全部缺失.md) |
 | 0008 | enjoy 缺共享方法库与类型扩展方法 | 🔴 | enjoy | [0008-enjoy-缺共享方法与扩展方法](0008-enjoy-缺共享方法与扩展方法.md) |
 | 0009 | enjoy `#for` 缺 else 分支与循环状态变量 | 🔴 | enjoy | [0009-enjoy-for缺else与循环状态变量](0009-enjoy-for缺else与循环状态变量.md) |
 | 0010 | enjoy `#call`/`#define` 作用域隔离与前向引用 | 🔴 | enjoy | [0010-enjoy-call-define作用域与前向引用](0010-enjoy-call-define作用域与前向引用.md) |

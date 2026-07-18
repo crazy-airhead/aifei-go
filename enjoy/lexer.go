@@ -127,8 +127,7 @@ func (l *Lexer) scanDirective() Token {
 	l.pos++
 
 	if l.pos < l.length && l.input[l.pos] == '@' {
-		l.pos++
-		return Token{TokCall, trimRight(l.input[l.pos:]), ""}
+		return l.scanAtCall(hashPos)
 	}
 
 	start := l.pos
@@ -222,8 +221,6 @@ func (l *Lexer) mapDirective(name string) TokType {
 		return TokDefine
 	case "include":
 		return TokInclude
-	case "call":
-		return TokCall
 	case "switch":
 		return TokSwitch
 	case "case":
@@ -245,6 +242,75 @@ func (l *Lexer) mapDirective(name string) TokType {
 
 func isDirectiveChar(ch byte) bool {
 	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_'
+}
+
+// scanAtCall scans the #@id(p) / #@id?(p) static call sugar (对照 Java Lexer
+// state 20)。它推进 l.pos 越过 '@'、函数名、可选 '?' 与参数括号，避免被当作文本重扫
+// （修复旧实现只前进一步导致 #@ 内容被重扫的缺陷）。函数名通过 Token.Name 传递。
+func (l *Lexer) scanAtCall(hashPos int) Token {
+	l.pos++ // past '@'
+	l.skipBlanks()
+
+	idStart := l.pos
+	for l.pos < l.length && isIdentChar(l.input[l.pos]) {
+		l.pos++
+	}
+	id := l.input[idStart:l.pos]
+
+	l.skipBlanks()
+	tokType := TokCall
+	if l.pos < l.length && l.input[l.pos] == '?' { // #@id?(p) callIfDefined
+		tokType = TokCallIfDefined
+		l.pos++
+		l.skipBlanks()
+	}
+
+	para := ""
+	if l.pos < l.length && l.input[l.pos] == '(' {
+		l.pos++ // past '('
+		depth := 1
+		pstart := l.pos
+		for l.pos < l.length && depth > 0 {
+			if l.input[l.pos] == '(' {
+				depth++
+			} else if l.input[l.pos] == ')' {
+				depth--
+				if depth == 0 {
+					break
+				}
+			}
+			l.pos++
+		}
+		para = l.input[pstart:l.pos]
+		if l.pos < l.length { // skip closing ')'
+			l.pos++
+		}
+	}
+
+	// Consume trailing newline when the directive starts its line.
+	if l.pos < l.length && l.isAtLineStart(hashPos) {
+		if l.input[l.pos] == '\n' {
+			l.pos++
+		} else if l.pos+1 < l.length && l.input[l.pos] == '\r' && l.input[l.pos+1] == '\n' {
+			l.pos += 2
+		}
+	}
+
+	return Token{tokType, para, id}
+}
+
+func (l *Lexer) skipBlanks() {
+	for l.pos < l.length && (l.input[l.pos] == ' ' || l.input[l.pos] == '\t') {
+		l.pos++
+	}
+}
+
+func isIdentStart(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
+}
+
+func isIdentChar(c byte) bool {
+	return isIdentStart(c) || (c >= '0' && c <= '9')
 }
 
 func trimRight(s string) string {

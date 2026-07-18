@@ -17,6 +17,7 @@ const (
 	TokDefine
 	TokInclude
 	TokCall
+	TokCallIfDefined
 	TokSwitch
 	TokCase
 	TokDefault

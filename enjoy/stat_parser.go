@@ -160,19 +160,29 @@ func (s *DefineStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl)
 	env.AddFunction(s.Name, s)
 }
 
-// CallStat represents #call or #@name.
+// CallStat is the #@name(args) static call sugar (对照 Java Lexer state 20 →
+// Symbol.CALL / CALL_IF_DEFINED)。函数名 name 由词法器解析为字面标识符；
+// nullSafe 对应 #@name?(args) 的 callIfDefined 形态。动态调用 #call(funcName, args)
+// 由 CallDirective 指令处理（对照 Java CallDirective）。
 type CallStat struct {
 	FuncName string
+	NullSafe bool
 	Args     []Expr
 }
 
 func (s *CallStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 	def := env.GetFunction(s.FuncName)
 	if def == nil {
-		return
+		return // Go 版本宽松：函数不存在则跳过（Java 非_nullSafe 时会抛异常）
 	}
-	args := make([]interface{}, len(s.Args))
-	for i, a := range s.Args {
+	callDefine(env, def, s.Args, scope, writer, ctrl)
+}
+
+// callDefine binds evaluated args to the function's params in a child scope and
+// executes the function body (shared by #@name(args) 与 #call(...) 动态调用)。
+func callDefine(env *Env, def *DefineStat, argExprs []Expr, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
+	args := make([]interface{}, len(argExprs))
+	for i, a := range argExprs {
 		args[i] = a.Eval(scope, ctrl)
 	}
 	childScope := NewScope(make(map[string]interface{}))
@@ -369,8 +379,8 @@ func parseOneStat(tok Token, lexer *Lexer, env *Env) (Stat, error) {
 		return parseSetStat(tok.Val, "global")
 	case TokDefine:
 		return parseDefineStat(tok.Val, lexer, env)
-	case TokCall:
-		return parseCallStat(tok.Val)
+	case TokCall, TokCallIfDefined:
+		return parseCallStat(tok)
 	case TokBreak:
 		return &BreakStat{}, nil
 	case TokContinue:
@@ -665,31 +675,21 @@ func parseDefineStat(header string, lexer *Lexer, env *Env) (Stat, error) {
 	return &DefineStat{Name: name, Params: params, Body: body}, nil
 }
 
-func parseCallStat(val string) (Stat, error) {
-	val = strings.TrimSpace(val)
-	parenIdx := strings.Index(val, "(")
-	name := val
+// parseCallStat parses the #@name(args) static call sugar. The function name is
+// the literal identifier captured by the lexer (tok.Name)，无需启发式判定。
+func parseCallStat(tok Token) (Stat, error) {
+	val := strings.TrimSpace(tok.Val)
 	var args []Expr
-	if parenIdx != -1 {
-		name = strings.TrimSpace(val[:parenIdx])
-		if len(val) > parenIdx+1 {
-			argStr := val[parenIdx+1:]
-			if idx := strings.Index(argStr, ")"); idx != -1 {
-				argStr = argStr[:idx]
-			}
-			for _, a := range strings.Split(argStr, ",") {
-				a = strings.TrimSpace(a)
-				if a != "" {
-					ex, err := ParseExpr(a)
-					if err != nil {
-						continue
-					}
-					args = append(args, ex)
-				}
-			}
+	if val != "" {
+		exprs, err := parseExprList(val)
+		if err != nil {
+			return nil, fmt.Errorf("#@%s parameter error: %w", tok.Name, err)
+		}
+		for i := 0; i < exprs.Length(); i++ {
+			args = append(args, exprs.GetExpr(i))
 		}
 	}
-	return &CallStat{FuncName: name, Args: args}, nil
+	return &CallStat{FuncName: tok.Name, NullSafe: tok.Type == TokCallIfDefined, Args: args}, nil
 }
 
 func parseReturnStat(val string) (Stat, error) {

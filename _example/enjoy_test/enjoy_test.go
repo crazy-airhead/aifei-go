@@ -144,7 +144,7 @@ func TestRawBlock(t *testing.T) {
 
 func TestDefineAndCall(t *testing.T) {
 	engine := enjoy.NewEngine("test14")
-	tpl := engine.GetTemplateByString("#define(greet(name))Hello #(name)#end#call greet('Aifei')")
+	tpl := engine.GetTemplateByString("#define(greet(name))Hello #(name)#end#@greet('Aifei')")
 	result := tpl.RenderToString(nil)
 	if !strings.Contains(result, "Hello Aifei") {
 		t.Fatalf("expected 'Hello Aifei', got '%s'", result)
