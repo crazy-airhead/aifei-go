@@ -290,3 +290,23 @@ func TestNestedIfInFor(t *testing.T) {
 		t.Fatalf("expected '12', got '%s'", result)
 	}
 }
+
+// RenderToString0 是 RenderToString 的 panic-on-error 便捷版本（内部调用 RenderToString）。
+func TestRenderToString0(t *testing.T) {
+	engine := enjoy.NewEngine("render0")
+
+	// 正常渲染：返回字符串、无 error 概念。
+	tpl := engine.GetTemplateByString("Hello, #(name)!")
+	if got := tpl.RenderToString0(map[string]interface{}{"name": "Aifei"}); got != "Hello, Aifei!" {
+		t.Fatalf("RenderToString0 正常渲染: got %q", got)
+	}
+
+	// 渲染错误（C 风格 for 语法错）应 panic，而非静默返回。
+	badTpl := engine.GetTemplateByString("#for(i=0; i<3; i++)X#end")
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("RenderToString0 渲染错误时应 panic")
+		}
+	}()
+	badTpl.RenderToString0(nil)
+}

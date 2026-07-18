@@ -58,6 +58,17 @@ func (t *Template) RenderToString(data map[string]interface{}) (string, error) {
 	return buf.String(), nil
 }
 
+// RenderToString0 是 RenderToString 的「不返回 error」便捷版本：内部调用 RenderToString，
+// 渲染出错时 panic（而非返回 error）。适合调用方确定模板无误、不想逐处处理 error 的场景
+// （如 db SqlKit 渲染 SQL、代码生成器）。注意：出错会 panic，调用方需自行决定是否 recover。
+func (t *Template) RenderToString0(data map[string]interface{}) string {
+	out, err := t.RenderToString(data)
+	if err != nil {
+		panic(err)
+	}
+	return out
+}
+
 // sharedObjectMap returns the engine-level shared objects bound to this template's
 // env, or nil when the template has no env/config (对照 Java env.engineConfig.sharedObjectMap)。
 func (t *Template) sharedObjectMap() map[string]interface{} {

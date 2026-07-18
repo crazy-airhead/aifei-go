@@ -33,18 +33,6 @@ func (sk *SqlKit) Engine() *enjoy.Engine {
 	return sk.engine
 }
 
-// renderSQL 渲染 SQL 模板，出错即 panic。
-//
-// SQL 模板渲染错误本质是静态代码 bug（模板写错），与 AddSql 对空 id 的 panic 一致；
-// Dao 的 Sql()/SqlById() 是链式 builder（返回 *Dao 不带 error），panic 不破坏 fluent API。
-func renderSQL(tpl *enjoy.Template, data map[string]interface{}) string {
-	out, err := tpl.RenderToString(data)
-	if err != nil {
-		panic(fmt.Sprintf("render sql template: %v", err))
-	}
-	return out
-}
-
 // GetSqlPara gets a SqlPara from a SQL template string with named parameters.
 //
 //	SqlPara sp = sqlKit.GetSqlPara("select * from user where id = #para(id)", map[string]interface{}{"id": 123})
@@ -58,7 +46,7 @@ func (sk *SqlKit) GetSqlPara(sql string, data map[string]interface{}) *SqlPara {
 	}
 
 	data[SqlParaKey] = sp
-	sp.SetSql(renderSQL(tpl, data))
+	sp.SetSql(tpl.RenderToString0(data))
 	delete(data, SqlParaKey)
 	return sp
 }
@@ -74,7 +62,7 @@ func (sk *SqlKit) GetSqlParaWithArgs(sql string, args ...interface{}) *SqlPara {
 		SqlParaKey:   sp,
 		ParaArrayKey: args,
 	}
-	sp.SetSql(renderSQL(tpl, data))
+	sp.SetSql(tpl.RenderToString0(data))
 	return sp
 }
 
@@ -87,7 +75,7 @@ func (sk *SqlKit) GetSqlParaByID(sqlID string, data map[string]interface{}) *Sql
 
 	sp := NewSqlPara().SetID(sqlID)
 	data[SqlParaKey] = sp
-	sp.SetSql(renderSQL(tpl, data))
+	sp.SetSql(tpl.RenderToString0(data))
 	delete(data, SqlParaKey)
 	return sp
 }
@@ -104,7 +92,7 @@ func (sk *SqlKit) GetSqlParaByIDWithArgs(sqlID string, args ...interface{}) *Sql
 		SqlParaKey:   sp,
 		ParaArrayKey: args,
 	}
-	sp.SetSql(renderSQL(tpl, data))
+	sp.SetSql(tpl.RenderToString0(data))
 	return sp
 }
 
@@ -128,7 +116,7 @@ func (sk *SqlKit) addSqlTemplate(sqlID string, sql string) {
 	data := map[string]interface{}{
 		SqlCacheKey: sqlCache,
 	}
-	renderSQL(tpl, data)
+	tpl.RenderToString0(data)
 
 	for id, t := range sqlCache {
 		sk.cache.Store(id, t)
@@ -149,7 +137,7 @@ func (sk *SqlKit) GetSql(sqlID string, data map[string]interface{}) string {
 	if tpl == nil {
 		return ""
 	}
-	return renderSQL(tpl, data)
+	return tpl.RenderToString0(data)
 }
 
 // ParseSqlFile parses all SQL templates and populates the cache.
