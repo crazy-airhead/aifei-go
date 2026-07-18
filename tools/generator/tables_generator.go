@@ -25,7 +25,10 @@ func (g *TablesGenerator) Generate(engine *Engine, infos []*TableInfo, outputDir
 		"importRoot":    importRoot,
 		"outputPkgName": outputPkgName,
 	}
-	content := engine.RenderTemplate(tablesTemplateContent, data)
+	content, err := engine.RenderTemplate(tablesTemplateContent, data)
+	if err != nil {
+		return fmt.Errorf("render tables template: %w", err)
+	}
 
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("create dir %s: %w", outputDir, err)

@@ -33,7 +33,7 @@ func TestInlineElseNotSwallowed(t *testing.T) {
 		{`#if(notEmpty(x))Y#else N#end`, map[string]interface{}{"x": []interface{}{}}, " N"},
 	}
 	for _, c := range cases {
-		got := engine.GetTemplateByString(c.tpl).RenderToString(c.data)
+		got := renderToString(t, engine.GetTemplateByString(c.tpl), c.data)
 		if got != c.want {
 			t.Errorf("%-34s => %q, want %q", c.tpl, got, c.want)
 		}
@@ -44,10 +44,10 @@ func TestInlineElseNotSwallowed(t *testing.T) {
 func TestMultilineElseUnchanged(t *testing.T) {
 	engine := enjoy.NewEngine("inline-dir-2")
 	tpl := "#if(notEmpty(x))\nhave\n#else\nempty\n#end"
-	if got := engine.GetTemplateByString(tpl).RenderToString(map[string]interface{}{"x": []interface{}{}}); got != "empty\n" {
+	if got := renderToString(t, engine.GetTemplateByString(tpl), map[string]interface{}{"x": []interface{}{}}); got != "empty\n" {
 		t.Errorf("multiline false-branch: got %q, want %q", got, "empty\n")
 	}
-	if got := engine.GetTemplateByString(tpl).RenderToString(map[string]interface{}{"x": []interface{}{1}}); got != "have\n" {
+	if got := renderToString(t, engine.GetTemplateByString(tpl), map[string]interface{}{"x": []interface{}{1}}); got != "have\n" {
 		t.Errorf("multiline true-branch: got %q, want %q", got, "have\n")
 	}
 }
@@ -58,7 +58,7 @@ func TestInlineBreakContinueText(t *testing.T) {
 	engine := enjoy.NewEngine("inline-dir-3")
 	// #for 内 #if 命中后 #continue：跳过本次后续 #(i)，但「#end」后的文本在循环体每次都输出
 	tpl := "#for(i : x)#if(i == 2)#continue skip#end#(i)#end"
-	got := engine.GetTemplateByString(tpl).RenderToString(map[string]interface{}{"x": []interface{}{1, 2, 3}})
+	got := renderToString(t, engine.GetTemplateByString(tpl), map[string]interface{}{"x": []interface{}{1, 2, 3}})
 	// i=1 → "1"；i=2 → continue（#(2) 被跳过）；i=3 → "3"
 	if got != "13" {
 		t.Errorf("inline #continue text: got %q, want %q", got, "13")

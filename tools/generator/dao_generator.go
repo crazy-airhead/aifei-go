@@ -21,7 +21,10 @@ func NewDaoGenerator() *DaoGenerator {
 // Generate generates dao.go. Skips if the file already exists.
 func (g *DaoGenerator) Generate(engine *Engine, info *TableInfo, outputDir string) error {
 	data := g.buildData(info)
-	content := engine.RenderTemplate(daoTemplateContent, data)
+	content, err := engine.RenderTemplate(daoTemplateContent, data)
+	if err != nil {
+		return fmt.Errorf("render dao template: %w", err)
+	}
 
 	pkgDir := filepath.Join(outputDir, info.PkgName)
 	if err := os.MkdirAll(pkgDir, 0755); err != nil {

@@ -26,7 +26,10 @@ func NewBaseGenerator() *BaseGenerator {
 // Generate generates base.go for a single table.
 func (g *BaseGenerator) Generate(engine *Engine, info *TableInfo, outputDir string) error {
 	data := g.buildData(info)
-	content := engine.RenderTemplate(baseTemplateContent, data)
+	content, err := engine.RenderTemplate(baseTemplateContent, data)
+	if err != nil {
+		return fmt.Errorf("render base template: %w", err)
+	}
 
 	pkgDir := filepath.Join(outputDir, info.PkgName)
 	if err := os.MkdirAll(pkgDir, 0755); err != nil {

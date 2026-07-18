@@ -45,7 +45,7 @@
 | 0006 | db `Row.Keep()` 未清理 change 集合 | 🔴 | db | [0006-db-Row-Keep未清理change](0006-db-Row-Keep未清理change.md) |
 | 0007 | enjoy 内置指令全部缺失（#escape/#date/#number/#random/#render/#string） | 🟢 | enjoy | [0007-enjoy-内置指令全部缺失](0007-enjoy-内置指令全部缺失.md) |
 | 0008 | enjoy 缺共享方法库与类型扩展方法 | 🟢 | enjoy | [0008-enjoy-缺共享方法与扩展方法](0008-enjoy-缺共享方法与扩展方法.md) |
-| 0009 | enjoy `#for` 缺 else 分支与循环状态变量 | 🔴 | enjoy | [0009-enjoy-for缺else与循环状态变量](0009-enjoy-for缺else与循环状态变量.md) |
+| 0009 | enjoy `#for` 缺 else 分支与循环状态变量 | 🟢 | enjoy | [0009-enjoy-for缺else与循环状态变量](0009-enjoy-for缺else与循环状态变量.md) |
 | 0010 | enjoy `#call`/`#define` 作用域隔离与前向引用 | 🔴 | enjoy | [0010-enjoy-call-define作用域与前向引用](0010-enjoy-call-define作用域与前向引用.md) |
 | 0011 | enjoy 作用域与取值缺陷（Set/赋值/Field getter） | 🔴 | enjoy | [0011-enjoy-作用域与取值缺陷](0011-enjoy-作用域与取值缺陷.md) |
 | 0012 | enjoy 语义差异与 EngineConfig 配置项杂项 | 🔴 | enjoy | [0012-enjoy-语义差异与配置项杂项](0012-enjoy-语义差异与配置项杂项.md) |

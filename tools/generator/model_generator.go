@@ -21,7 +21,10 @@ func NewModelGenerator() *ModelGenerator {
 // Generate generates the model struct file. Skips if the file already exists.
 func (g *ModelGenerator) Generate(engine *Engine, info *TableInfo, outputDir string) error {
 	data := g.buildData(info)
-	content := engine.RenderTemplate(modelTemplateContent, data)
+	content, err := engine.RenderTemplate(modelTemplateContent, data)
+	if err != nil {
+		return fmt.Errorf("render model template: %w", err)
+	}
 
 	pkgDir := filepath.Join(outputDir, info.PkgName)
 	if err := os.MkdirAll(pkgDir, 0755); err != nil {

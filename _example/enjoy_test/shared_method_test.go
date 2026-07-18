@@ -29,7 +29,7 @@ func TestSharedMethodIsEmpty(t *testing.T) {
 		{`#(notEmpty(list))`, map[string]interface{}{"list": []interface{}{}}, "false"},
 	}
 	for _, c := range cases {
-		got := engine.GetTemplateByString(c.tpl).RenderToString(c.data)
+		got := renderToString(t, engine.GetTemplateByString(c.tpl), c.data)
 		if got != c.want {
 			t.Errorf("%-22s => %q, want %q", c.tpl, got, c.want)
 		}
@@ -37,10 +37,10 @@ func TestSharedMethodIsEmpty(t *testing.T) {
 
 	// 行内 #if/#else：notEmpty 为真输出 have，否则 empty。
 	ml := "#if(notEmpty(list))have#else empty#end"
-	if got := engine.GetTemplateByString(ml).RenderToString(map[string]interface{}{"list": []interface{}{}}); got != " empty" {
+	if got := renderToString(t, engine.GetTemplateByString(ml), map[string]interface{}{"list": []interface{}{}}); got != " empty" {
 		t.Errorf("inline if/else empty: got %q", got)
 	}
-	if got := engine.GetTemplateByString(ml).RenderToString(map[string]interface{}{"list": []interface{}{"a"}}); got != "have" {
+	if got := renderToString(t, engine.GetTemplateByString(ml), map[string]interface{}{"list": []interface{}{"a"}}); got != "have" {
 		t.Errorf("inline if/else nonempty: got %q", got)
 	}
 }
@@ -52,7 +52,7 @@ func TestNumericExtensionMethod(t *testing.T) {
 	values := []interface{}{int(7), int8(7), int16(7), int32(7), int64(7),
 		uint(7), uint8(7), uint16(7), uint32(7), uint64(7), float64(7.9)}
 	for _, v := range values {
-		got := engine.GetTemplateByString(`#(v.toInt())`).RenderToString(map[string]interface{}{"v": v})
+		got := renderToString(t, engine.GetTemplateByString(`#(v.toInt())`), map[string]interface{}{"v": v})
 		if got != "7" {
 			t.Errorf("%T toInt => %q, want 7", v, got)
 		}
@@ -71,7 +71,7 @@ func TestNumericExtensionMethod(t *testing.T) {
 		{`#(f.toInt())`, map[string]interface{}{"f": float64(3.9)}, "3"}, // float→int 截断
 	}
 	for _, c := range cases {
-		got := engine.GetTemplateByString(c.tpl).RenderToString(c.data)
+		got := renderToString(t, engine.GetTemplateByString(c.tpl), c.data)
 		if got != c.want {
 			t.Errorf("%-22s => %q, want %q", c.tpl, got, c.want)
 		}
@@ -84,7 +84,7 @@ func TestStringExtensionConversion(t *testing.T) {
 	engine := enjoy.NewEngine("ext-str-1")
 	cond := "#if(age.toInt() > 18)成年#else未成年#end"
 	for _, age := range []interface{}{"20", 20} {
-		got := engine.GetTemplateByString(cond).RenderToString(map[string]interface{}{"age": age})
+		got := renderToString(t, engine.GetTemplateByString(cond), map[string]interface{}{"age": age})
 		if got != "成年" {
 			t.Fatalf("age=%T(%v) toInt>18: expected '成年', got %q", age, age, got)
 		}
@@ -101,7 +101,7 @@ func TestStringExtensionConversion(t *testing.T) {
 		{`#(s.toDouble())`, map[string]interface{}{"s": "3.5"}, "3.5"},
 	}
 	for _, c := range cases {
-		got := engine.GetTemplateByString(c.tpl).RenderToString(c.data)
+		got := renderToString(t, engine.GetTemplateByString(c.tpl), c.data)
 		if got != c.want {
 			t.Errorf("%-20s => %q, want %q", c.tpl, got, c.want)
 		}
@@ -123,7 +123,7 @@ func TestStringExtensionLegacyMethods(t *testing.T) {
 		{`#(s.isEmpty())`, map[string]interface{}{"s": ""}, "true"},
 	}
 	for _, c := range cases {
-		got := engine.GetTemplateByString(c.tpl).RenderToString(c.data)
+		got := renderToString(t, engine.GetTemplateByString(c.tpl), c.data)
 		if got != c.want {
 			t.Errorf("%-22s => %q, want %q", c.tpl, got, c.want)
 		}
@@ -141,8 +141,7 @@ func TestRegisterCustomSharedMethod(t *testing.T) {
 	defer enjoy.RemoveSharedMethod("greet")
 
 	engine := enjoy.NewEngine("shared-method-custom")
-	got := engine.GetTemplateByString(`#(greet(name))`).
-		RenderToString(map[string]interface{}{"name": "Aifei"})
+	got := renderToString(t, engine.GetTemplateByString(`#(greet(name))`), map[string]interface{}{"name": "Aifei"})
 	if got != "hi Aifei" {
 		t.Fatalf("custom shared method: expected 'hi Aifei', got %q", got)
 	}
@@ -158,8 +157,7 @@ func TestRegisterCustomExtensionMethod(t *testing.T) {
 	})
 
 	engine := enjoy.NewEngine("ext-custom")
-	got := engine.GetTemplateByString(`#(flag.toggle())`).
-		RenderToString(map[string]interface{}{"flag": false})
+	got := renderToString(t, engine.GetTemplateByString(`#(flag.toggle())`), map[string]interface{}{"flag": false})
 	if got != "true" {
 		t.Fatalf("custom extension method: expected 'true', got %q", got)
 	}

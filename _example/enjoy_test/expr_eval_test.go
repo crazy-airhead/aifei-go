@@ -108,7 +108,7 @@ func TestArithIssue0002(t *testing.T) {
 		{"#(1.5 + 1)", "2.5"},        // 浮点提升
 	}
 	for _, c := range cases {
-		got := engine.GetTemplateByString(c.tpl).RenderToString(nil)
+		got := renderToString(t, engine.GetTemplateByString(c.tpl), nil)
 		if got != c.want {
 			t.Errorf("%-20s => %q, want %q", c.tpl, got, c.want)
 		}

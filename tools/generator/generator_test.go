@@ -112,7 +112,10 @@ func TestTemplateRendering(t *testing.T) {
 	// Test base template
 	EnrichFields(info.Fields, &TemplateUtil{}, db.KeyFormatCamel)
 	baseData := baseGen.buildData(info)
-	content := engine.RenderTemplate(baseTemplateContent, baseData)
+	content, err := engine.RenderTemplate(baseTemplateContent, baseData)
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Logf("base.go content:\n%s", content)
 
 	if !strings.Contains(content, "package user") {
@@ -141,7 +144,10 @@ func TestTemplateRendering(t *testing.T) {
 	}
 
 	// Test model template (uses buildData so jsonFields is always present)
-	modelContent := engine.RenderTemplate(modelTemplateContent, NewModelGenerator().buildData(info))
+	modelContent, err := engine.RenderTemplate(modelTemplateContent, NewModelGenerator().buildData(info))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(modelContent, "type User struct") {
 		t.Error("model.go should contain User struct, got:", modelContent)
 	}
@@ -149,7 +155,10 @@ func TestTemplateRendering(t *testing.T) {
 	// Test dao template
 	daoGen := NewDaoGenerator()
 	daoData := daoGen.buildData(info)
-	daoContent := engine.RenderTemplate(daoTemplateContent, daoData)
+	daoContent, err := engine.RenderTemplate(daoTemplateContent, daoData)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(daoContent, "type Dao struct") {
 		t.Error("dao.go should contain Dao struct, got:", daoContent)
 	}
@@ -278,7 +287,10 @@ func TestJsonFieldGeneration(t *testing.T) {
 	EnrichFields(info.Fields, &TemplateUtil{}, db.KeyFormatCamel)
 
 	// base.go: JSON column getter/setter must be absent (moved to model.go).
-	baseContent := engine.RenderTemplate(baseTemplateContent, baseGen.buildData(info))
+	baseContent, err := engine.RenderTemplate(baseTemplateContent, baseGen.buildData(info))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if strings.Contains(baseContent, "func (r *BaseUser) Profile()") {
 		t.Error("base.go must NOT generate a getter for the JSON column 'profile'")
 	}
@@ -295,7 +307,10 @@ func TestJsonFieldGeneration(t *testing.T) {
 	}
 
 	// model.go: default string scaffold + upgrade hint present.
-	modelContent := engine.RenderTemplate(modelTemplateContent, NewModelGenerator().buildData(info))
+	modelContent, err := engine.RenderTemplate(modelTemplateContent, NewModelGenerator().buildData(info))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(modelContent, "func (m *User) Profile() string") {
 		t.Error("model.go should contain the default string scaffold for the JSON column")
 	}
@@ -470,7 +485,10 @@ func TestRemarksRendering(t *testing.T) {
 	engine := NewEngine()
 	EnrichFields(info.Fields, &TemplateUtil{}, db.KeyFormatCamel)
 
-	baseContent := engine.RenderTemplate(baseTemplateContent, NewBaseGenerator().buildData(info))
+	baseContent, err := engine.RenderTemplate(baseTemplateContent, NewBaseGenerator().buildData(info))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(baseContent, "// 用户表") {
 		t.Errorf("base.go should emit the table comment, got:\n%s", baseContent)
 	}
@@ -478,7 +496,10 @@ func TestRemarksRendering(t *testing.T) {
 		t.Errorf("base.go should emit the column comment on the getter, got:\n%s", baseContent)
 	}
 
-	modelContent := engine.RenderTemplate(modelTemplateContent, NewModelGenerator().buildData(info))
+	modelContent, err := engine.RenderTemplate(modelTemplateContent, NewModelGenerator().buildData(info))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(modelContent, "// 用户表") {
 		t.Errorf("model.go should emit the table comment, got:\n%s", modelContent)
 	}

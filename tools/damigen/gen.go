@@ -126,7 +126,10 @@ func render(pkgName string, ifaces []ifaceInfo) ([]byte, error) {
 		"ImportPath": DamiImportPath,
 		"Ifaces":     ifaces,
 	}
-	out := engine.GetTemplateByString(clientTemplate).RenderToString(data)
+	out, err := engine.GetTemplateByString(clientTemplate).RenderToString(data)
+	if err != nil {
+		return nil, fmt.Errorf("render client template: %w", err)
+	}
 	formatted, err := format.Source([]byte(out))
 	if err != nil {
 		// Return unformatted source so the caller can read the error context.

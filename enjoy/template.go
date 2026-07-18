@@ -12,27 +12,50 @@ import (
 
 // Template represents a compiled template.
 type Template struct {
-	engine *Engine
-	ast    Stat
-	source source.Source
-	env    *Env
+	engine   *Engine
+	ast      Stat
+	source   source.Source
+	env      *Env
+	parseErr error // 解析期错误；非 nil 时 Render/RenderToString 直接返回它，不渲染。
+}
+
+// exec 在给定作用域上执行模板 AST，返回渲染期错误。
+//
+// 错误来源：① 解析期错误（parseErr，如 #for 语法错、#returnIf() 空参）直接返回；
+// ② 运行期 panic（如 #date/#number 参数错、reflect 调用异常）经 recover 转为 error。
+// 这样调用方可明确区分「正常渲染结果」与「错误」，错误不再烘进输出。
+//
+// 注意：流式 Render(writer) 时若中途 panic，已写入 writer 的部分内容无法撤回——
+// 调用方据返回的 error 自行处理（server 端 io_handler 会记录日志）。
+func (t *Template) exec(scope *Scope, writer io.Writer) (err error) {
+	if t.parseErr != nil {
+		return t.parseErr
+	}
+	ctrl := NewCtrl()
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("template render: %v", r)
+		}
+	}()
+	t.ast.Exec(t.env, scope, &IOAdapter{w: writer}, ctrl)
+	return nil
 }
 
 // Render executes the template with the given data and writes to writer.
 func (t *Template) Render(data map[string]interface{}, writer io.Writer) error {
 	scope := NewScopeWithShared(data, t.sharedObjectMap())
-	ctrl := NewCtrl()
-	t.ast.Exec(t.env, scope, &IOAdapter{w: writer}, ctrl)
-	return nil
+	return t.exec(scope, writer)
 }
 
 // RenderToString executes the template and returns the result as a string.
-func (t *Template) RenderToString(data map[string]interface{}) string {
+// 渲染出错时返回 ("", err)（半成品输出被丢弃），调用方据 err 区分正常结果与错误。
+func (t *Template) RenderToString(data map[string]interface{}) (string, error) {
 	var buf bytes.Buffer
 	scope := NewScopeWithShared(data, t.sharedObjectMap())
-	ctrl := NewCtrl()
-	t.ast.Exec(t.env, scope, &IOAdapter{w: &buf}, ctrl)
-	return buf.String()
+	if err := t.exec(scope, &buf); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 // sharedObjectMap returns the engine-level shared objects bound to this template's
@@ -104,13 +127,16 @@ func (e *Engine) compileSource(key string, src source.Source) *Template {
 	env := NewEnv(e.config)
 	env.engine = e
 
-	ast, err := ParseTemplate(lexer, env)
+	ast, err := parseTemplateRecovered(lexer, env)
 	if err != nil {
+		// 解析错误存入 parseErr：Render/RenderToString 会直接返回它（不再烘进输出）。
+		// ast 置 NullStat 以防调用方忽略 err 时也不会误渲染。
 		return &Template{
-			engine: e,
-			ast:    &errorStat{err: err},
-			source: src,
-			env:    env,
+			engine:   e,
+			ast:      &NullStat{},
+			source:   src,
+			env:      env,
+			parseErr: err,
 		}
 	}
 
@@ -122,6 +148,18 @@ func (e *Engine) compileSource(key string, src source.Source) *Template {
 	}
 	e.templateCache.Store(key, t)
 	return t
+}
+
+// parseTemplateRecovered 编译 token 为 Stat AST，并把解析期的 panic（如 #date/#number
+// 等 directive 的 SetExprList 参数校验 panic）转为 error 返回，避免打崩 GetTemplateByString 调用方。
+// 与 exec 的运行期 recover 分工：此处覆盖解析期，exec 覆盖渲染期。
+func parseTemplateRecovered(lexer *Lexer, env *Env) (stat Stat, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			stat, err = nil, fmt.Errorf("template parse: %v", r)
+		}
+	}()
+	return ParseTemplate(lexer, env)
 }
 
 // SetDevMode sets development mode (disables cache).
@@ -169,13 +207,4 @@ func (e *Engine) GetConfig() *EngineConfig {
 // NewTemplate creates a Template from an Env and Stat (for use by SQL directives).
 func NewTemplate(env *Env, ast Stat) *Template {
 	return &Template{env: env, ast: ast}
-}
-
-// errorStat outputs an error message.
-type errorStat struct {
-	err error
-}
-
-func (s *errorStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
-	writer.WriteString(fmt.Sprintf("<!-- template error: %s -->", s.err.Error()))
 }

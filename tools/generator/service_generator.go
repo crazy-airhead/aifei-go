@@ -33,7 +33,10 @@ func (g *ServiceGenerator) Generate(engine *Engine, info *TableInfo, outputDir s
 	}
 
 	data := g.buildData(info)
-	content := engine.RenderTemplate(serviceTemplateContent, data)
+	content, err := engine.RenderTemplate(serviceTemplateContent, data)
+	if err != nil {
+		return fmt.Errorf("render service template: %w", err)
+	}
 
 	if err := os.MkdirAll(pkgDir, 0755); err != nil {
 		return fmt.Errorf("create dir %s: %w", pkgDir, err)

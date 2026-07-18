@@ -19,10 +19,10 @@ func TestSharedObjectFallback(t *testing.T) {
 	engine.AddSharedObject("greeting", "hello")
 	engine.AddSharedObject("count", 42)
 
-	if got := engine.GetTemplateByString("#(greeting)").RenderToString(nil); got != "hello" {
+	if got := renderToString(t, engine.GetTemplateByString("#(greeting)"), nil); got != "hello" {
 		t.Fatalf("shared string: expected 'hello', got '%s'", got)
 	}
-	if got := engine.GetTemplateByString("#(count)").RenderToString(nil); got != "42" {
+	if got := renderToString(t, engine.GetTemplateByString("#(count)"), nil); got != "42" {
 		t.Fatalf("shared int: expected '42', got '%s'", got)
 	}
 }
@@ -32,7 +32,7 @@ func TestSharedObjectMissStillEmpty(t *testing.T) {
 	engine := enjoy.NewEngine("shared-obj-2")
 	engine.AddSharedObject("greeting", "hello")
 
-	if got := engine.GetTemplateByString("[#(missing)]").RenderToString(nil); got != "[]" {
+	if got := renderToString(t, engine.GetTemplateByString("[#(missing)]"), nil); got != "[]" {
 		t.Fatalf("unregistered ident: expected '[]', got '%s'", got)
 	}
 }
@@ -42,7 +42,7 @@ func TestSharedObjectShadowedByData(t *testing.T) {
 	engine := enjoy.NewEngine("shared-obj-3")
 	engine.AddSharedObject("greeting", "hello")
 
-	got := engine.GetTemplateByString("#(greeting)").RenderToString(map[string]interface{}{"greeting": "hi"})
+	got := renderToString(t, engine.GetTemplateByString("#(greeting)"), map[string]interface{}{"greeting": "hi"})
 	if got != "hi" {
 		t.Fatalf("data should shadow shared: expected 'hi', got '%s'", got)
 	}
@@ -54,7 +54,7 @@ func TestSharedObjectInForBody(t *testing.T) {
 	engine.AddSharedObject("sep", "|")
 
 	tpl := engine.GetTemplateByString("#for(i : items)#(i)#(sep)#end")
-	got := tpl.RenderToString(map[string]interface{}{"items": []interface{}{"a", "b", "c"}})
+	got := renderToString(t, tpl, map[string]interface{}{"items": []interface{}{"a", "b", "c"}})
 	if got != "a|b|c|" {
 		t.Fatalf("shared object in for body: expected 'a|b|c|', got '%s'", got)
 	}
@@ -98,14 +98,14 @@ func TestSharedObjectMethodCall(t *testing.T) {
 	// 通过 sharedObject 注入
 	engine := enjoy.NewEngine("shared-obj-5")
 	engine.AddSharedObject("tool", tool)
-	got := engine.GetTemplateByString(`#(tool.Up("hi"))`).RenderToString(nil)
+	got := renderToString(t, engine.GetTemplateByString(`#(tool.Up("hi"))`), nil)
 	if got != "HI" {
 		t.Fatalf("shared object method call: expected 'HI', got '%s'", got)
 	}
 
 	// 对照：同一对象通过 data 注入，方法调用同样可达（取值能力上 data 与 sharedObject 等价）
 	engine2 := enjoy.NewEngine("shared-obj-6")
-	got2 := engine2.GetTemplateByString(`#(tool.Up("hi"))`).RenderToString(map[string]interface{}{"tool": tool})
+	got2 := renderToString(t, engine2.GetTemplateByString(`#(tool.Up("hi"))`), map[string]interface{}{"tool": tool})
 	if got2 != "HI" {
 		t.Fatalf("data object method call: expected 'HI', got '%s'", got2)
 	}

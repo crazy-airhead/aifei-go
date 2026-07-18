@@ -25,7 +25,7 @@ func NewEngine() *Engine {
 }
 
 // RenderTemplate compiles (or fetches cached) a template and renders it.
-func (e *Engine) RenderTemplate(content string, data map[string]interface{}) string {
+func (e *Engine) RenderTemplate(content string, data map[string]interface{}) (string, error) {
 	var tpl *enjoy.Template
 	if cached, ok := e.templateCache.Load(content); ok {
 		tpl = cached.(*enjoy.Template)

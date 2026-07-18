@@ -69,65 +69,53 @@ func (s *IfStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 	}
 }
 
-// ForStat represents #for.
+// ForStat represents the iterator form #for(id : expr) ... #else ... #end
+// （对照 Java For 的 forIterator 分支）。Go 版本仅支持迭代型 for —— 不支持 Java 的
+// C 风格 for(init; cond; update)（forLoop），以收敛 for 的语义。
+//
+// 循环状态聚合为作用域内的 `for` 对象，模板用 for.index/count/first/last/odd/even/size/outer
+// 对象式访问（对照 Java ForIteratorStatus）。#else 体在循环一次未执行（空集合）时运行。
 type ForStat struct {
 	VarName  string
 	IterExpr Expr
 	Body     Stat
-	Init     Stat
-	Cond     Expr
-	Update   Stat
-	IsRange  bool
+	Else     Stat
 }
 
+// Exec 执行迭代型 #for(id : expr)。跳转语义对照 Java For.forIterator：
+// #return 透传不在此复位；#break 跳出循环；#continue 跳过本次后续并进入下一轮。
+// break/continue 复位（setJumpNone），return 保留。
 func (s *ForStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
-	if s.IsRange {
-		s.execRange(env, scope, writer, ctrl)
-	} else {
-		s.execTrad(env, scope, writer, ctrl)
-	}
-}
-
-func (s *ForStat) execRange(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
 	val := s.IterExpr.Eval(scope, ctrl)
 	items := toSlice(val)
+	size := len(items)
+	// 捕获外层循环状态，供内层 for.outer 访问（对照 Java Object outer = scope.get("for")）。
+	outer := scope.Get("for")
+	ran := false
 	for i, item := range items {
 		if ctrl.Return {
 			return
 		}
+		ran = true
 		child := scope.NewChild()
 		child.Set(s.VarName, item)
-		child.Set("index", i)
-		child.Set("size", len(items))
-		child.Set("first", i == 0)
-		child.Set("last", i == len(items)-1)
-		ctrl.Reset()
+		child.Set("for", forIteratorStatus(outer, i, size))
 		s.Body.Exec(env, child, writer, ctrl)
-	}
-	ctrl.Reset()
-}
-
-func (s *ForStat) execTrad(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
-	if s.Init != nil {
-		s.Init.Exec(env, scope, writer, ctrl)
-	}
-	for {
 		if ctrl.Return {
 			return
 		}
-		if s.Cond != nil && !isTruthy(s.Cond.Eval(scope, ctrl)) {
-			break
-		}
-		ctrl.Reset()
-		s.Body.Exec(env, scope, writer, ctrl)
 		if ctrl.Break {
+			ctrl.Break = false
 			break
 		}
-		if s.Update != nil {
-			s.Update.Exec(env, scope, writer, ctrl)
+		if ctrl.Continue {
+			ctrl.Continue = false
+			continue
 		}
 	}
-	ctrl.Reset()
+	if !ran && s.Else != nil {
+		s.Else.Exec(env, scope, writer, ctrl)
+	}
 }
 
 // SetStat represents #set, #setLocal, #setGlobal.
@@ -237,17 +225,6 @@ func (s *ReturnIfStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctr
 type NullStat struct{}
 
 func (s *NullStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {}
-
-// SetAsStat wraps an Expr as a Stat.
-type SetAsStat struct {
-	Expr Expr
-}
-
-func (s *SetAsStat) Exec(env *Env, scope *Scope, writer *IOAdapter, ctrl *Ctrl) {
-	if s.Expr != nil {
-		s.Expr.Eval(scope, ctrl)
-	}
-}
 
 // IncludeStat represents #include(path, arg1=val1, ...).
 type IncludeStat struct {
@@ -591,47 +568,39 @@ func mergeStats(stats []Stat) Stat {
 }
 
 func parseForStat(header string, lexer *Lexer, env *Env) (Stat, error) {
-	body, _, err := collectUntil(lexer, env, TokEnd)
+	// 收集循环体，遇到 #else 或 #end 停止；命中 #else 则继续收集 else 体（对照 Java For 的 _else）。
+	body, stopToks, err := collectUntil(lexer, env, TokElse, TokEnd)
 	if err != nil {
 		return nil, err
+	}
+	var elseStat Stat
+	if len(stopToks) > 0 && stopToks[0].Type == TokElse {
+		elseStat, _, err = collectUntil(lexer, env, TokEnd)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	header = strings.TrimSpace(header)
 
+	// 仅支持迭代型 #for(id : expr) / #for(id in expr)（对照 Java For 的 forIterator）。
+	// 不支持 C 风格 for(init; cond; update) —— header 不匹配迭代型语法时报语法错误，
+	// 经 errorStat 在渲染期输出错误标记，而非静默忽略（避免循环体被悄悄丢弃）。
+	var varName, iterStr string
 	if idx := strings.Index(header, " : "); idx != -1 {
-		varName := strings.TrimSpace(header[:idx])
-		iterStr := strings.TrimSpace(header[idx+3:])
-		iterExpr, err := ParseExpr(iterStr)
-		if err != nil {
-			return nil, err
-		}
-		return &ForStat{VarName: varName, IterExpr: iterExpr, Body: body, IsRange: true}, nil
+		varName = strings.TrimSpace(header[:idx])
+		iterStr = strings.TrimSpace(header[idx+3:])
+	} else if idx := strings.Index(header, " in "); idx != -1 {
+		varName = strings.TrimSpace(header[:idx])
+		iterStr = strings.TrimSpace(header[idx+4:])
+	} else {
+		return nil, fmt.Errorf("#for syntax error: only iterator form '#for(id : expr)' or '#for(id in expr)' is supported, C-style 'for(init; cond; update)' is not: %q", header)
 	}
-	if idx := strings.Index(header, " in "); idx != -1 {
-		varName := strings.TrimSpace(header[:idx])
-		iterStr := strings.TrimSpace(header[idx+4:])
-		iterExpr, err := ParseExpr(iterStr)
-		if err != nil {
-			return nil, err
-		}
-		return &ForStat{VarName: varName, IterExpr: iterExpr, Body: body, IsRange: true}, nil
+	iterExpr, err := ParseExpr(iterStr)
+	if err != nil {
+		return nil, err
 	}
-
-	parts := strings.Split(header, ";")
-	if len(parts) >= 3 {
-		initExpr, _ := ParseExpr(strings.TrimSpace(parts[0]))
-		condExpr, _ := ParseExpr(strings.TrimSpace(parts[1]))
-		updateExpr, _ := ParseExpr(strings.TrimSpace(parts[2]))
-		return &ForStat{
-			Body:    body,
-			IsRange: false,
-			Init:    &SetAsStat{Expr: initExpr},
-			Cond:    condExpr,
-			Update:  &SetAsStat{Expr: updateExpr},
-		}, nil
-	}
-
-	return &NullStat{}, nil
+	return &ForStat{VarName: varName, IterExpr: iterExpr, Body: body, Else: elseStat}, nil
 }
 
 func parseSetStat(val string, scopeType string) (Stat, error) {

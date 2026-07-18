@@ -584,6 +584,23 @@ func forEntry(k, v interface{}) map[string]interface{} {
 	return map[string]interface{}{"key": k, "value": v}
 }
 
+// forIteratorStatus 构造迭代型 #for(id : expr) 的循环状态对象，作为作用域内的 `for` 变量，
+// 模板通过 for.index/count/first/last/odd/even/size/outer 对象式访问
+// （对照 Java ForIteratorStatus）。odd/even 按 count 计数：index 偶数 → 第奇数个 → odd=true，
+// 与 Java getOdd()=index%2==0 / getEven()=index%2!=0 一致。outer 为外层循环状态（for.outer）。
+func forIteratorStatus(outer interface{}, index, size int) map[string]interface{} {
+	return map[string]interface{}{
+		"index": index,
+		"count": index + 1,
+		"first": index == 0,
+		"last":  index == size-1,
+		"odd":   index%2 == 0,
+		"even":  index%2 != 0,
+		"size":  size,
+		"outer": outer,
+	}
+}
+
 // toSlice 将迭代源规整为 []interface{}，支持 slice/array/map 与指针解引用；
 // 非集合单对象自动包成单元素列表（对照 Java ForIteratorStatus.init）。
 // map 转为 key/value entry 列表，使 #for(entry : myMap) 可遍历 #(entry.key)/#(entry.value)。
