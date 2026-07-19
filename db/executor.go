@@ -23,11 +23,27 @@ func execInsertRow(dao *Dao, row *Row) (*Row, error) {
 		values[i] = normalizeSQLValue(row.data[f])
 	}
 	sqlStr := dialect.ForInsert(row.table, fields)
-	dao.setSqlPara(&dbsql.SqlPara{Sql: sqlStr, Paras: values})
+	preSP := &dbsql.SqlPara{Sql: sqlStr, Paras: values}
+	dao.setSqlPara(preSP)
 
 	var toAfter interface{}
 	if hk != nil && hk.InsertHook != nil {
 		toAfter = hk.InsertHook.BeforeRowInsert(dao, row)
+		// A row-stamping hook (e.g. dataisolate setting tenant_id) may add writable
+		// fields after the INSERT was built; recompute when the field set grew and the
+		// hook did not write its own sqlPara, so the new columns ride the INSERT.
+		// No-op when unchanged (regression-safe).
+		if dao.sqlPara == preSP {
+			if newFields := filterWritableFields(row.table, row.FieldNames()); !sameFields(fields, newFields) {
+				fields = newFields
+				values = make([]interface{}, len(fields))
+				for i, f := range fields {
+					values[i] = normalizeSQLValue(row.data[f])
+				}
+				sqlStr = dialect.ForInsert(row.table, fields)
+				dao.setSqlPara(&dbsql.SqlPara{Sql: sqlStr, Paras: values})
+			}
+		}
 		if sp := dao.sqlPara; sp != nil {
 			sqlStr = sp.Sql
 			values = sp.Paras
@@ -516,11 +532,25 @@ func execInsertOrUpdateRow(dao *Dao, row *Row) (*Row, error) {
 		values[i] = normalizeSQLValue(row.data[f])
 	}
 	sqlStr := config.Dialect.ForInsertOrUpdate(row.table, fields, row.primaryKeys)
-	dao.setSqlPara(&dbsql.SqlPara{Sql: sqlStr, Paras: values})
+	preSP := &dbsql.SqlPara{Sql: sqlStr, Paras: values}
+	dao.setSqlPara(preSP)
 
 	var toAfter interface{}
 	if hk != nil && hk.InsertHook != nil {
 		toAfter = hk.InsertHook.BeforeRowInsert(dao, row)
+		// Recompute when a row-stamping hook added fields and did not write its own
+		// sqlPara (see execInsertRow). No-op when unchanged.
+		if dao.sqlPara == preSP {
+			if newFields := filterTableFields(row.table, row.FieldNames()); !sameFields(fields, newFields) {
+				fields = newFields
+				values = make([]interface{}, len(fields))
+				for i, f := range fields {
+					values[i] = normalizeSQLValue(row.data[f])
+				}
+				sqlStr = config.Dialect.ForInsertOrUpdate(row.table, fields, row.primaryKeys)
+				dao.setSqlPara(&dbsql.SqlPara{Sql: sqlStr, Paras: values})
+			}
+		}
 		if sp := dao.sqlPara; sp != nil {
 			sqlStr = sp.Sql
 			values = sp.Paras
@@ -1068,6 +1098,20 @@ func execTransactionOf[R any](dao *Dao, fn func(ctx context.Context, d *Dao, tx 
 }
 
 // ---- Internal helpers ----
+
+// sameFields reports whether two sorted field slices are equal. Used to detect
+// whether a row-stamping hook added fields after the INSERT was built.
+func sameFields(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
 
 func scanRows(rows *sql.Rows) ([]*Row, error) {
 	cols, err := rows.Columns()

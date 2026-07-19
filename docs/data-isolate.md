@@ -36,7 +36,7 @@
 
 ## 1. 概述与设计原则
 
-- **插件化**：数据隔离是 `plugins/dataisolate`，核心库（`aifei`/`db`/`enjoy`）保持零外部依赖；SQL 解析依赖（`vitess-sqlparser`）只进插件。
+- **插件化**：数据隔离是 `plugins/dataisolate`，核心库（`aifei`/`db`/`enjoy`）保持零外部依赖；SQL 解析依赖（`GoSQLX`）只进插件。
 - **db 最小改动**：仅 4 项纯新增（`Dao.Context()`、导出 `SqlAndArgs()`、`db.Batch` 触发 hook、hook veto `Dao.Fail`），全部向后兼容；**仅用库/Schema 隔离时零 db 改动**。
 - **透明**：应用照常 `db.WithCtx(ctx)` / `db.NewBatchCtx(ctx)` / `db.Sql(...)`，隔离自动生效；除配置外无感知代码。
 - **统一机制**：租户、行范围、字段脱敏都是「从 context 取主体 → 改写 SQL」，共用 Principal / Policy 链 / AST 改写器 / hook。**租户是最简的行 policy**。
@@ -239,10 +239,13 @@ WHERE 谓词以 `AND` 合并：`... WHERE tenant_id=? AND <范围谓词> ...`。
 
 | 库                                                 | 采用                                                                                  |
 | ------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| **`github.com/blastrain/vitess-sqlparser`**（默认推荐） | 独立、纯 Go、持续维护；Vitess 本就为「查询改写」而生（分片键注入），`Parse`→改 AST→`String()` + `WalkSubtree` 最贴合 |
+| **`github.com/ajitpratap0/GoSQLX`**（采用） | 独立、纯 Go、持续维护、原生支持 PostgreSQL 语法（`$N` 占位、`::` 类型转换、JSON 操作符、RETURNING 等），`gosqlx.Parse`→改 AST→`Format()` + `ast.Walk` 访问者，贴合「查询改写」 |
+| ~~`github.com/blastrain/vitess-sqlparser`~~ | 早期候选（Vitess 改写血统），但 2020 年后停更，且只认 MySQL 方言、不认 PG 语法，已弃用 |
 | `github.com/pingcap/tidb/pkg/parser`              | 备选，MySQL 8.0 最全但更重                                                                  |
 | ~~`github.com/xwb1989/sqlparser`~~                | 已停维护，勿用                                                                             |
-| `github.com/pganalyze/pg_query_go`（可选，PG）         | 精确但 cgo；仅 PG 专用语法必须解析时按方言启用                                                         |
+| `github.com/pganalyze/pg_query_go`（可选，PG）         | 精确但 cgo；GoSQLX 已原生支持 PG 语法，一般无需再引入                                                  |
+
+> **GoSQLX 只解析 PostgreSQL 风格的 `$N` 占位符，不认 MySQL/SQLite 的 `?`**（`?` 在其词法里是 JSON 操作符）。而 aifei 按方言渲染的是 `?` 占位 SQL。故改写器在解析前做一次「`?` → `$N`」预扫，渲染后再「`$N` → `?`」回扫（见 §7.3）——这反而比 vitess 的「`?` → `:vN`」隐式改名更可控（命名权完全在改写器手里）。
 
 ### 7.2 API
 
@@ -259,14 +262,15 @@ const (
 func Rewrite(sql string, args []interface{}, p *Principal, chain PolicyChain) (string, []interface{}, Status)
 ```
 
-### 7.3 实现要点（以 vitess-sqlparser 为例）
+### 7.3 实现要点（以 GoSQLX 为例）
 
-1. `stmt, err := sqlparser.Parse(sql)`；`err != nil` → `StatusFailed`（fail-closed，勿 panic，由 hook 中止）。
-2. 依次跑 `PolicyChain`：WHERE 注入类 policy（Tenant/DataScope）经 `WalkSubtree` **递归**遍历（含子查询/UNION/CTE）；`FieldMaskPolicy` **只访问最外层 `SelectExprs`**，不递归（见 §10.2）。各 policy 通过 `ParamCollector` 登记新参数。
-3. **参数重排（关键）**：原 `?` 是按源序的 bind 节点——遍历时按序绑定到 `args[i]`；新注入谓词/脱敏用一个新 bind 节点、把值直接挂其上。改写完成后按遍历序收集所有 bind 节点 → 输出重建 `sql` 与对齐的 `args`。**这是 AST 方案相对字符串注入的根本优势**。
-4. `sqlOut := sqlparser.String(stmt)`（规范化重建）。
+1. **`?` → `$N` 预扫**：GoSQLX 只解析 `$N`，故先对源 SQL 做引号感知扫描（跳过 `'...'` 串与反引号标识符），把第 k 个 `?` 换成 `$k`，并记 `vals[k-1] = args[k-1]`。`?` 数超过 `args` → `StatusFailed`。
+2. `tree, err := gosqlx.Parse(conv)`；`err != nil`（真正畸形的语句）→ `StatusFailed`（fail-closed，勿 panic，由 hook 中止）。
+3. 依次跑 `PolicyChain`：WHERE 注入类 policy（Tenant/DataScope）经 `ast.Walk` 访问者**递归**遍历每个 `SelectStatement/UpdateStatement/DeleteStatement`（`Children()` 自动下钻子查询/UNION/CTE）；`FieldMaskPolicy` **只访问最外层 SELECT 的 `Columns`**，不递归（见 §10.2）。各 policy 通过 `ParamCollector.Bind` 登记新值，`Bind` 返回 `$(len(vals)+1)`——与原 `$1..$M` 不冲突。
+4. **渲染 + `$N` → `?` 回扫**：`rendered := tree.Format(ast.CompactStyle())`；再引号感知扫描，把每个 `$N` 换回 `?` 并按出现序输出 `vals[N-1]`。`$N` 越界 → `StatusFailed`。原占位与注入占位用**同一套 `$N`** 命名，无歧义、参数天然对齐——这是 AST 方案相对字符串注入的根本优势。
+5. **方言边界**：hook 层看到的已是 `?` 占位 SQL（aifei 按方言渲染成 `?`），`$1`/命名占位不成问题。**GoSQLX 原生支持 PG 语法**（`::`、`RETURNING`、`ARRAY[...]`、`INTERVAL`、JSON 操作符），故这些语句**不再 fail-closed**，能被正常改写隔离（比 vitess 后端更好）。仍会 fail-closed 的只有真正解析失败/受控表无法安全改写/占位对齐失败的语句。DDL 类语句通常能正常解析且无受控表 → `StatusSkippedNoScoped` 放行。SQL 注入安全：值只进 `LiteralValue{Type:"placeholder"}` 节点（最终是 `?` + 参数），绝不字符串拼接。
 
-> **方言边界**：hook 层看到的已是 `?` 占位 SQL（aifei 按方言渲染成 `?`），`$1`/命名占位不成问题；但 PG 专用语法（`::`、`RETURNING`、`ARRAY[...]`、`INTERVAL`）可能解析失败 → **fail-closed 报错**（无法证明该语句已隔离，宁可中止也不放行）。DDL 类语句通常能正常解析且无受控表 → `StatusSkippedNoScoped` 放行，不受影响。SQL 注入安全：值只进 bind 节点（最终是 `?` + 参数），绝不字符串拼接。
+> **GoSQLX 的 JOIN 表引用**：`SELECT ... FROM a JOIN b` 在 AST 里是 `From=[a]` + `Joins=[{Left:a, Right:b}]`，左表同时出现在 `From` 与 `Joins[0].Left`。收集受控表时只取 `From` + 每个 `Joins[i].Right`，避免左表被算两次（否则会注入重复谓词）。
 
 ---
 
@@ -656,7 +660,7 @@ dataisolate:
 
 ```
 plugins/dataisolate/
-├── go.mod                 # module .../plugins/dataisolate；require aifei/config/log/db/http/server + vitess-sqlparser
+├── go.mod                 # module .../plugins/dataisolate；require aifei/config/log/db/http/server + GoSQLX
 ├── plugin.go              # Plugin 实现 aifei.Plugin（Start 装 HookKit）
 ├── principal.go           # Principal + WithPrincipal/PrincipalFrom
 ├── middleware.go          # Middleware()：解析 Principal → in.SetContext
@@ -680,7 +684,7 @@ plugins/dataisolate/
 ```go
 module github.com/crazy-airhead/aifei-go/plugins/dataisolate
 
-go 1.26
+go 1.26.1   // GoSQLX 要求 go >= 1.26.1
 
 require (
     github.com/crazy-airhead/aifei-go/aifei v0.0.41
@@ -689,7 +693,7 @@ require (
     github.com/crazy-airhead/aifei-go/http v0.0.41
     github.com/crazy-airhead/aifei-go/log v0.0.41
     github.com/crazy-airhead/aifei-go/server v0.0.41
-    github.com/blastrain/vitess-sqlparser <latest>   # SQL AST 解析（§7）；版本由 go get 确定
+    github.com/ajitpratap0/GoSQLX v1.14.0   // SQL AST 解析（§7）
 )
 
 replace (
@@ -799,7 +803,7 @@ func (s *Service) List(in aifei.Input) aifei.Output {
 | **Principal 缺失**      | `enforce=false`（默认）跳过；`enforce=true` 命中受控项报错，防裸查。                                                                         |
 | **后台/无 ctx**          | 忘 `WithPrincipal` → 无 Principal → 跳过（默认）→ **可能越权**；严格部署开 `enforce=true`，或显式 `Bypass`。                                     |
 | **批处理透明**             | `db.Batch` 触发 hook（§13），批插盖列、批改/删注入范围 WHERE；字段权限不作用（无投影）。                                                                 |
-| **改写失败（fail-closed）** | 解析失败/受控表无法安全改写 → `StatusFailed` → `dao.Fail` **报错中止**，绝不原样放行未隔离查询。DDL 能正常解析且无受控表 → 放行；可用 `on_failure: passthrough` 按路径放宽。 |
+| **改写失败（fail-closed）** | 真正解析失败/受控表无法安全改写/占位对齐失败 → `StatusFailed` → `dao.Fail` **报错中止**，绝不原样放行未隔离查询。**PostgreSQL 专用语法（`::`/`RETURNING`/`ARRAY`/JSON 操作符）GoSQLX 原生解析，正常改写隔离，不触发 fail-closed**。DDL 能正常解析且无受控表 → 放行；可用 `on_failure: passthrough` 按路径放宽。 |
 | **防越权写**              | UPDATE/DELETE 强制追加 `AND tenant_id=? AND <范围>`，即便 PK 命中也只动本租户+本范围行；INSERT 强制盖当前主体列。                                        |
 | **SQL 注入安全**          | 值**只走参数占位** `?`，绝不字符串拼接。                                                                                                  |
 | **唯一约束**              | 共享表的全局唯一索引（如 `email`）跨租户冲突；**唯一索引须含 `tenant_id`**（如 `(tenant_id, email)`）——schema 约束。                                     |
@@ -818,7 +822,7 @@ func (s *Service) List(in aifei.Input) aifei.Output {
 - **rewriter 单测（无 DB）**：
   - WHERE 注入：SELECT/UPDATE/DELETE 有/无 WHERE；`GROUP BY`/`ORDER BY`/`LIMIT`/`HAVING` 前定位；`UNION` 各分支均注入；子查询/CTE 递归；多表 JOIN 按别名注入。
   - 投影改写：`SELECT *` 展开后按规则脱敏/移除；显式列脱敏保留别名；JOIN 逐表规则；`COUNT(*)`/无 FROM 跳过；默认 `MaskNull` 保留形状。**断言只改最外层 SELECT**：子查询/UNION 各分支/CTE 内投影保持不变（不破坏 `IN/EXISTS`/UNION 列对齐）；标量子查询投影列不脱敏。
-  - 参数对齐：占位与 args 顺序（含 IN 列表、多谓词）；PG 专用语法/DDL → `StatusFailed`（fail-closed 报错）。
+  - 参数对齐：占位与 args 顺序（含 IN 列表、多谓词）；PG 语法（`::`/`$N`/`RETURNING`）应**正常改写**（不再 fail-closed）；真正畸形语句 → `StatusFailed`（fail-closed 报错）。
 - **Policy 链集成测（注册多表 + sqlite）**：
   - 租户：插入自动带 `tenant_id`；读取仅本租户；跨租户不可见。
   - 行范围：同接口不同 Principal（本人/本部门/部门树/全部）返回不同结果集；多角色取最宽；DeptTree `IN(...)`。
@@ -845,7 +849,7 @@ func (s *Service) List(in aifei.Input) aifei.Output {
    - (c) hook veto：`Dao.Fail(err)` + `runner()` 检查（fail-closed，§4.3）。
      均向后兼容。
 2. **Principal + 中间件 + resolver**：`principal.go`/`middleware.go`/`resolver.go`；`subdomain_header` 内置（仅 TenantID），应用可接 JWT/session。
-3. **rewriter**：引入 `blastrain/vitess-sqlparser`，实现 WHERE 注入 + 投影改写 + 参数重排，全量单测。
+3. **rewriter**：引入 `github.com/ajitpratap0/GoSQLX`，实现 `?`→`$N` 预扫 + WHERE 注入 + 投影改写 + `$N`→`?` 回扫对齐，全量单测。
 4. **Policy 链 + TenantPolicy**：迁入租户行为，验证与原租户方案等价（回归保护）。
 5. **策略①/② 路由**：`use.go` + `Manager`。
 6. **DataScopePolicy + 定义 `ScopeRuleProvider` 接口**：五档谓词、多角色合并、DeptTree（接口由插件定义，实现交应用）。
@@ -861,7 +865,7 @@ func (s *Service) List(in aifei.Input) aifei.Output {
 - **策略级逃逸**：`WithoutPolicy(ctx, "field")` 仅跳某条 policy（如运维需见全部字段但保留租户隔离）。
 - **行权限表达式增强**：基于权限点（`Perms`）的细粒度规则（如「有 order:view.all 则全部」）。
 - **字段级审计**：记录被脱敏字段访问（合规）。
-- **解析器方言扩展**：为 PostgreSQL 接 `pg_query_go`（cgo）精确解析 `::`/`RETURNING`/`ARRAY`，避免 fail-closed 误报。
+- **解析器方言扩展**：GoSQLX 已原生支持 PostgreSQL 语法（`::`/`RETURNING`/`ARRAY`/JSON 操作符），无需再为 PG 单独接 `pg_query_go`（cgo）；若未来需要方言精确还原（保留原文而非规范化重建），可在此层扩展。
 - **DB 层 RLS / 视图**：把行/列权限下推到 PG RLS 或 MySQL 视图，作为应用层改写的替代/补充；可作 `strategy: rls`。
 - **缓存键带主体**：与 `plugins/cache` 联动，自动把 Principal 摘要纳入 key。
 - **生成器集成**：`tools/generator` 识别受控表，生成 `tenant_id`/`creator_id`/`dept_id` 列与索引；typed Dao 标注脱敏字段。

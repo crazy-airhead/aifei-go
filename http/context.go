@@ -85,7 +85,13 @@ func (c *HttpContext) RemoteIP() string {
 }
 
 // Header returns the first value of the named request header (case-insensitive), or "" if absent.
+// "Host" is special-cased to return Request.Host, since net/http keeps the host there for
+// server requests rather than in the Header map (so middleware — e.g. tenant subdomain
+// resolution — can read it via the Input interface).
 func (c *HttpContext) Header(name string) string {
+	if strings.EqualFold(name, "Host") {
+		return c.Request.Host
+	}
 	return c.Request.Header.Get(name)
 }
 

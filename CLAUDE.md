@@ -11,11 +11,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # …) carry no tests and are listed only to compile-check them.
 go test ./aifei ./config ./dami ./db ./enjoy ./http ./json ./log ./nami ./server \
          ./tools/generator ./tools/damigen \
-         ./plugins/cache ./plugins/dami ./plugins/kafka ./plugins/nacos ./plugins/storage ./plugins/swagger ./plugins/elasticsearch ./plugins/xxljob \
+         ./plugins/cache ./plugins/dami ./plugins/dataisolate ./plugins/kafka ./plugins/nacos ./plugins/storage ./plugins/swagger ./plugins/elasticsearch ./plugins/xxljob \
          ./_test/json_test ./_test/log_test ./_test/config_test ./_test/dami_test \
          ./_test/server_test ./_test/nami_test ./_test/storage_test ./_test/swagger_test \
          ./_test/nacos_test ./_test/damigen_test ./_test/generator_test \
-         ./_test/db_test ./_test/cache_test ./_test/kafka_test ./_test/enjoy_test
+         ./_test/dataisolate_test ./_test/db_test ./_test/cache_test ./_test/kafka_test ./_test/enjoy_test
 
 # Run tests for a single area (tests live under _test/<area>_test)
 go test ./_test/db_test
@@ -63,6 +63,7 @@ Each test area is its own Go module:
 | `_test/nami_test` | `nami` RPC client + `util`/`coder/json`/`channel/http` subpackages (black-box) | — |
 | `_test/storage_test` | `plugins/storage` local + S3 clients, `Manager` (black-box) | `minio-go` |
 | `_test/swagger_test` | `plugins/swagger` config loading (black-box) | — |
+| `_test/dataisolate_test` | `plugins/dataisolate` tenant/row/column isolation (rewriter unit tests + sqlite integration) (black-box) | `modernc.org/sqlite`, `vitess-sqlparser` |
 | `_test/nacos_test` | `plugins/nacos` `NamiUpstream` (black-box) | — |
 | `_test/damigen_test` | `tools/damigen` dami-provider codegen (black-box) | — |
 | `_test/generator_test` | `tools/generator` schema→code (`MetaReader`, type mapping) (black-box) | `modernc.org/sqlite` |
@@ -101,6 +102,7 @@ This project uses a Go workspace (`go.work`) of independent modules, layered by 
 | Plugin | `…/aifei-go/plugins/nacos` | `./plugins/nacos` | aifei, nami, log + `nacos-sdk-go` |
 | Plugin | `…/aifei-go/plugins/storage` | `./plugins/storage` | aifei, config, log + `minio-go` |
 | Plugin | `…/aifei-go/plugins/swagger` | `./plugins/swagger` | aifei, config, log + `swaggo/swag` |
+| Plugin | `…/aifei-go/plugins/dataisolate` | `./plugins/dataisolate` | aifei, config, db, http, log, server + `vitess-sqlparser` |
 | Example | `_test/demo` | `./_test/demo` | core + db + generator + `modernc.org/sqlite` |
 | Example | `_test/db_test` | `./_test/db_test` | db + `modernc.org/sqlite` |
 | Example | `_test/cache_test` | `./_test/cache_test` | `miniredis` |
@@ -114,6 +116,7 @@ This project uses a Go workspace (`go.work`) of independent modules, layered by 
 | Example | `_test/nami_test` | `./_test/nami_test` | nami |
 | Example | `_test/storage_test` | `./_test/storage_test` | plugins/storage + `minio-go` |
 | Example | `_test/swagger_test` | `./_test/swagger_test` | plugins/swagger |
+| Example | `_test/dataisolate_test` | `./_test/dataisolate_test` | plugins/dataisolate + `modernc.org/sqlite` |
 | Example | `_test/nacos_test` | `./_test/nacos_test` | plugins/nacos |
 | Example | `_test/damigen_test` | `./_test/damigen_test` | tools/damigen |
 | Example | `_test/generator_test` | `./_test/generator_test` | tools/generator + `modernc.org/sqlite` |
@@ -130,6 +133,7 @@ Users can import individual modules without pulling unwanted dependencies:
 - `go get github.com/crazy-airhead/aifei-go/plugins/cache` — cache plugin (local FreeCache/TinyLFU + Redis two-level cache)
 - `go get github.com/crazy-airhead/aifei-go/plugins/swagger` — knife4j-vue3 OpenAPI docs plugin (embedded UI, serves spec via swaggo/swag)
 - `go get github.com/crazy-airhead/aifei-go/plugins/kafka` — Kafka plugin (franz-go producer/consumer, multi-cluster, at-least-once Subscribe)
+- `go get github.com/crazy-airhead/aifei-go/plugins/dataisolate` — data isolation plugin (tenant isolation + row/column isolation; AST SQL rewriting via vitess-sqlparser)
 
 Requires Go 1.26. All library code uses only the Go standard library.
 
@@ -213,6 +217,7 @@ Generates type-safe per-table packages from database schema:
 - **`./plugins/swagger`** — Knife4j-vue3 OpenAPI docs plugin. Implements `aifei.Plugin` to serve the compiled knife4j-vue3 UI (`web/` is embedded via `//go:embed`) plus a generated `services.json` group config and the OpenAPI spec at a configurable base path (default `/swagger`). The UI is pure static frontend (no springboot) compiled with `VITE_RELEASE_APP_TYPE=Knife4jFront`; it requests `/services.json` from the server root (hardcoded), which points it to `{basePath}/swagger.json` served via `swag.ReadDoc()`. Provides `Handler() func(http.Handler) http.Handler` middleware that intercepts matching requests to serve raw HTML/JSON/CSS/JS outside the aifei `{code, msg, data}` envelope; users wire it via `server.WithHTTPHandler(swagPlugin.Handler())`. Configured via `swagger.*` in the global config (`enabled`, `basePath`, `groupName`). Users run `swag init` to generate docs from Go comments, import the generated `docs` package (which registers the spec), and add `swagger.NewPlugin(nil)` to the app. Dependencies: `github.com/swaggo/swag`.
 - **`./plugins/cache`** — Two-level (local + Redis) cache abstraction built on jetcache-go (inspired by ficus `CacheService`). `Cache` interface (`Get` returning a `found bool` distinct from miss, `Set`/`Delete`/`Exists`, and `GetOrStore` doing singleflight + cache-penetration protection) wraps jetcache-go, exposing FreeCache/TinyLFU L1 and go-redis L2; per-instance key prefixing isolates instances sharing one Redis. `Manager` routes by instance name with a default; `Plugin` (`aifei.Plugin`) reads `cache.*` from `config.Props` (`cache.default` + `cache.instances.<name>.{type,ttl,codec,keyPrefix,local,remote,refresh,syncLocal}`) and installs the package-level default so top-level `cache.Get/Set/Delete/Exists/GetOrStore` and `cache.Use(instance)` work. `Stop()` closes every instance (unlike storage, caches may run refresh goroutines). Type inferred from `type` (`local`/`remote`/`both`) or which of `local`/`remote` is configured; L1 driver `freecache`/`tinylfu`, L2 redis `addr` (single node) or `addrs` (ring). Advanced jetcache features (SetNX/Refresh/SyncLocal/...) are reachable via `Cache.JetCache()`.
 - **`./plugins/kafka`** — Kafka producer/consumer abstraction built on franz-go (`twmb/franz-go`). `Client` interface (per-cluster) exposes `ProduceSync` (sync ack)/`Produce` (async w/ `Promise`)/`Flush`/`Subscribe` over `Message`/`Header` records; each `Subscribe` spawns a dedicated consumer client running an at-least-once poll loop — `AutoCommitMarks` is enabled so records are only committed once their handler returns nil (failed records are not committed and are redelivered on the next rebalance/restart); `Subscription.Close` does a final `CommitMarkedOffsets`. `Manager` routes by cluster name with a default; `Plugin` (`aifei.Plugin`) reads `kafka.*` from `config.Props` (`kafka.default` + `kafka.clusters.<name>.{brokers,clientId,sasl.{mechanism,user,password},tls.{enabled,caFile,certFile,keyFile,insecureSkipVerify},producer.{acks,compression,lingerMs,maxAttempts},consumer.{groupId,offsetReset,balancer,autoCommit.{enable,intervalMs}}}`) and installs the package-level default so top-level `kafka.ProduceSync/Produce/Flush/Subscribe` and `kafka.Use(cluster)` work. `Stop()` stops every running subscription (committing marked offsets) and closes every producer client. Defaults: acks=all, compression=snappy, offsetReset=latest, balancer=cooperativeSticky, autoCommit enable=true/5s. SASL plain/scram-sha-256/512 and TLS (incl. mTLS) supported; all built from the root franz-go module. Advanced needs (transactions, manual commits, seek, admin via `kadm`) are reachable via `Client.KgoClient()`/`Subscription.KgoClient()`. Integration tested against the in-memory `kfake` broker in `_test/kafka_test`.
+- **`./plugins/dataisolate`** — Data isolation (tenant + row + column) for `db`, ported from the `docs/data-isolate.md` design. Three orthogonal policies share one mechanism (Principal from context → AST rewrite → rebuilt `?`-SQL with realigned args): `TenantPolicy` (shared-table strategy ③ injects `WHERE <alias>.tenant_id=?` and stamps INSERT rows; strategies ①/② database/schema route by `db.Config` with zero SQL rewrite via `Use(ctx)`), `DataScopePolicy` (row scope — self/dept/dept-tree/region/custom — from an app-supplied `ScopeRuleProvider`), and `FieldMaskPolicy` (column mask — NULL/constant/remove — on the outermost SELECT projection, from an app-supplied `FieldRuleProvider`). SQL parsing uses `github.com/ajitpratap0/GoSQLX`: it parses only PostgreSQL-style `$N` placeholders (the MySQL/SQLite `?` aifei renders is rejected), so the rewriter converts `?`→`$N` before parsing and `$N`→`?` after rendering, keeping placeholders and args aligned; PostgreSQL syntax (`::`, `RETURNING`, JSON operators) parses natively and is isolated (only genuinely malformed statements fail-closed via `Dao.Fail`). `Plugin` (`aifei.Plugin`) reads `dataisolate.*` from `config.Props` (`policies`, `enforce`, `allow_bypass`, `on_failure`, `configs`, `tenant.{strategy,column,scope.{mode,ignore_tables,tables},tenants}`, `scope.merge`, `field.default_mask`) and installs a `DbHookKit` (all 6 db hooks, composed with any pre-existing hook) on the listed `db.Config`s. `Middleware()` (`aifei.Handler`) resolves the `Principal` (built-in `SubdomainHeaderResolver` for tenant id; apps plug in JWT/session resolvers for the full principal) and writes it into the request context. `Bypass(ctx)`/`As(ctx, p)` escape hatches act on one call; identity columns are registered via `RegisterTableMeta` or inferred by convention. Application code stays isolation-unaware: just use `db.WithCtx(in.Context())` / `dataisolate.Use(in.Context())` (strategy ①/②) / `dataisolate.Sql(...)` (db.Sql directive path). Requires 5 backward-compatible additions to `db` (`Dao.Context()`, `Dao.SqlAndArgs()`, `Dao.Fail` veto, `db.Batch` triggering hooks, and INSERT field recompute after the stamp hook). Integration tested in `_test/dataisolate_test` against in-memory sqlite. GoSQLX requires Go 1.26.1.
 
 ### Examples
 

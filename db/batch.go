@@ -2,8 +2,11 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
+
+	dbsql "github.com/crazy-airhead/aifei-go/db/sql"
 )
 
 // BatchResult holds batch operation results.
@@ -74,6 +77,103 @@ func (b *Batch) GetGeneratedKeys(enable bool) *Batch {
 // runner returns the DBConn this Batch executes on (tx from ctx, or the pool).
 func (b *Batch) runner() (DBConn, error) {
 	return b.config.runner(b.ctx)
+}
+
+// sqlKind classifies a SQL statement by its leading keyword (lowercased). Used only to
+// route batch statements to the matching Before* hook; tolerant of leading parentheses.
+func sqlKind(sql string) string {
+	s := strings.TrimSpace(sql)
+	for len(s) > 0 && s[0] == '(' {
+		s = strings.TrimSpace(s[1:])
+	}
+	s = strings.ToLower(s)
+	switch {
+	case strings.HasPrefix(s, "select"), strings.HasPrefix(s, "with"):
+		return "select"
+	case strings.HasPrefix(s, "insert"), strings.HasPrefix(s, "replace"):
+		return "insert"
+	case strings.HasPrefix(s, "update"):
+		return "update"
+	case strings.HasPrefix(s, "delete"):
+		return "delete"
+	default:
+		return "other"
+	}
+}
+
+// fireBeforeRowInserts fires InsertHook.BeforeRowInsert for each row when a hook is
+// installed, so row-stamping hooks (tenant/creator/dept) apply before the rows are
+// grouped and inserted. Returns a veto error if any hook calls Dao.Fail. No-op without
+// a hook. (See §13: batch inserts consume only the row-mutation semantics of the hook.)
+func (b *Batch) fireBeforeRowInserts(rows []*Row) error {
+	hk := b.config.GetDbHookKit()
+	if hk == nil || hk.InsertHook == nil {
+		return nil
+	}
+	for _, row := range rows {
+		synth := &Dao{config: b.config, ctx: b.ctx}
+		hk.InsertHook.BeforeRowInsert(synth, row)
+		if synth.failErr != nil {
+			return synth.failErr
+		}
+	}
+	return nil
+}
+
+// applyHook fires the statement-kind-appropriate Before* hook on a synthetic Dao
+// carrying sql+sampleArgs, then returns the rewritten SQL together with the TRAILING
+// args injected by the hook (constant across rows). The original placeholders in sql
+// are per-row template slots filled by the caller; only the trailing injected params
+// are returned here. Returns sql unchanged (no trailing) when no hook is installed.
+// A hook veto (Dao.Fail) is surfaced as err so the batch aborts (fail-closed).
+func (b *Batch) applyHook(sql string, sampleArgs []interface{}) (string, []interface{}, error) {
+	hk := b.config.GetDbHookKit()
+	if hk == nil {
+		return sql, nil, nil
+	}
+	synth := &Dao{config: b.config, ctx: b.ctx}
+	synth.setSqlPara(&dbsql.SqlPara{Sql: sql, Paras: sampleArgs})
+	switch sqlKind(sql) {
+	case "select":
+		if hk.FindHook != nil {
+			hk.FindHook.BeforeFind(synth)
+		} else if hk.QueryHook != nil {
+			hk.QueryHook.BeforeQuery(synth)
+		}
+	case "update":
+		if hk.UpdateHook != nil {
+			hk.UpdateHook.BeforeSqlUpdate(synth)
+		}
+	case "delete":
+		if hk.DeleteHook != nil {
+			hk.DeleteHook.BeforeSqlDelete(synth)
+		}
+	case "insert":
+		// No row is available at this layer, so row-stamping cannot apply; the
+		// documented caveat is to use the row-based Batch.Insert for inserts.
+	}
+	if synth.failErr != nil {
+		return "", nil, synth.failErr
+	}
+	outSQL, outArgs := synth.SqlAndArgs()
+	if len(outArgs) <= len(sampleArgs) {
+		return outSQL, nil, nil
+	}
+	return outSQL, append([]interface{}(nil), outArgs[len(sampleArgs):]...), nil
+}
+
+// updateRowArgs builds the per-row argument slice for a batch UPDATE group: the
+// normalized values of the changed fields followed by the primary-key values, matching
+// the placeholder order produced by Dialect.ForUpdate.
+func updateRowArgs(row *Row, changedFields, pks []string) []interface{} {
+	args := make([]interface{}, 0, len(changedFields)+len(pks))
+	for _, f := range changedFields {
+		args = append(args, normalizeSQLValue(row.data[f]))
+	}
+	for _, pk := range pks {
+		args = append(args, row.data[pk])
+	}
+	return args
 }
 
 // commitChunk is the chunked-commit hook: when CommitOnBatchSize is on, it
@@ -166,6 +266,10 @@ func (b *Batch) InsertWithTable(table string, rows []*Row) (*BatchResult, error)
 	if len(rows) == 0 {
 		return &BatchResult{}, nil
 	}
+	if err := b.fireBeforeRowInserts(rows); err != nil {
+		res := &BatchResult{Error: err}
+		return res, err
+	}
 	groups := groupRowsForInsert(table, rows)
 	return b.execInsertGroups(groups)
 }
@@ -183,6 +287,10 @@ func (b *Batch) InsertGroup(rows []*Row) (*BatchResult, error) {
 		if r.table == "" {
 			return &BatchResult{}, fmt.Errorf("batch InsertGroup requires every row to carry a table; use InsertWithTable for a fixed table")
 		}
+	}
+	if err := b.fireBeforeRowInserts(rows); err != nil {
+		res := &BatchResult{Error: err}
+		return res, err
 	}
 	groups := groupRowsForInsert("", rows)
 	return b.execInsertGroups(groups)
@@ -369,18 +477,24 @@ func (b *Batch) execUpdateGroups(groups []updateGroup) (*BatchResult, error) {
 			return res, err
 		}
 		sqlStr := b.config.Dialect.ForUpdate(g.table, g.changedFields, g.pks)
+		// Route the base UPDATE through any installed hook so isolation predicates
+		// (e.g. AND tenant_id=?) are injected once per group; the rewritten SQL is the
+		// prepared template and the trailing injected params are appended per row.
+		sample := updateRowArgs(g.rows[0], g.changedFields, g.pks)
+		sqlStr, trailing, err := b.applyHook(sqlStr, sample)
+		if err != nil {
+			res.Error = err
+			return res, err
+		}
 		stmt, err := r.Prepare(sqlStr)
 		if err != nil {
 			res.Error = err
 			return res, err
 		}
 		for i, row := range g.rows {
-			args := make([]interface{}, 0, len(g.changedFields)+len(g.pks))
-			for _, f := range g.changedFields {
-				args = append(args, normalizeSQLValue(row.data[f]))
-			}
-			for _, pk := range g.pks {
-				args = append(args, row.data[pk])
+			args := updateRowArgs(row, g.changedFields, g.pks)
+			if len(trailing) > 0 {
+				args = append(args, trailing...)
 			}
 			result, err := stmt.Exec(args...)
 			if err != nil {
@@ -426,7 +540,18 @@ func (b *Batch) Execute(sql string, argsList [][]interface{}) (*BatchResult, err
 		res.Error = err
 		return res, err
 	}
-	stmt, err := r.Prepare(sql)
+	// Route the template SQL through any installed hook once; the rewritten SQL is the
+	// prepared template and the trailing injected params are appended to each arg row.
+	execSQL := sql
+	var trailing []interface{}
+	if len(argsList) > 0 {
+		execSQL, trailing, err = b.applyHook(sql, argsList[0])
+		if err != nil {
+			res.Error = err
+			return res, err
+		}
+	}
+	stmt, err := r.Prepare(execSQL)
 	if err != nil {
 		res.Error = err
 		return res, err
@@ -434,7 +559,13 @@ func (b *Batch) Execute(sql string, argsList [][]interface{}) (*BatchResult, err
 	defer stmt.Close()
 
 	for i, args := range argsList {
-		result, err := stmt.Exec(args...)
+		full := args
+		if len(trailing) > 0 {
+			full = make([]interface{}, 0, len(args)+len(trailing))
+			full = append(full, args...)
+			full = append(full, trailing...)
+		}
+		result, err := stmt.Exec(full...)
 		if err != nil {
 			res.Error = err
 			return res, err
@@ -448,7 +579,7 @@ func (b *Batch) Execute(sql string, argsList [][]interface{}) (*BatchResult, err
 			} else if nr != nil {
 				r = nr
 				stmt.Close()
-				stmt, err = r.Prepare(sql)
+				stmt, err = r.Prepare(execSQL)
 				if err != nil {
 					res.Error = err
 					return res, err
@@ -475,8 +606,18 @@ func (b *Batch) ExecuteSQLs(sqls []string) (*BatchResult, error) {
 		res.Error = err
 		return res, err
 	}
-	for i, sql := range sqls {
-		result, err := r.Exec(sql)
+	for i, q := range sqls {
+		execSQL, trailing, err := b.applyHook(q, nil)
+		if err != nil {
+			res.Error = err
+			return res, fmt.Errorf("sql error: %w", err)
+		}
+		var result sql.Result
+		if len(trailing) > 0 {
+			result, err = r.Exec(execSQL, trailing...)
+		} else {
+			result, err = r.Exec(execSQL)
+		}
 		if err != nil {
 			res.Error = err
 			return res, fmt.Errorf("sql error: %w", err)

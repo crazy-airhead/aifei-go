@@ -1,9 +1,10 @@
-go 1.26
+go 1.26.1
 
 use (
 	./_test/cache_test
 	./_test/config_test
 	./_test/dami_test
+	./_test/dataisolate_test
 	./_test/damigen_test
 	./_test/generator_test
 	./_test/db_test
@@ -28,6 +29,7 @@ use (
 	./nami
 	./plugins/cache
 	./plugins/dami
+	./plugins/dataisolate
 	./plugins/elasticsearch
 	./plugins/kafka
 	./plugins/nacos

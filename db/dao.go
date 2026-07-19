@@ -19,6 +19,7 @@ type Dao struct {
 	table      string     // single-table hint (existing)
 	multi      []TableRef // multi-table explicit hint (new)
 	autoTables bool       // auto-parse switch (new)
+	failErr    error      // hook veto: when non-nil, runner() returns it, aborting the statement
 }
 
 // ---- Builder methods (set SQL on Dao, no execution) ----
@@ -112,9 +113,36 @@ func (d *Dao) Ctx(ctx context.Context) *Dao {
 }
 
 // runner returns the DBConn this Dao executes on: the *sql.Tx from ctx when
-// inside a transaction, otherwise the pool.
+// inside a transaction, otherwise the pool. It honors a hook veto: when Fail
+// has been called, it returns the veto error instead of a connection, so every
+// executor (which already checks runner's error) aborts the statement.
 func (d *Dao) runner() (DBConn, error) {
+	if d.failErr != nil {
+		return nil, d.failErr
+	}
 	return d.config.runner(d.ctx)
+}
+
+// Context returns the context bound to this Dao (set by Dao.Ctx / db.WithCtx;
+// carries *sql.Tx when inside a transaction). Hooks read the Principal from it.
+// Returns nil when unbound.
+func (d *Dao) Context() context.Context { return d.ctx }
+
+// SqlAndArgs returns the currently staged SQL and args that will be dispatched
+// (the exported counterpart of the internal sqlAndArgs). Hooks inspect/rewrite
+// the statement before execution, then write the result back via Dao.SqlPara.
+func (d *Dao) SqlAndArgs() (string, []interface{}) {
+	return d.sqlAndArgs()
+}
+
+// Fail marks this Dao's statement to be aborted. A Before hook calls it when it
+// cannot safely rewrite the statement (fail-closed); the next runner() returns
+// the error and the executor propagates it to the caller. Only the first error
+// is kept.
+func (d *Dao) Fail(err error) {
+	if d.failErr == nil {
+		d.failErr = err
+	}
 }
 
 func (d *Dao) setSqlPara(sp *dbsql.SqlPara) {
