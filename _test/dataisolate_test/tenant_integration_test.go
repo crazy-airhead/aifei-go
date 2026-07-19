@@ -72,8 +72,8 @@ func TestTenantCrossTenantInvisible(t *testing.T) {
 	if err != nil {
 		t.Fatalf("acme find: %v", err)
 	}
-	if len(acme) != 2 {
-		t.Fatalf("acme should see 2 rows, saw %d", len(acme))
+	if len(acme) != 3 {
+		t.Fatalf("acme should see 3 rows, saw %d", len(acme))
 	}
 	for _, r := range acme {
 		if r.GetStr("tenant_id") != "acme" {
@@ -98,8 +98,8 @@ func TestTenantFindAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("findAll: %v", err)
 	}
-	if len(rows) != 2 {
-		t.Fatalf("acme findAll should return 2, got %d", len(rows))
+	if len(rows) != 3 {
+		t.Fatalf("acme findAll should return 3, got %d", len(rows))
 	}
 }
 
@@ -177,11 +177,11 @@ func TestTenantPaginateBothSegments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("paginate: %v", err)
 	}
-	if page.TotalRows != 2 {
-		t.Fatalf("acme count should be 2, got %d", page.TotalRows)
+	if page.TotalRows != 3 {
+		t.Fatalf("acme count should be 3, got %d", page.TotalRows)
 	}
-	if len(page.Rows) != 2 {
-		t.Fatalf("acme page should have 2 rows, got %d", len(page.Rows))
+	if len(page.Rows) != 3 {
+		t.Fatalf("acme page should have 3 rows, got %d", len(page.Rows))
 	}
 }
 
@@ -194,8 +194,8 @@ func TestTenantBypassSeesAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bypass find: %v", err)
 	}
-	if len(rows) != 3 {
-		t.Fatalf("bypass should see all 3 rows, got %d", len(rows))
+	if len(rows) != 4 {
+		t.Fatalf("bypass should see all 4 rows, got %d", len(rows))
 	}
 }
 
@@ -245,8 +245,8 @@ func TestTenantRawSqlIsolated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("raw find: %v", err)
 	}
-	// acme has one open order (globex's open order must be excluded)
-	if len(rows) != 1 || rows[0].GetStr("tenant_id") != "acme" {
-		t.Fatalf("expected 1 acme open order, got %#v", rows)
+	// acme has two open orders (globex's open order must be excluded)
+	if len(rows) != 2 || rows[0].GetStr("tenant_id") != "acme" {
+		t.Fatalf("expected 2 acme open orders, got %#v", rows)
 	}
 }

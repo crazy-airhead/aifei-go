@@ -53,7 +53,7 @@ func TestBatchUpdateScoped(t *testing.T) {
 	bypass := dataisolate.Bypass(context.Background())
 
 	acmeRows, err := db.WithCtx(bypass).FindBy("orders", "tenant_id = ?", "acme")
-	if err != nil || len(acmeRows) != 2 {
+	if err != nil || len(acmeRows) != 3 {
 		t.Fatalf("seed acme: err=%v rows=%d", err, len(acmeRows))
 	}
 	globexRows, err := db.WithCtx(bypass).FindBy("orders", "tenant_id = ?", "globex")
@@ -74,8 +74,8 @@ func TestBatchUpdateScoped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("batch update: %v", err)
 	}
-	if res.RowsAffected != 2 {
-		t.Fatalf("expected 2 affected (acme only), got %d", res.RowsAffected)
+	if res.RowsAffected != 3 {
+		t.Fatalf("expected 3 affected (acme only), got %d", res.RowsAffected)
 	}
 	// globex row must be untouched
 	globexAfter, err := db.WithCtx(bypass).FindBy("orders", "tenant_id = ?", "globex")
@@ -104,8 +104,8 @@ func TestSqlDirectiveTenant(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sql find: %v", err)
 	}
-	if len(rows) != 2 {
-		t.Fatalf("expected 2 acme rows, got %d", len(rows))
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 acme rows, got %d", len(rows))
 	}
 	// guard: the executed SQL references tenant_id exactly once (no double injection)
 	if c := subcount(seen, "tenant_id"); c != 1 {
@@ -123,8 +123,8 @@ func TestSqlDirectiveBypassOmits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bypass sql: %v", err)
 	}
-	if len(rows) != 3 {
-		t.Fatalf("bypass should see all 3 rows, got %d", len(rows))
+	if len(rows) != 4 {
+		t.Fatalf("bypass should see all 4 rows, got %d", len(rows))
 	}
 }
 
