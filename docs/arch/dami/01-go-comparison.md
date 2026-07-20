@@ -1,7 +1,7 @@
 # DamiBus 与 Go 生态同类库对比分析
 
 > 本文是「DamiBus 迁移到 Go」调研的第一部分。源码位于 `/Users/airhead/WorkSpace/goldsyear/damibus`（`org.noear:dami2` 2.0.5，作者 noear，与 Solon 同源）。
-> 第二部分为迁移设计文档 [`02-migration-design.md`](./02-migration-design.md)。
+> 第二部分为迁移设计文档 [`02-migration-design.md`](02-migration-design.md)。
 
 ---
 
@@ -180,7 +180,7 @@ DamiBus 的 `lpc.createConsumer(iface)` 依赖 Java 的 `java.lang.reflect.Proxy
 
 **总体结论**：DamiBus 约 85% 可直接、忠实迁移到 Go；**唯一无法 1:1 的是 lpc 的消费者代理**，需用 code-gen / 泛型助手替代——这同时也是一个机会：Go 版可以比 Java 版更**类型安全**（编译期检查而非运行时反射）。
 
-详细设计见 [`02-migration-design.md`](./02-migration-design.md)。
+详细设计见 [`02-migration-design.md`](02-migration-design.md)。
 
 ---
 

@@ -333,7 +333,7 @@ Aifei-Go 的定位很明确：**把 Aifei「为 AI Coding 而生」的设计哲�
 
 - Java 版官方文档：<https://aifei.cn/doc>
 - Java 版仓库：<https://github.com/jfinal/aifei>
-- 实施方案总览：[00-overview.md](00-overview.md)
-- Java → Go 对照：[java-go-comparison.md](java-go-comparison.md)
+- 实施方案总览：[00-overview.md](../arch/00-overview.md)
+- Java → Go 对照：[java-go-comparison.md](../arch/java-go-comparison.md)
 - 数据隔离插件：[data-isolate-intro.md](data-isolate-intro.md)
-- 多表关联映射：[multi-table-mapping.md](multi-table-mapping.md)
+- 多表关联映射：[multi-table-mapping.md](../arch/multi-table-mapping.md)

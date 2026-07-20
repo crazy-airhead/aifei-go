@@ -1,7 +1,7 @@
 # DamiBus 迁移到 Go 的设计（dami-go）
 
 > 本文是「DamiBus 迁移到 Go」调研的第二部分（设计规范，**已定稿**）。
-> 前置：[`01-go-comparison.md`](./01-go-comparison.md)（生态对比与可行性结论）。
+> 前置：[`01-go-comparison.md`](01-go-comparison.md)（生态对比与可行性结论）。
 > 源码参照：`/Users/airhead/WorkSpace/goldsyear/damibus`（`dami2` 2.0.5）。
 > 目标宿主：`aifei-go` 工作区（Go 1.26，零外部依赖，多模块）。
 
