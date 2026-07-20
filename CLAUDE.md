@@ -63,7 +63,7 @@ Each test area is its own Go module:
 | `_test/nami_test` | `nami` RPC client + `util`/`coder/json`/`channel/http` subpackages (black-box) | — |
 | `_test/storage_test` | `plugins/storage` local + S3 clients, `Manager` (black-box) | `minio-go` |
 | `_test/swagger_test` | `plugins/swagger` config loading (black-box) | — |
-| `_test/dataisolate_test` | `plugins/dataisolate` tenant/row/column isolation (rewriter unit tests + sqlite integration) (black-box) | `modernc.org/sqlite`, `vitess-sqlparser` |
+| `_test/dataisolate_test` | `plugins/dataisolate` tenant/row/column isolation (rewriter unit tests + sqlite integration) (black-box) | `modernc.org/sqlite`, `github.com/ajitpratap0/GoSQLX` |
 | `_test/nacos_test` | `plugins/nacos` `NamiUpstream` (black-box) | — |
 | `_test/damigen_test` | `tools/damigen` dami-provider codegen (black-box) | — |
 | `_test/generator_test` | `tools/generator` schema→code (`MetaReader`, type mapping) (black-box) | `modernc.org/sqlite` |
@@ -102,7 +102,7 @@ This project uses a Go workspace (`go.work`) of independent modules, layered by 
 | Plugin | `…/aifei-go/plugins/nacos` | `./plugins/nacos` | aifei, nami, log + `nacos-sdk-go` |
 | Plugin | `…/aifei-go/plugins/storage` | `./plugins/storage` | aifei, config, log + `minio-go` |
 | Plugin | `…/aifei-go/plugins/swagger` | `./plugins/swagger` | aifei, config, log + `swaggo/swag` |
-| Plugin | `…/aifei-go/plugins/dataisolate` | `./plugins/dataisolate` | aifei, config, db, http, log, server + `vitess-sqlparser` |
+| Plugin | `…/aifei-go/plugins/dataisolate` | `./plugins/dataisolate` | aifei, config, db, http, log, server + `github.com/ajitpratap0/GoSQLX` |
 | Example | `_test/demo` | `./_test/demo` | core + db + generator + `modernc.org/sqlite` |
 | Example | `_test/db_test` | `./_test/db_test` | db + `modernc.org/sqlite` |
 | Example | `_test/cache_test` | `./_test/cache_test` | `miniredis` |
@@ -133,7 +133,7 @@ Users can import individual modules without pulling unwanted dependencies:
 - `go get github.com/crazy-airhead/aifei-go/plugins/cache` — cache plugin (local FreeCache/TinyLFU + Redis two-level cache)
 - `go get github.com/crazy-airhead/aifei-go/plugins/swagger` — knife4j-vue3 OpenAPI docs plugin (embedded UI, serves spec via swaggo/swag)
 - `go get github.com/crazy-airhead/aifei-go/plugins/kafka` — Kafka plugin (franz-go producer/consumer, multi-cluster, at-least-once Subscribe)
-- `go get github.com/crazy-airhead/aifei-go/plugins/dataisolate` — data isolation plugin (tenant isolation + row/column isolation; AST SQL rewriting via vitess-sqlparser)
+- `go get github.com/crazy-airhead/aifei-go/plugins/dataisolate` — data isolation plugin (tenant isolation + row/column isolation; AST SQL rewriting via GoSQLX)
 
 Requires Go 1.26. All library code uses only the Go standard library.
 

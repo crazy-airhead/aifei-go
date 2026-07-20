@@ -151,9 +151,8 @@ func TestNoPrincipalSkips(t *testing.T) {
 }
 
 // TestPostgresSyntaxNowParses: GoSQLX parses PostgreSQL-specific syntax (e.g. the `::`
-// cast) natively, so such statements are isolated rather than fail-closed — an improvement
-// over the vitess-sqlparser backend, which rejected them. aifei renders `?` placeholders,
-// so the input uses `?` (never PG `$N`).
+// cast) natively, so such statements are isolated rather than fail-closed. aifei renders
+// `?` placeholders, so the input uses `?` (never PG `$N`).
 func TestPostgresSyntaxNowParses(t *testing.T) {
 	out, args, st := dataisolate.Rewrite(
 		"SELECT * FROM orders WHERE id::int = ?", []interface{}{1},

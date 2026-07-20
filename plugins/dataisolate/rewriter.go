@@ -18,8 +18,8 @@ import (
 // (continuing the counter), so original and injected placeholders are uniform.
 //
 // StatusSkippedNoScoped: parsed but no policy modified it — return original sql/args.
-// StatusFailed: parse error (note: PostgreSQL-specific syntax now parses fine, so this
-// is rarer than with vitess), a policy signaled an unsafe rewrite, or placeholder
+// StatusFailed: parse error (note: PostgreSQL-specific syntax parses natively, so genuine
+// parse failures are rare), a policy signaled an unsafe rewrite, or placeholder
 // alignment failed — the hook must abort (fail-closed).
 // StatusRewritten: a policy modified the statement; rebuilt sql + realigned args.
 func Rewrite(sql string, args []interface{}, p *Principal, chain PolicyChain) (string, []interface{}, Status) {
