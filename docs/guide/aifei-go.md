@@ -274,7 +274,7 @@ u.SetName("new name").Update()
 - **`plugins/kafka`** —— 基于 franz-go 的生产/消费，多集群，`Subscribe` 至少一次投递（失败记录不提交、下次重投）。
 - **`plugins/nacos`** —— 服务注册与发现、配置中心，自动桥接到 nami RPC 客户端；`init()` 自动注册云配置加载器。
 - **`plugins/swagger`** —— 内嵌 knife4j-vue3 UI 的 OpenAPI 文档插件。
-- **`plugins/dataisolate`** —— 租户 + 行 + 列三正交维度的数据隔离，AST 改写 SQL，应用代码零隔离感知（详见 [data-isolate-intro.md](data-isolate-intro.md)）。
+- **`plugins/dataisolate`** —— 租户 + 行 + 列三正交维度的数据隔离，AST 改写 SQL，应用代码零隔离感知（详见 [data-isolate.md](data-isolate.md)）。
 
 ### 6.7 独立框架：Nami 与 Dami
 
@@ -335,5 +335,5 @@ Aifei-Go 的定位很明确：**把 Aifei「为 AI Coding 而生」的设计哲�
 - Java 版仓库：<https://github.com/jfinal/aifei>
 - 实施方案总览：[00-overview.md](../arch/00-overview.md)
 - Java → Go 对照：[java-go-comparison.md](../arch/java-go-comparison.md)
-- 数据隔离插件：[data-isolate-intro.md](data-isolate-intro.md)
+- 数据隔离插件：[data-isolate.md](data-isolate.md)
 - 多表关联映射：[multi-table-mapping.md](../arch/multi-table-mapping.md)
