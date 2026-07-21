@@ -3,19 +3,19 @@ module github.com/crazy-airhead/aifei-go/_test/dataisolate_test
 go 1.26.1
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v0.0.41
-	github.com/crazy-airhead/aifei-go/config v0.0.41
-	github.com/crazy-airhead/aifei-go/db v0.0.41
-	github.com/crazy-airhead/aifei-go/http v0.0.41
-	github.com/crazy-airhead/aifei-go/plugins/dataisolate v0.0.0
-	github.com/crazy-airhead/aifei-go/server v0.0.41
+	github.com/crazy-airhead/aifei-go/aifei v0.0.43
+	github.com/crazy-airhead/aifei-go/config v0.0.43
+	github.com/crazy-airhead/aifei-go/db v0.0.43
+	github.com/crazy-airhead/aifei-go/http v0.0.43
+	github.com/crazy-airhead/aifei-go/plugins/dataisolate v0.0.43
+	github.com/crazy-airhead/aifei-go/server v0.0.43
 	modernc.org/sqlite v1.54.0
 )
 
 require (
 	github.com/ajitpratap0/GoSQLX v1.14.0 // indirect
-	github.com/crazy-airhead/aifei-go/enjoy v0.0.41 // indirect
-	github.com/crazy-airhead/aifei-go/log v0.0.41 // indirect
+	github.com/crazy-airhead/aifei-go/enjoy v0.0.43 // indirect
+	github.com/crazy-airhead/aifei-go/log v0.0.43 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

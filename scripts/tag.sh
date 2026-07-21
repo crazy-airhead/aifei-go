@@ -5,7 +5,10 @@
 #   - Every module lives in a subdir <mod>/, its go.mod declares
 #     module github.com/crazy-airhead/aifei-go/<mod>, and its version
 #     tag is <mod>/vX.Y.Z.
-#   - _test/* are not importable libraries and are deliberately excluded.
+#   - _test/* are not importable libraries: they are NEVER tagged, but their
+#     internal aifei-go requires are bumped in lockstep (see TEST_MODULES) so
+#     the whole repo stays on one version. Each aifei-go dep in a _test module
+#     must carry a `replace … => ../../<dir>` so go mod tidy resolves locally.
 #
 # Usage:
 #   ./scripts/tag.sh v0.1.0           # dry-run (print what would be tagged)
@@ -68,6 +71,36 @@ MODULES=(
   plugins/xxljob  # github.com/crazy-airhead/aifei-go/plugins/xxljob  (./plugins/xxljob/go.mod)  → aifei, config, log
 )
 
+# Test/example modules under _test/. They are NOT importable libraries, so they
+# are never tagged or pushed — but they depend on the library modules above, so
+# their internal aifei-go require lines are bumped and go mod tidy'd in lockstep
+# to keep the whole repo on one version. (Library modules first, then _test, so
+# a module is always bumped before anything that depends on it is tidy'd.)
+TEST_MODULES=(
+  _test/cache_test
+  _test/config_test
+  _test/dami_test
+  _test/dataisolate_test
+  _test/damigen_test
+  _test/db_test
+  _test/demo
+  _test/enjoy_test
+  _test/generator_test
+  _test/json_test
+  _test/kafka_test
+  _test/log_test
+  _test/nacos_test
+  _test/nami_test
+  _test/server_test
+  _test/storage_test
+  _test/swagger_test
+)
+
+# All modules whose internal aifei-go requires get bumped (libraries + tests).
+# The tag/push loops below deliberately iterate MODULES only — tests are not
+# released.
+BUMP_MODULES=("${MODULES[@]}" "${TEST_MODULES[@]}")
+
 # Internal dependencies are auto-discovered from each module's go.mod in the
 # update loop below — there is no hand-maintained dependency map to keep in
 # sync, so adding a new internal require to any go.mod is picked up
@@ -92,7 +125,7 @@ echo ""
 # ---------------------------------------------------------------------------
 # Sanity: every module dir must actually contain a go.mod
 # ---------------------------------------------------------------------------
-for mod in "${MODULES[@]}"; do
+for mod in "${BUMP_MODULES[@]}"; do
   if [[ ! -f "$mod/go.mod" ]]; then
     echo "ERROR: $mod/go.mod not found (module list is out of date?)"
     exit 3
@@ -116,7 +149,7 @@ if [[ "$DO" == "--do" || "$DO" == "--push" ]]; then
   echo "=== Updating internal dependency versions to $VERSION ==="
   UPDATED_ANY=0
 
-  for mod in "${MODULES[@]}"; do
+  for mod in "${BUMP_MODULES[@]}"; do
     MOD_FILE="$mod/go.mod"
     MODIFIED=0
 

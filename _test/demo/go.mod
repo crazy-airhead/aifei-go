@@ -3,17 +3,17 @@ module github.com/crazy-airhead/aifei-go/_test/demo
 go 1.26
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v0.0.14
-	github.com/crazy-airhead/aifei-go/db v0.0.14
-	github.com/crazy-airhead/aifei-go/server v0.0.0
-	github.com/crazy-airhead/aifei-go/tools/generator v0.0.0
+	github.com/crazy-airhead/aifei-go/aifei v0.0.43
+	github.com/crazy-airhead/aifei-go/db v0.0.43
+	github.com/crazy-airhead/aifei-go/server v0.0.43
+	github.com/crazy-airhead/aifei-go/tools/generator v0.0.43
 	modernc.org/sqlite v1.53.0
 )
 
 require (
-	github.com/crazy-airhead/aifei-go/enjoy v0.0.14 // indirect
-	github.com/crazy-airhead/aifei-go/http v0.0.14 // indirect
-	github.com/crazy-airhead/aifei-go/log v0.0.11 // indirect
+	github.com/crazy-airhead/aifei-go/enjoy v0.0.43 // indirect
+	github.com/crazy-airhead/aifei-go/http v0.0.43 // indirect
+	github.com/crazy-airhead/aifei-go/log v0.0.43 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -28,9 +28,9 @@ require (
 replace (
 	github.com/crazy-airhead/aifei-go/aifei => ../../aifei
 	github.com/crazy-airhead/aifei-go/db => ../../db
+	github.com/crazy-airhead/aifei-go/enjoy => ../../enjoy
 	github.com/crazy-airhead/aifei-go/http => ../../http
+	github.com/crazy-airhead/aifei-go/log => ../../log
 	github.com/crazy-airhead/aifei-go/server => ../../server
 	github.com/crazy-airhead/aifei-go/tools/generator => ../../tools/generator
 )
-
-replace github.com/crazy-airhead/aifei-go/enjoy => ../../enjoy
