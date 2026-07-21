@@ -55,6 +55,13 @@ func (n *Nami) URL(u string) *Nami {
 	return n
 }
 
+// GetURL returns the request URL set via URL or URLWithPath. It is the base URL
+// (including path) without any query parameters — useful for logging the
+// endpoint a call is addressed to.
+func (n *Nami) GetURL() string {
+	return n.url
+}
+
 // URLWithPath sets the base URL and path, joining them appropriately.
 func (n *Nami) URLWithPath(baseURL, path string) *Nami {
 	if strings.Contains(baseURL, "{fun}") {
