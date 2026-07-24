@@ -20,6 +20,7 @@ require (
 replace (
 	github.com/crazy-airhead/aifei-go/aifei => ../../aifei
 	github.com/crazy-airhead/aifei-go/config => ../../config
+	github.com/crazy-airhead/aifei-go/enjoy => ../../enjoy
 	github.com/crazy-airhead/aifei-go/db => ../../db
 	github.com/crazy-airhead/aifei-go/http => ../../http
 	github.com/crazy-airhead/aifei-go/log => ../../log
