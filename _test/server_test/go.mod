@@ -3,15 +3,15 @@ module github.com/crazy-airhead/aifei-go/_test/server_test
 go 1.26
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v0.0.43
-	github.com/crazy-airhead/aifei-go/server v0.0.43
+	github.com/crazy-airhead/aifei-go/aifei v0.0.44
+	github.com/crazy-airhead/aifei-go/server v0.0.44
 )
 
 require (
-	github.com/crazy-airhead/aifei-go/db v0.0.43 // indirect
-	github.com/crazy-airhead/aifei-go/enjoy v0.0.43 // indirect
-	github.com/crazy-airhead/aifei-go/http v0.0.43 // indirect
-	github.com/crazy-airhead/aifei-go/log v0.0.43 // indirect
+	github.com/crazy-airhead/aifei-go/db v0.0.44 // indirect
+	github.com/crazy-airhead/aifei-go/enjoy v0.0.44 // indirect
+	github.com/crazy-airhead/aifei-go/http v0.0.44 // indirect
+	github.com/crazy-airhead/aifei-go/log v0.0.44 // indirect
 )
 
 replace (

@@ -1,7 +1,5 @@
 github.com/ajitpratap0/GoSQLX v1.14.0 h1:IDOLNlQJoU3Ixn/i/tOiPj3rMHB5owRlTa4NBH1/YCc=
 github.com/ajitpratap0/GoSQLX v1.14.0/go.mod h1:febLa3f0Zyroyds49/Xo2DqHWwbD4BEH/QNoExfKMYg=
-github.com/crazy-airhead/aifei-go/enjoy v0.0.41 h1:IXoImYldckXmSl+baWoWFKhSPni/QHHzcDgrHuvKC6U=
-github.com/crazy-airhead/aifei-go/enjoy v0.0.41/go.mod h1:7xZ2cCmYvrv+MLmqb/3qHvEDQSbIvclc8kZ1XN038EQ=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
