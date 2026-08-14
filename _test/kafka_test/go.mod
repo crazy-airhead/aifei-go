@@ -3,14 +3,14 @@ module github.com/crazy-airhead/aifei-go/_test/kafka_test
 go 1.26
 
 require (
-	github.com/crazy-airhead/aifei-go/config v0.0.44
-	github.com/crazy-airhead/aifei-go/plugins/kafka v0.0.44
+	github.com/crazy-airhead/aifei-go/config v0.0.45
+	github.com/crazy-airhead/aifei-go/plugins/kafka v0.0.45
 	github.com/twmb/franz-go/pkg/kfake v0.0.0-20260625163649-cec2eb18edeb
 )
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v0.0.44 // indirect
-	github.com/crazy-airhead/aifei-go/log v0.0.44 // indirect
+	github.com/crazy-airhead/aifei-go/aifei v0.0.45 // indirect
+	github.com/crazy-airhead/aifei-go/log v0.0.45 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/pierrec/lz4/v4 v4.1.26 // indirect
 	github.com/twmb/franz-go v1.21.4 // indirect
