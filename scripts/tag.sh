@@ -57,6 +57,7 @@ MODULES=(
   log           # github.com/crazy-airhead/aifei-go/log      (./log/go.mod)
   nami          # github.com/crazy-airhead/aifei-go/nami     (./nami/go.mod)
   dami          # github.com/crazy-airhead/aifei-go/dami     (./dami/go.mod)
+  flow          # github.com/crazy-airhead/aifei-go/flow     (./flow/go.mod)            → dami, enjoy
   http       # github.com/crazy-airhead/aifei-go/http  (./http/go.mod)        → aifei
   tools/generator # github.com/crazy-airhead/aifei-go/tools/generator (./tools/generator/go.mod) → db, enjoy
   tools/damigen  # github.com/crazy-airhead/aifei-go/tools/damigen  (./tools/damigen/go.mod)  → enjoy
@@ -70,6 +71,7 @@ MODULES=(
   plugins/dataisolate # github.com/crazy-airhead/aifei-go/plugins/dataisolate (./plugins/dataisolate/go.mod) → aifei, config, db, http, log, server
   plugins/elasticsearch # github.com/crazy-airhead/aifei-go/plugins/elasticsearch (./plugins/elasticsearch/go.mod) → aifei, config, log
   plugins/xxljob  # github.com/crazy-airhead/aifei-go/plugins/xxljob  (./plugins/xxljob/go.mod)  → aifei, config, log
+  plugins/flow    # github.com/crazy-airhead/aifei-go/plugins/flow    (./plugins/flow/go.mod)    → aifei, config, db, flow, log
 )
 
 # Test/example modules under _test/. They are NOT importable libraries, so they
@@ -86,6 +88,8 @@ TEST_MODULES=(
   _test/db_test
   _test/demo
   _test/enjoy_test
+  _test/flow_plugin_test
+  _test/flow_test
   _test/generator_test
   _test/json_test
   _test/kafka_test
