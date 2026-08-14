@@ -10,6 +10,8 @@ use (
 	./_test/db_test
 	./_test/demo
 	./_test/enjoy_test
+	./_test/flow_plugin_test
+	./_test/flow_test
 	./_test/json_test
 	./_test/kafka_test
 	./_test/log_test
@@ -23,6 +25,7 @@ use (
 	./dami
 	./db
 	./enjoy
+	./flow
 	./http
 	./json
 	./log
@@ -31,6 +34,7 @@ use (
 	./plugins/dami
 	./plugins/dataisolate
 	./plugins/elasticsearch
+	./plugins/flow
 	./plugins/kafka
 	./plugins/nacos
 	./plugins/storage

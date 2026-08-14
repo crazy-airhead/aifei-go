@@ -9,13 +9,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # expand from the repo root — list module paths explicitly, as below).
 # All _test.go files live under _test/; the library paths below (aifei, config,
 # …) carry no tests and are listed only to compile-check them.
-go test ./aifei ./config ./dami ./db ./enjoy ./http ./json ./log ./nami ./server \
+go test ./aifei ./config ./dami ./db ./enjoy ./flow ./http ./json ./log ./nami ./server \
          ./tools/generator ./tools/damigen \
-         ./plugins/cache ./plugins/dami ./plugins/dataisolate ./plugins/kafka ./plugins/nacos ./plugins/storage ./plugins/swagger ./plugins/elasticsearch ./plugins/xxljob \
+         ./plugins/cache ./plugins/dami ./plugins/dataisolate ./plugins/flow ./plugins/kafka ./plugins/nacos ./plugins/storage ./plugins/swagger ./plugins/elasticsearch ./plugins/xxljob \
          ./_test/json_test ./_test/log_test ./_test/config_test ./_test/dami_test \
          ./_test/server_test ./_test/nami_test ./_test/storage_test ./_test/swagger_test \
          ./_test/nacos_test ./_test/damigen_test ./_test/generator_test \
-         ./_test/dataisolate_test ./_test/db_test ./_test/cache_test ./_test/kafka_test ./_test/enjoy_test
+         ./_test/dataisolate_test ./_test/db_test ./_test/cache_test ./_test/kafka_test ./_test/enjoy_test ./_test/flow_test ./_test/flow_plugin_test
 
 # Run tests for a single area (tests live under _test/<area>_test)
 go test ./_test/db_test
@@ -26,6 +26,7 @@ go test ./_test/nacos_test
 go test ./_test/generator_test
 go test ./_test/config_test
 go test ./_test/dami_test
+go test ./_test/flow_test
 
 # Run db integration tests (requires sqlite)
 go test ./_test/db_test
@@ -55,6 +56,8 @@ Each test area is its own Go module:
 | `_test/cache_test` | `plugins/cache` (local + Redis two-level cache) | `miniredis` |
 | `_test/kafka_test` | `plugins/kafka` (producer/consumer, at-least-once) | franz-go `kfake` broker |
 | `_test/enjoy_test` | `enjoy` template engine (black-box) | — |
+| `_test/flow_test` | `flow` engine + `flow/workflow` (claim/submit, gateways, snapshot) (black-box) | — |
+| `_test/flow_plugin_test` | `plugins/flow` MysqlStateRepository + TaskHistoryRecorder (black-box; MySQL dialect via `FLOW_MYSQL_DSN`) | — |
 | `_test/json_test` | `json` marshal/unmarshal wrappers (black-box) | — |
 | `_test/log_test` | `log` logger interface + levels (black-box) | — |
 | `_test/config_test` | `config` layered loading, `Props`/`Store`/`Sub`/`Bind` (black-box) | — |

@@ -201,7 +201,7 @@ engine.Eval(graph, ctx)                                                // 从 tr
 - **缓存粒度**：`sync.Map[instanceID → *stateCache]`。`WorkflowExecutor.LOCKER`（`sync.Mutex`）已串行化同一实例的 submit，故同实例缓存无竞争。
 - **读全走缓存**：`StateGet` 仅首次触发一次 `FindFirstBy`；之后纯内存。
 - **写透**：每次 `StatePut`/`StateRemove`/`StateClear` = 一次单行 UPDATE（O(1)，命中唯一索引）。
-- **跨进程/分布式**（已知限制）：多个进程操作同一 `instanceID` 时，内存缓存各自独立 → last-write-wins。严格一致需 `SELECT ... FOR UPDATE` 或分布式锁，列为未来增强（P2 基础版假设单实例处理或可接受最终一致）。
+- **跨进程/分布式**（已接受的限制，**明确不处理**）：多个进程操作同一 `instanceID` 时，内存缓存各自独立 → last-write-wins。按需求不引入 `SELECT ... FOR UPDATE` / 分布式锁；部署假设同一流程实例由单进程处理（`WorkflowExecutor` 的锁已保证单进程内同实例串行）。
 - **缓存失效**：`StateClear` 后保留空 map（不删缓存条目）；实例真正结束可由应用调 `Evict(instanceID)` 释放。
 
 ---
@@ -394,7 +394,7 @@ app.Use(aifei.WithPlugin(flowplugin.NewPlugin()))
 | `ON DUPLICATE KEY UPDATE` 误命中 PK 而非 instant_id | 表有 `uniq_instantId` 唯一键；不显式设 `id`；测试 4 验证 upsert 命中 instant_id |
 | 引擎重算整图 → N 次 StateGet | 按 instanceID 缓存懒加载；读全走缓存 |
 | 跨表（states+task）非原子 | `db.TransactionCtx` + `db.WithCtx` 透传；需 `Context.GoContext()` |
-| 跨进程同实例缓存不一致 | 标注限制；未来 `SELECT FOR UPDATE`/分布式锁 |
+| 跨进程同实例缓存不一致 | **明确不处理**（按需求）：单行 upsert + Executor 锁保证单进程串行；多进程同实例为 last-write-wins |
 | MySQL 方言无法内嵌测试 | 纯逻辑用单元+伪 db；方言用 CI 真实 MySQL（`t.Skip` 降级） |
 | 审计列（creator/update_time）来源 | 由 `Context`/调用方注入（`auditor(ctx)` 从 vars 或 server principal 取） |
 

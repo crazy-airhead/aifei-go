@@ -1,0 +1,9 @@
+id: rule
+title: 评分规则示例
+layout:
+  - { id: s, type: start, link: n1 }
+  - { id: n1, type: activity, task: "@SetAmount", link: x }
+  - { id: x, type: exclusive, link: [{nextId: hi, when: "amount >= 100"}, {nextId: lo}] }
+  - { id: hi, type: activity, task: "@ScoreHigh", link: e }
+  - { id: lo, type: activity, task: "@ScoreLow", link: e }
+  - { id: e, type: end }
