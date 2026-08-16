@@ -32,6 +32,9 @@ func newIntent(rootGraph *flow.Graph, typ intentType) *WorkflowIntent {
 	return &WorkflowIntent{rootGraph: rootGraph, typ: typ, nextTasks: []*Task{}}
 }
 
+// RootGraph returns the graph the operation runs on (nil if none).
+func (i *WorkflowIntent) RootGraph() *flow.Graph { return i.rootGraph }
+
 // Task returns the single matched task (claim/find).
 func (i *WorkflowIntent) Task() *Task { return i.task }
 

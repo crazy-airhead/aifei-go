@@ -6,29 +6,42 @@ import (
 	"strings"
 
 	"github.com/crazy-airhead/aifei-go/aifei"
+	"github.com/crazy-airhead/aifei-go/db"
 	"github.com/crazy-airhead/aifei-go/flow"
 	"github.com/crazy-airhead/aifei-go/flow/workflow"
 	"github.com/crazy-airhead/aifei-go/log"
 )
 
+// Graph DB source: the OA process-definition table and its deploy column.
+// graph_bpmn is where the designer deploys to (PostDeploy / PostUploadAndDeploy);
+// the engine-format graph JSON is stored/read there. Kept as constants
+// (matching the reference schema); parametrize when needed.
+const (
+	GraphTable      = "oa_process"
+	GraphBpmnColumn = "graph_bpmn"
+)
+
 var _ aifei.Plugin = (*Plugin)(nil)
 
 // Plugin assembles a flow engine + workflow executor with the built-in MySQL state
-// repository and task-history recorder, and loads graphs from configured URIs.
+// repository and task-history recorder, and loads graphs from configured URIs
+// and/or the process-definition table (oa_process.graph_data).
 // Implements aifei.Plugin.
 type Plugin struct {
 	log             log.Logger
 	uris            []string // graph file paths (.yml/.yaml/.json)
+	graphDB         bool     // load graph definitions from oa_process.graph_data
 	repoEnabled     bool
 	controller      workflow.StateController
 	recorderEnabled bool
 
-	engine    *flow.Engine
-	executor  *workflow.Executor
-	container *flow.MapContainer
-	repo      workflow.StateRepository
-	mysqlRepo *MysqlStateRepository
-	recorder  *TaskHistoryRecorder
+	engine     *flow.Engine
+	executor   *workflow.Executor
+	container  *flow.MapContainer
+	repo       workflow.StateRepository
+	mysqlRepo  *MysqlStateRepository
+	recorder   *TaskHistoryRecorder
+	graphTexts map[string]string // graphID -> source JSON (instance snapshots)
 }
 
 // PluginOption configures the Plugin.
@@ -58,6 +71,13 @@ func WithGraphDir(dir string) PluginOption {
 	}
 }
 
+// WithGraphDB loads graph definitions from the process-definition table's
+// deploy column (default oa_process.graph_bpmn) on Start: every valid row is
+// parsed with flow.GraphFromText. Rows that don't parse (e.g. legacy Flowable
+// BPMN XML) are skipped with a warning instead of failing Start. Loaded graph
+// texts are kept for instance snapshots (bpm_flow_repository.graph).
+func WithGraphDB() PluginOption { return func(p *Plugin) { p.graphDB = true } }
+
 // WithMySQL enables the MySQL state repository (default InMemory).
 func WithMySQL() PluginOption { return func(p *Plugin) { p.repoEnabled = true } }
 
@@ -85,9 +105,11 @@ func NewPlugin(logger log.Logger, opts ...PluginOption) *Plugin {
 func (p *Plugin) Start() error {
 	p.container = flow.NewMapContainer()
 	p.engine = flow.NewEngine(flow.NewSimpleDriver(flow.WithContainer(p.container)))
+	p.graphTexts = map[string]string{}
 
 	if p.repoEnabled {
 		p.mysqlRepo = NewMysqlStateRepository(p.log)
+		p.mysqlRepo.SetGraphTexts(p.graphTexts)
 		p.repo = p.mysqlRepo
 	} else {
 		p.repo = workflow.NewInMemoryStateRepository()
@@ -102,9 +124,14 @@ func (p *Plugin) Start() error {
 			return err
 		}
 	}
+	if p.graphDB {
+		if err := p.loadGraphsFromDB(); err != nil {
+			return err
+		}
+	}
 
-	setDefault(p.engine, p.executor)
-	p.log.Info("flow plugin started, mysql=%v history=%v graphs=%d", p.repoEnabled, p.recorderEnabled, len(p.uris))
+	setDefault(p.engine, p.executor, p.mysqlRepo, p.recorder)
+	p.log.Info("flow plugin started, mysql=%v history=%v graphs=%d", p.repoEnabled, p.recorderEnabled, len(p.graphTexts))
 	return nil
 }
 
@@ -121,6 +148,40 @@ func (p *Plugin) loadGraph(uri string) error {
 		return err
 	}
 	p.engine.Load(g)
+	p.graphTexts[g.GetID()] = string(data)
+	return nil
+}
+
+// loadGraphsFromDB loads graph definitions from the process-definition table's
+// deploy column (graph_bpmn): rows with valid=1 and a non-empty graph_bpmn are
+// parsed and registered. Rows that don't parse into a graph with an id and
+// nodes (legacy Flowable BPMN XML / old designer exports) are skipped with a
+// warning — they must be migrated to the engine format separately.
+func (p *Plugin) loadGraphsFromDB() error {
+	rows, err := db.FindBy(GraphTable, "valid", 1)
+	if err != nil {
+		return err
+	}
+	loaded, skipped := 0, 0
+	for _, row := range rows {
+		text := row.GetStr(GraphBpmnColumn)
+		if text == "" {
+			continue
+		}
+		g, err := flow.GraphFromText(text)
+		// an engine-format graph always carries an id (processKey) and nodes
+		if err != nil || g.GetID() == "" || len(g.GetNodes()) == 0 {
+			skipped++
+			continue
+		}
+		p.engine.Load(g)
+		p.graphTexts[g.GetID()] = text
+		loaded++
+	}
+	if skipped > 0 {
+		p.log.Warn("flow graph db: skipped %d %s rows not in engine format (legacy bpmn/designer data)", skipped, GraphBpmnColumn)
+	}
+	p.log.Info("flow graph db: loaded %d graphs from %s.%s", loaded, GraphTable, GraphBpmnColumn)
 	return nil
 }
 
