@@ -233,6 +233,117 @@ func (c *HttpContext) GetBool(key string, def ...bool) bool {
 	return b
 }
 
+// GetStrs returns every value under key as a string slice. Query and form
+// sources read repeated keys (ids=1&ids=2) or comma-separated lists
+// (ids=1,2,3); a JSON body contributes body[key] as an array. When the key is
+// missing or yields no values the single optional default is returned,
+// mirroring GetStr.
+func (c *HttpContext) GetStrs(key string, def ...[]string) []string {
+	if vs := c.getVals(key); len(vs) > 0 {
+		return vs
+	}
+	if len(def) > 0 {
+		return def[0]
+	}
+	return nil
+}
+
+// GetInts returns every value under key parsed as int; elements that do not
+// parse are skipped. Sources and comma-splitting follow GetStrs. When the key
+// is missing or yields no values the single optional default is returned,
+// mirroring GetInt.
+func (c *HttpContext) GetInts(key string, def ...[]int) []int {
+	vs := c.getVals(key)
+	if len(vs) == 0 {
+		if len(def) > 0 {
+			return def[0]
+		}
+		return nil
+	}
+	var ints []int
+	for _, v := range vs {
+		if n, err := strconv.Atoi(v); err == nil {
+			ints = append(ints, n)
+		}
+	}
+	return ints
+}
+
+// getVals collects the raw string values under key across sources, mirroring
+// getVal's precedence: repeated query keys first, then form values, then
+// body[key] when the body is JSON. Every collected value is then split on
+// commas, so "ids=1,2,3" reads the same as "ids=1&ids=2". Segments are
+// space-trimmed and empty ones dropped — a bare "ids=" therefore reads as
+// missing, matching GetStr's empty-is-default rule.
+func (c *HttpContext) getVals(key string) []string {
+	var vals []string
+	if vs, ok := c.Request.URL.Query()[key]; ok && len(vs) > 0 {
+		vals = vs
+	} else if bt, _ := c.ensureBody(); bt == bodyForm && c.Request.Form != nil {
+		if vs, ok := c.Request.Form[key]; ok && len(vs) > 0 {
+			vals = vs
+		}
+	} else if bt == bodyJSON {
+		vals = c.jsonVals(key)
+	}
+	if len(vals) == 0 {
+		return nil
+	}
+	var out []string
+	for _, v := range vals {
+		for _, seg := range strings.Split(v, ",") {
+			if seg = strings.TrimSpace(seg); seg != "" {
+				out = append(out, seg)
+			}
+		}
+	}
+	return out
+}
+
+// jsonVals reads body[key] from a JSON body as a string slice: array elements
+// are stringified via jsonElToString. A missing key, a non-array value, or an
+// unparsable body yields nil.
+func (c *HttpContext) jsonVals(key string) []string {
+	data := c.Body()
+	if len(data) == 0 {
+		return nil
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil
+	}
+	raw, ok := m[key]
+	if !ok {
+		return nil
+	}
+	var arr []interface{}
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		return nil
+	}
+	var out []string
+	for _, el := range arr {
+		if s, ok := jsonElToString(el); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// jsonElToString renders a decoded JSON array element as text for the typed
+// array getters: strings stay as-is, numbers and bools use their literal
+// form; other kinds (null, objects, nested arrays) are skipped.
+func jsonElToString(el interface{}) (string, bool) {
+	switch v := el.(type) {
+	case string:
+		return v, true
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64), true
+	case bool:
+		return strconv.FormatBool(v), true
+	}
+	return "", false
+}
+
 // GetBean binds request parameters to obj. It reads from the request body
 // (form-encoded or raw JSON), falling back to query parameters when the body is
 // empty, so callers can pass id via query, form, or JSON body transparently.

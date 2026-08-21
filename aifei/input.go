@@ -36,6 +36,15 @@ type Param interface {
 	GetFloat64(key string, def ...float64) float64
 	GetBool(key string, def ...bool) bool
 
+	// Typed array getters by name: every value under one key. Query and form
+	// sources read repeated keys (ids=1&ids=2) or comma-separated lists
+	// (ids=1,2,3); a JSON body reads body[key] as an array. Elements that do
+	// not parse are skipped. Same default convention as the scalar getters:
+	// with the key missing or yielding no values, the single optional default
+	// is returned.
+	GetStrs(key string, def ...[]string) []string
+	GetInts(key string, def ...[]int) []int
+
 	// Bean / structured parameters. Pass keys to bind a nested subtree:
 	//   GetBean(&user)               → whole body
 	//   GetBean(&user, "data")       → body["data"]
