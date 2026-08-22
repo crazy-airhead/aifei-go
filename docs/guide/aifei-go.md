@@ -117,6 +117,7 @@ Aifei-Go 是一个 **Go workspace 多模块**项目，按角色分层。每个�
 | 运行时  | `aifei-go/server`          | 启动引导、内置 Handler、`Out`、`Register`                | aifei, http, db, enjoy, log |
 | 独立框架 | `aifei-go/nami`            | HTTP RPC **客户端**框架                              | —                           |
 | 独立框架 | `aifei-go/dami`            | 进程内事件总线（send/call/stream/lpc）                   | —                           |
+| 独立框架 | `aifei-go/flow`            | 流程编排引擎 + 工作流（claim/submit 人工任务）              | enjoy, dami, yaml.v3        |
 | 代码生成 | `aifei-go/tools/generator` | Schema → 类型安全 CRUD 代码                           | db, enjoy                   |
 | 代码生成 | `aifei-go/tools/damigen`   | dami 相关代码生成                                     | enjoy                       |
 | 插件   | `plugins/cache`            | 两级缓存（本地 + Redis）                                | jetcache-go, go-redis       |
@@ -125,6 +126,10 @@ Aifei-Go 是一个 **Go workspace 多模块**项目，按角色分层。每个�
 | 插件   | `plugins/storage`          | 文件存储（本地 + S3 兼容）                                | minio-go                    |
 | 插件   | `plugins/swagger`          | OpenAPI 文档（knife4j-vue3）                        | swaggo/swag                 |
 | 插件   | `plugins/dataisolate`      | 租户 + 行/列数据隔离                                    | GoSQLX                      |
+| 插件   | `plugins/elasticsearch`    | Elasticsearch 客户端封装                              | go-elasticsearch/v8         |
+| 插件   | `plugins/xxljob`           | XXL-JOB 分布式任务调度执行器                             | go-basic/ipv4               |
+| 插件   | `plugins/dami`             | dami 事件总线的生命周期封装                              | dami                        |
+| 插件   | `plugins/flow`             | flow 引擎组装 + MySQL 状态仓储/任务历史                    | flow, db                    |
 
 「核心库」层的模块（enjoy / db / json / log）刻意保持零外部依赖、可脱离框架独立使用——你完全可以只用 `enjoy` 做模板渲染，或只用 `db` 做数据库访问，而不引入整个 web 框架。插件层则把第三方库的集成集中隔离，不污染核心。
 
@@ -275,6 +280,8 @@ u.SetName("new name").Update()
 - **`plugins/nacos`** —— 服务注册与发现、配置中心，自动桥接到 nami RPC 客户端；`init()` 自动注册云配置加载器。
 - **`plugins/swagger`** —— 内嵌 knife4j-vue3 UI 的 OpenAPI 文档插件。
 - **`plugins/dataisolate`** —— 租户 + 行 + 列三正交维度的数据隔离，AST 改写 SQL，应用代码零隔离感知（详见 [data-isolate.md](data-isolate.md)）。
+- **`plugins/elasticsearch`** / **`plugins/xxljob`** —— Elasticsearch 客户端封装；XXL-JOB 执行器（自实现协议，仅依赖 net/http）。
+- **`plugins/dami`** / **`plugins/flow`** —— 轻组装插件：dami 事件总线生命周期托管；flow 引擎组装 + 图加载 + MySQL 状态仓储与任务历史（详见 [flow.md](flow.md) / [flow-plugin.md](flow-plugin.md)）。
 
 ### 6.7 独立框架：Nami 与 Dami
 
@@ -282,6 +289,7 @@ u.SetName("new name").Update()
 
 - **`nami`** —— 轻量 HTTP RPC **客户端**框架（移植自 Java Solon Nami）。Channel 传输（`channel/http`）、编解码（`coder/json`）、Filter 链、`Upstream`/`Discovery` 服务发现、流式 `Builder`/`ClientFactory`。它是 aifei 服务端的对偶：aifei 暴露服务，nami 消费服务。
 - **`dami`** —— 进程内事件总线（send/call/stream/lpc），发布订阅 + 同步调用 + 流式返回，用于解耦模块间通信。
+- **`flow`** —— 流程编排引擎（移植自 Solon-Flow）。图模型（四类网关）+ 引擎求值 + 快照恢复；`flow/workflow` 子系统叠加 claim/submit 人工审批语义。表达式复用 enjoy，事件复用 dami（详见 [flow.md](flow.md)）。
 
 ---
 

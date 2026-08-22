@@ -127,6 +127,13 @@ page := in.GetInt("page", 1)            // 缺省返回 1
 enabled := in.GetBool("enabled", true)  // 缺省返回 true
 ```
 
+数组版 `GetStrs`/`GetInts` 取**一个 key 下的全部值**：query/form 源读重复键（`ids=1&ids=2`）或逗号分隔列表（`ids=1,2,3`），JSON body 源读 `body[key]` 数组；解析不了的元素**跳过**，key 缺失或无值时返回默认：
+
+```go
+ids := in.GetInts("ids")                // [1 2 3]（ids=1&ids=2 或 ids=1,2,3）
+kinds := in.GetStrs("kinds", []string{"all"})  // 缺省返回 ["all"]
+```
+
 ### 3.5 body 类型探测
 
 `ensureBody()` 把请求体归为三类，调用方据此分流，不必反复看 `Content-Type`：

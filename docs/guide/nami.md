@@ -481,5 +481,6 @@ Aifei-Go 的 nami 围绕几个核心设计原则构建：
 - [aifei-go 总览](aifei-go.md) — 整体模块地图
 - [Nacos 插件](nacos.md) — `NewNamiUpstream` 把 Nacos 服务发现桥接为 `nami.Upstream`
 - [dami 事件总线](dami.md) — 进程内 RPC 的另一种选择（不走网络）
+- 设计文档：[../arch/nami/01-java-comparison.md](../arch/nami/01-java-comparison.md)（Solon Nami 逐项对照与移植矩阵）、[../arch/nami/02-design.md](../arch/nami/02-design.md)（契约设计、调用时序、已知限制）
 - `docs/arch/dami/01-go-comparison.md` — nami / dami / kafka 的定位对比
 

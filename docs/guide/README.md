@@ -42,6 +42,7 @@ Aifei-Go 各模块的说明文档集合。每篇深入讲解一个模块的**背
 |------|------|------|
 | [nami](nami.md) | `./nami` | HTTP RPC 客户端框架：`Channel`/`Encoder`/`Filter`/`Upstream`/`Discovery` |
 | [dami](dami.md) | `./dami` | 进程内事件总线：`send`/`call`/`stream`/`lpc` 四种交互模式 |
+| [flow](flow.md) | `./flow` + `./flow/workflow` | 流程编排引擎：图模型（四类网关）、Driver/组件、快照恢复、claim/submit 工作流 |
 
 ## Code Generation（代码生成）
 
@@ -63,6 +64,7 @@ Aifei-Go 各模块的说明文档集合。每篇深入讲解一个模块的**背
 | [swagger](swagger.md) | `./plugins/swagger` | knife4j-vue3 OpenAPI 文档 UI，基于 swaggo/swag |
 | [dami-plugin](dami-plugin.md) | `./plugins/dami` | dami 事件总线的 aifei 插件封装（生命周期托管） |
 | [data-isolate](data-isolate.md) | `./plugins/dataisolate` | 数据隔离：租户 + 行范围 + 列脱敏，AST SQL 改写 |
+| [flow-plugin](flow-plugin.md) | `./plugins/flow` | flow 引擎组装插件：图加载 + MySQL 状态仓储 + 任务历史 |
 
 ---
 
@@ -72,6 +74,7 @@ Aifei-Go 各模块的说明文档集合。每篇深入讲解一个模块的**背
 - **模板与动态 SQL**：[enjoy](enjoy.md) → [db](db.md)（`db/sql`）
 - **事件驱动**：[dami](dami.md) → [damigen](damigen.md) → [dami-plugin](dami-plugin.md)
 - **RPC 调用**：[nami](nami.md) → [nacos](nacos.md)（服务发现）
+- **流程编排/审批流**：[flow](flow.md) → [flow-plugin](flow-plugin.md) → [db](db.md)
 - **多租户/权限**：[data-isolate](data-isolate.md) → [config](config.md)
 
 ## 相关文档
@@ -82,4 +85,4 @@ Aifei-Go 各模块的说明文档集合。每篇深入讲解一个模块的**背
 
 ---
 
-共 22 篇说明文档（含本索引与框架总览），约 10,500 行。
+共 26 篇说明文档（含本索引与框架总览），约 11,800 行。

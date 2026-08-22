@@ -89,6 +89,12 @@ type Param interface {
     GetFloat64(key string, def ...float64) float64
     GetBool(key string, def ...bool) bool
 
+    // 类型化数组读取：取一个 key 下的全部值。query/form 读重复键
+    // （ids=1&ids=2）或逗号分隔列表（ids=1,2,3）；JSON body 读
+    // body[key] 数组。解析不了的元素跳过；缺 key 或无值时返回默认。
+    GetStrs(key string, def ...[]string) []string
+    GetInts(key string, def ...[]int) []int
+
     // 结构化绑定：GetBean(&user) / GetBean(&user, "data")
     GetBean(obj interface{}, keys ...string) error
     // 参数→map：GetMap() / GetMap("user")（前缀剥离）
@@ -105,7 +111,7 @@ type Meta interface {
 type Input interface { Param; Meta }
 ```
 
-`GetStr`/`GetInt`/... 的 variadic 默认值是核心包的一贯风格——调用方写 `in.GetInt("page", 1)` 即可，无需 if-else。
+`GetStr`/`GetInt`/... 的 variadic 默认值是核心包的一贯风格——调用方写 `in.GetInt("page", 1)` 即可，无需 if-else。数组版 `GetStrs`/`GetInts` 同一约定，如 `in.GetInts("ids", []int{1})`。
 
 ### 3.2 Output
 
