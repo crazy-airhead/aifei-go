@@ -170,7 +170,7 @@ _ = json.ToJSON(m)
 
 `json` 是 Aifei-Go 最底层的核心库之一，**无任何内部依赖**；反过来，它被上层多处复用：
 
-- [http](../http) / [server](../server)：HTTP 响应体序列化（`{code, msg, data}` 信封）
+- [http](./http.md) / [server](./server.md)：HTTP 响应体序列化（`{code, msg, data}` 信封）
 - [aifei](aifei-go.md) 核心：`Input.GetBean()` 解析请求体
 - 各 [plugins](aifei-go.md)：插件配置、消息体的序列化
 

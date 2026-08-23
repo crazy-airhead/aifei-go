@@ -18,7 +18,7 @@
 |------|------|
 | 是什么 | `dami` 模块到 `aifei.Plugin` 的生命周期适配器 |
 | 不是什么 | 不是另一套事件总线；**所有总线能力都在 `dami` 模块里**，本插件不重新实现 |
-| 依赖 | [aifei](core.md)（Plugin 接口）+ [dami](dami.md) + [log](../) |
+| 依赖 | [aifei](core.md)（Plugin 接口）+ [dami](dami.md) + [log](log.md) |
 | 代码量 | 单文件 `plugin.go`，约 67 行 |
 | 是否读配置 | **否**。dami 是纯进程内，没有外部依赖（不像 kafka/cache 要连 broker/redis），故无 `dami.*` 配置键，全部通过 `dami.Option` 传入 |
 

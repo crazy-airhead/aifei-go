@@ -44,6 +44,24 @@ go test ./enjoy -run TestOutputExpr
 go run ./_test/demo
 ```
 
+## 文档站点（VitePress）
+
+文档站源码即 `docs/` 目录（内容原地发布），配置在 `docs/.vitepress/config.ts`，依赖与脚本见根 `package.json`（pnpm）。
+
+```bash
+pnpm docs:dev       # 本地开发（http://localhost:5173/aifei-go/，注意 base 前缀）
+pnpm docs:build     # 构建到 docs/.vitepress/dist（构建即死链检查，失败会报 file:line）
+pnpm docs:preview   # 预览构建产物
+pnpm docs:clean     # 清理 dist 与缓存
+```
+
+内容规则：
+
+- 站点收录 `docs/guide/` 与 `docs/arch/`；`docs/issues/` 和 `**/_*.md`（如 `guide/_STYLE.md`）通过 `srcExclude` 排除，不发布。
+- 不要添加指向 `issues/`、`_` 前缀文件或 `docs/` 之外的相对链接——死链会让构建直接失败（这是有意的质量门禁）。
+- 侧边栏/导航为手工维护的 curated 配置（`config.ts` 里的 `sidebar`），新增文档需同步更新。
+- 部署：push 到 GitHub 远端 `master` 触发 `.github/workflows/docs.yml`，构建产物以孤儿单提交推到 `gh-pages` 分支，由 GitHub Pages（base `/aifei-go/`）对外服务。
+
 ## Testing Conventions
 
 **All test code lives under `_test/` — never co-locate `_test.go` files inside the library packages** (do not add tests to `db/`, `enjoy/`, `db/sql/`, etc.). When writing a new test, add it to the matching `_test/<area>_test/` module; if no module exists for that area, create one following the rules below. This is why the `db/sql` parser and `SqlKit` unit tests live in `_test/db_test`, imported as `dbsql "github.com/crazy-airhead/aifei-go/db/sql"` rather than as a `package sql` test inside `db/sql/`.

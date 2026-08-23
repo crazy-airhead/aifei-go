@@ -424,7 +424,7 @@ dami.Listen("pipeline", func(e *dami.Event[Data]) error {
 
 ## 9. Java DamiBus → Go dami 的关键迁移决策
 
-本节总结 [`docs/arch/dami/`](../arch/dami/) 两份设计文档的核心决策，详见 [01-go-comparison.md](../arch/dami/01-go-comparison.md) 与 [02-migration-design.md](../arch/dami/02-migration-design.md)。
+本节总结 `docs/arch/dami/` 两份设计文档的核心决策，详见 [01-go-comparison.md](../arch/dami/01-go-comparison.md) 与 [02-migration-design.md](../arch/dami/02-migration-design.md)。
 
 ### 9.1 可忠实迁移的 85%
 

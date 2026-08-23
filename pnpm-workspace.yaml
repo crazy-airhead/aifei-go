@@ -1,0 +1,4 @@
+# pnpm 设置（pnpm 11 起配置统一放这里，见 https://pnpm.io/settings）
+# 允许 esbuild 运行安装脚本（vitepress 的传递依赖，平台二进制校验）
+allowBuilds:
+  esbuild: true

@@ -33,8 +33,8 @@ knife4j 原本是 Java 生态的 swagger-ui 增强（knife4j-vue3 是其 Vue3 �
 |------|------|
 | [`github.com/swaggo/swag`](https://github.com/swaggo/swag) | 唯一外部依赖。读取由 `swag init` 生成、并经 `docs` 包 `init()` 注册的 OpenAPI 文档 |
 | [aifei](core.md) | 提供 `aifei.Plugin` 接口（`Start`/`Stop` 生命周期） |
-| [config](../) | 从全局 `config.Props` 读 `swagger.*` |
-| [log](../) | 日志 |
+| [config](config.md) | 从全局 `config.Props` 读 `swagger.*` |
+| [log](log.md) | 日志 |
 
 ---
 

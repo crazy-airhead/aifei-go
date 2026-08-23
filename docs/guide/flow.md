@@ -6,7 +6,7 @@
 
 ## 1. 背景与定位
 
-[flow](../../flow) 是 [Solon-Flow](https://solon.noear.org/article/learn-solon-flow)（Java）的 Go 移植，与 `docs/arch/flow/` 七篇设计文档一一对应。它解决的问题是：**把"一串带分支/并行/循环/人工介入的步骤"从业务代码里抽出来，声明成一张图**，由引擎统一驱动、追踪、快照与恢复。
+`./flow` 是 [Solon-Flow](https://solon.noear.org/article/learn-solon-flow)（Java）的 Go 移植，与 `docs/arch/flow/` 七篇设计文档一一对应。它解决的问题是：**把"一串带分支/并行/循环/人工介入的步骤"从业务代码里抽出来，声明成一张图**，由引擎统一驱动、追踪、快照与恢复。
 
 | 维度 | 说明 |
 |------|------|
