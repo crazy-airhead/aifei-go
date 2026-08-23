@@ -2,6 +2,7 @@
 
 > **核对日期**：2026-08-22
 > **2026-08-23 拍板**：P0-2 时间转换采用方案 B —— `ToTime`/`GetTime` 直接改签名返回 `(time.Time, error)`（放弃 `ToTimeE` 兼容路径），详见 2.1 P0-2；P1-4 MaxHeaderBytes 维持 Go 默认 1MB 不收紧，仅暴露 Option，详见 2.1 P1-4
+> **2026-08-23 拍板修订**：P0-2 最终形态回调为「宽松保旧名 + 严格加新名」——`GetTime` 背离 `GetInt/GetStr` 宽松家族语义且迫使全部存量代码迁移；`ToTime/GetTime/GetTimeDefault` 恢复原签名，严格版为 `ToTimeE/GetTimeE`（即最初的方案 A，生成 base.go 与旧代码零改动）
 > **对照基准**：Java 版 `/Users/airhead/WorkSpace/aifei/aifei`（dev 分支，HEAD=b25c056，2026-08-22 rebase）vs Go 版 `/Users/airhead/WorkSpace/aifei/aifei-go`（master，dcdb1a5）
 > **移植基线**：aifei-go 核心移植完成于 2026-06-25；本文评估此后的 Java 变更（约 110 个提交，其间发布 v1.0.4 2026-07-17、v1.1.0 2026-08-17，后续至 08-20）
 > **范围**：aifei core、aifei-db、aifei-enjoy、aifei-proxy、aifei-undertow。**排除**：新模块 `aifei-json-snack4`、`aifei-feathttp`（不关注）
@@ -183,7 +184,7 @@ SQL 参数绑定路径**不做**字符串日期解析（String 原样 `setObject
 | 项 | 实现 | 主要改动 | 测试 |
 |----|------|----------|------|
 | P0-1 | ✅ | `db/config.go`：`configsMu sync.RWMutex` 保护 registry；`Config.mu` 保护 pool/SqlKit 惰性初始化；`Pool()` 失败时关闭已打开的句柄 | `config_concurrent_test.go`（3 用例，`-race` 通过） |
-| P0-2 | ✅ | `ToTime/GetTime/GetTimeDefault` 改签名 `(time.Time, error)`；新增宽松访问器 `Row.GetTimeOrZero`（NULL/缺失/脏数据→零值，服务生成代码）；`scanRows`/`execForEach` 对 DATE/TIME/DATETIME/TIMESTAMP 列 scan 时类型化（`temporalLayoutsFor`+`scanTemporal`），脏数据在查询处报错；`ToStr` 支持 time.Time；生成器时间 getter 映射改 `GetTimeOrZero`，**base.go 签名保持单返回值不变** | `temporal_test.go`（6 用例：类型化 scan/JSON 格式稳定/NULL/脏数据报错/ToTime 契约/GetTimeOrZero） |
+| P0-2 | ✅ | `scanRows`/`execForEach` 对 DATE/TIME/DATETIME/TIMESTAMP 列 scan 时类型化（`temporalLayoutsFor`+`scanTemporal`），脏数据在查询处报错；`ToStr` 支持 time.Time；**宽松 `ToTime/GetTime/GetTimeDefault` 保持原签名原语义**（与 `ToInt/GetStr` 家族一致，旧代码与生成 base.go 零改动），新增严格版 `ToTimeE/GetTimeE` 返回 `(time.Time, error)` | `temporal_test.go`（5 用例：类型化 scan/JSON 格式稳定/NULL/脏数据报错+严格宽松双路径/ToTimeE 契约） |
 | P1-1 | ✅ | `TxOption`（`WithIsolation`/`WithReadOnly`）变参挂在 4 个 Ctx 入口，经 `BeginTx` 下发；`rollbackTx` 统一 4 处回滚（失败 `log.Warn`，不掩盖原始错误）；db 模块新增内部依赖 log | `tx_options_test.go`（2 用例：隔离级别提交/回滚路径 + 嵌套 join） |
 | P1-2 | ✅ | `server/run.go` 插件 Stop 改逆序 | 既有 server_test 回归 |
 | P1-3 | ✅ | `config/config.go`：`loadExtensionWithEnv`/`loadEnvVariantsFor`——L2 扩展配置（含 glob）每个文件加载后追加 `-{env}` 变体；L3 迟到 env 也补挂扩展变体 | `ext_env_test.go`（3 用例：单文件/glob/迟到 env） |
@@ -195,6 +196,6 @@ SQL 参数绑定路径**不做**字符串日期解析（String 原样 `setObject
 
 **行为变化摘要**（发布时值得写进变更说明）：
 1. 时间列 scan 即类型化 + 脏数据报错（原先静默 string/零值）；
-2. `ToTime/GetTime/GetTimeDefault` 改双返回值（唯一破坏性变更，仅影响手写调用；生成器时间 getter 经 `GetTimeOrZero` 保持单返回值，base.go 签名不变）；
+2. 新增严格时间访问器 `ToTimeE/GetTimeE`；`ToTime/GetTime/GetTimeDefault` 保持原签名原宽松语义（与 `ToInt/GetStr` 一致）。**无破坏性 API 变更**（v0.0.47 曾短暂将 `GetTime` 改严格双返回值并引入 `GetTimeOrZero`，v0.0.48 起恢复原名宽松语义、严格版改用 `E` 后缀，`GetTimeOrZero` 移除）；
 3. `AddMapping/RemoveMapping/GetType` 键经归一化（大小写/别名/后缀不敏感）；
 4. db 模块新增内部依赖 `log`（仍零外部依赖）。

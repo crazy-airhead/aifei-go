@@ -202,11 +202,18 @@ var timeParseLayouts = []string{
 	"15:04:05",       // time-only (SQL TIME)
 }
 
-// ToTime converts interface{} to time.Time. A nil value yields the zero time
-// with a nil error (a NULL column is a missing value, not a dirty one); a
-// string matching no known layout is an error — dirty data never silently
-// becomes the zero time.
-func ToTime(v interface{}) (time.Time, error) {
+// ToTime converts interface{} to time.Time with the loose semantics of
+// ToInt/ToString: nil and unparseable values yield the zero time. Use ToTimeE
+// when dirty data must surface as an error.
+func ToTime(v interface{}) time.Time {
+	t, _ := ToTimeE(v)
+	return t
+}
+
+// ToTimeE is the strict ToTime: nil yields (zero, nil) — a NULL column is a
+// missing value, not a dirty one — while a string matching no known layout is
+// an error, so dirty data never silently becomes the zero time.
+func ToTimeE(v interface{}) (time.Time, error) {
 	switch n := v.(type) {
 	case nil:
 		return time.Time{}, nil

@@ -21,9 +21,7 @@ func (tu *TemplateUtil) RowGetter(goType string) string {
 	case "bool":
 		return "GetBool"
 	case "time.Time":
-		// Lenient accessor keeps generated getter signatures single-value;
-		// strict error handling lives in Row.GetTime for hand-written code.
-		return "GetTimeOrZero"
+		return "GetTime"
 	case "[]byte":
 		return "GetBytes"
 	default:

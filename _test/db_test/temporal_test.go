@@ -56,27 +56,18 @@ func TestTemporalColumnScan(t *testing.T) {
 		}
 	}
 
-	got, err := r.GetTime("dt")
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := r.GetTime("dt")
 	want := time.Date(2026, 8, 23, 10, 30, 5, 0, time.UTC)
 	if !got.Equal(want) {
 		t.Errorf("GetTime(dt) = %v, want %v", got, want)
 	}
 
-	gotD, err := r.GetTime("d")
-	if err != nil {
-		t.Fatal(err)
-	}
+	gotD := r.GetTime("d")
 	if gotD.Year() != 2026 || gotD.Month() != time.August || gotD.Day() != 23 {
 		t.Errorf("GetTime(d) = %v, want 2026-08-23", gotD)
 	}
 
-	gotT, err := r.GetTime("t")
-	if err != nil {
-		t.Fatal(err)
-	}
+	gotT := r.GetTime("t")
 	if gotT.Hour() != 10 || gotT.Minute() != 30 || gotT.Second() != 5 {
 		t.Errorf("GetTime(t) = %v, want 10:30:05", gotT)
 	}
@@ -111,8 +102,9 @@ func TestTemporalJSONStableFormat(t *testing.T) {
 	}
 }
 
-// TestTemporalNull verifies NULL temporal columns are a missing value, not an
-// error: GetTime yields the zero time, GetTimeDefault yields the default.
+// TestTemporalNull verifies NULL temporal columns yield the zero time through
+// the loose accessors (a missing value, not an error), and (zero, nil) via
+// the strict variant.
 func TestTemporalNull(t *testing.T) {
 	setupTemporalDB(t)
 	if _, err := db.Use().RawSql(`INSERT INTO temporal_test (d) VALUES (NULL)`).Update(); err != nil {
@@ -126,26 +118,26 @@ func TestTemporalNull(t *testing.T) {
 	if v := r.Get("d"); v != nil {
 		t.Errorf("expected nil for NULL column, got %#v", v)
 	}
-	got, err := r.GetTime("d")
-	if err != nil {
-		t.Fatalf("GetTime on NULL should not error: %v", err)
-	}
-	if !got.IsZero() {
+	if got := r.GetTime("d"); !got.IsZero() {
 		t.Errorf("GetTime on NULL = %v, want zero time", got)
 	}
-	def := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-	gotDef, err := r.GetTimeDefault("missing_field", def)
-	if err != nil || !gotDef.Equal(def) {
-		t.Errorf("GetTimeDefault(missing) = %v, %v; want %v, nil", gotDef, err, def)
+	gotE, err := r.GetTimeE("d")
+	if err != nil || !gotE.IsZero() {
+		t.Errorf("GetTimeE on NULL = %v, %v; want zero, nil", gotE, err)
 	}
-	gotDef, err = r.GetTimeDefault("d", def)
-	if err != nil || !gotDef.Equal(def) {
-		t.Errorf("GetTimeDefault(NULL) = %v, %v; want %v, nil", gotDef, err, def)
+	def := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	if got := r.GetTimeDefault("missing_field", def); !got.Equal(def) {
+		t.Errorf("GetTimeDefault(missing) = %v, want %v", got, def)
+	}
+	if got := r.GetTimeDefault("d", def); !got.Equal(def) {
+		t.Errorf("GetTimeDefault(NULL) = %v, want %v", got, def)
 	}
 }
 
 // TestTemporalDirtyDataFailsLoud verifies a temporal column holding garbage
-// fails the query at the scan boundary instead of yielding a silent zero time.
+// fails the query at the scan boundary instead of yielding a silent zero
+// time; outside the scan path the strict accessors surface the error while
+// the loose ones fall back to zero.
 func TestTemporalDirtyDataFailsLoud(t *testing.T) {
 	setupTemporalDB(t)
 	if _, err := db.Use().RawSql(`INSERT INTO temporal_test (dt) VALUES ('not-a-date')`).Update(); err != nil {
@@ -159,53 +151,49 @@ func TestTemporalDirtyDataFailsLoud(t *testing.T) {
 		t.Errorf("error %q does not mention %q", err.Error(), want)
 	}
 
-	// GetTime on a dirty string (outside scan, e.g. hand-built Row) errors too.
-	if _, err := db.ToTime("2026/08/23 10:00"); err == nil {
-		t.Error("ToTime on unparseable string should error")
+	// Strict accessors on a dirty string (hand-built Row, JSON input): error.
+	if _, err := db.ToTimeE("2026/08/23 10:00"); err == nil {
+		t.Error("ToTimeE on unparseable string should error")
+	}
+	r := db.NewRow("t").Set("bad", "not-a-date")
+	if _, err := r.GetTimeE("bad"); err == nil {
+		t.Error("GetTimeE on dirty field should error")
+	}
+	// Loose accessors keep the GetInt/GetStr semantics: zero, no error.
+	if got := db.ToTime("2026/08/23 10:00"); !got.IsZero() {
+		t.Errorf("ToTime(dirty) = %v, want zero", got)
+	}
+	if got := r.GetTime("bad"); !got.IsZero() {
+		t.Errorf("GetTime(dirty) = %v, want zero", got)
 	}
 }
 
-// TestToTimeStrict covers the ToTime contract: nil→zero+nil, native pass
-// through, string/[]byte parsing, non-temporal types error.
-func TestToTimeStrict(t *testing.T) {
-	if got, err := db.ToTime(nil); err != nil || !got.IsZero() {
-		t.Errorf("ToTime(nil) = %v, %v; want zero, nil", got, err)
+// TestToTimeContract covers both the loose ToTime and strict ToTimeE.
+func TestToTimeContract(t *testing.T) {
+	if got, err := db.ToTimeE(nil); err != nil || !got.IsZero() {
+		t.Errorf("ToTimeE(nil) = %v, %v; want zero, nil", got, err)
 	}
 	now := time.Now()
-	if got, err := db.ToTime(now); err != nil || !got.Equal(now) {
-		t.Errorf("ToTime(time.Time) = %v, %v", got, err)
+	if got, err := db.ToTimeE(now); err != nil || !got.Equal(now) {
+		t.Errorf("ToTimeE(time.Time) = %v, %v", got, err)
 	}
-	if got, err := db.ToTime("2026-08-23 10:30:05"); err != nil || got.Year() != 2026 {
-		t.Errorf("ToTime(sql datetime str) = %v, %v", got, err)
+	if got, err := db.ToTimeE("2026-08-23 10:30:05"); err != nil || got.Year() != 2026 {
+		t.Errorf("ToTimeE(sql datetime str) = %v, %v", got, err)
 	}
-	if got, err := db.ToTime([]byte("2026-08-23T10:30:05Z")); err != nil || got.Hour() != 10 {
-		t.Errorf("ToTime([]byte) = %v, %v", got, err)
+	if got, err := db.ToTimeE([]byte("2026-08-23T10:30:05Z")); err != nil || got.Hour() != 10 {
+		t.Errorf("ToTimeE([]byte) = %v, %v", got, err)
 	}
-	if _, err := db.ToTime(42); err == nil {
-		t.Error("ToTime(int) should error")
+	if _, err := db.ToTimeE(42); err == nil {
+		t.Error("ToTimeE(int) should error")
 	}
-	if _, err := db.ToTime("2026-02-30"); err == nil {
-		t.Error("ToTime(invalid date) should error")
+	if _, err := db.ToTimeE("2026-02-30"); err == nil {
+		t.Error("ToTimeE(invalid date) should error")
 	}
-}
-
-// TestGetTimeOrZero covers the lenient accessor backing generated model
-// getters: NULL/missing/dirty all yield the zero time, no error.
-func TestGetTimeOrZero(t *testing.T) {
-	r := db.NewRow("t").
-		Set("ok", "2026-08-23 10:30:05").
-		Set("bad", "not-a-date").
-		Set("null", nil)
-	if got := r.GetTimeOrZero("ok"); got.Year() != 2026 || got.Hour() != 10 {
-		t.Errorf("GetTimeOrZero(ok) = %v", got)
+	// Loose wrapper mirrors ToTimeE's successes with zero on failure.
+	if got := db.ToTime("2026-08-23 10:30:05"); got.Year() != 2026 {
+		t.Errorf("ToTime(str) = %v", got)
 	}
-	if got := r.GetTimeOrZero("bad"); !got.IsZero() {
-		t.Errorf("GetTimeOrZero(dirty) = %v, want zero", got)
-	}
-	if got := r.GetTimeOrZero("null"); !got.IsZero() {
-		t.Errorf("GetTimeOrZero(null) = %v, want zero", got)
-	}
-	if got := r.GetTimeOrZero("missing"); !got.IsZero() {
-		t.Errorf("GetTimeOrZero(missing) = %v, want zero", got)
+	if got := db.ToTime("junk"); !got.IsZero() {
+		t.Errorf("ToTime(junk) = %v, want zero", got)
 	}
 }

@@ -42,7 +42,7 @@ func (r *BaseLoginLog) UserId() int {
 }
 
 func (r *BaseLoginLog) LoginTime() time.Time {
-	return r.GetTimeOrZero("login_time")
+	return r.GetTime("login_time")
 }
 
 func (r *BaseLoginLog) Ip() string {
