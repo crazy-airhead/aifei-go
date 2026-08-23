@@ -1,6 +1,6 @@
 # Aifei-Go Nacos 插件：注册中心 / 配置中心 / 服务发现三合一
 
-> **一个插件打通 Nacos 的三个角色。**实现 `aifei.Plugin`：Start 时注册临时实例（SDK 自动心跳）、监听 DataID 推送配置变更、把服务发现桥接成 `nami.Upstream`；`init()` 还自动注册 `config.CloudLoader`，让 `config.Init()` 在配置齐备时自动从 Nacos 拉 L5 配置。
+> **一个插件打通 Nacos 的三个角色。** 实现 `aifei.Plugin`：Start 时注册临时实例（SDK 自动心跳）、监听 DataID 推送配置变更、把服务发现桥接成 `nami.Upstream`；`init()` 还自动注册 `config.CloudLoader`，让 `config.Init()` 在配置齐备时自动从 Nacos 拉 L5 配置。
 
 ---
 

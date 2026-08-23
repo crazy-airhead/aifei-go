@@ -64,4 +64,3 @@ Java enjoy 默认注册 7 个内置指令，覆盖日期格式化、HTML 转义�
 
 - `#number` 为 DecimalFormat 子集（分组/小数位/百分号/字面前后缀），不含货币、科学计数法等；`#date` 仅支持 `time.Time`（Java 的 `Date`/`Temporal` 在 Go 统一为 `time.Time`）。
 - `#call` 与 `#@` 函数不存在时 Go 版本宽松跳过（Java 非 nullSafe 时抛异常）；`#call(true,...)` / `#@name?(...)` 的 nullSafe 语法已支持，但因 Go 本就跳过，运行时行为一致。
-

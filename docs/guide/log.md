@@ -1,6 +1,6 @@
 # Aifei-Go log：接口化的 5 级日志抽象
 
-> **用一个 `Logger` 接口把日志实现和业务代码解耦。**默认实现走标准库 `log`（零依赖、可直接跑）；需要 zap/logrus/zapr 时，只换一行 `log.SetDefault(myLogger)`，业务代码零改动。
+> **用一个 `Logger` 接口把日志实现和业务代码解耦。** 默认实现走标准库 `log`（零依赖、可直接跑）；需要 zap/logrus/zapr 时，只换一行 `log.SetDefault(myLogger)`，业务代码零改动。
 
 ---
 

@@ -571,4 +571,3 @@ Aifei-Go 的 dami 围绕几个核心设计原则构建：
 - [nami HTTP RPC](nami.md) — 跨进程 RPC 客户端，与 dami 形成三层互补
 - [docs/arch/dami/01-go-comparison.md](../arch/dami/01-go-comparison.md) — Go 生态同类库对比与可行性分析
 - [docs/arch/dami/02-migration-design.md](../arch/dami/02-migration-design.md) — 详细迁移设计规范
-

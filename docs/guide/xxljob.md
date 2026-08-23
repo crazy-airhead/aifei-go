@@ -1,6 +1,6 @@
 # Aifei-Go XXL-JOB 插件：分布式任务调度执行器
 
-> **执行器自起一个 HTTP 服务，向调度中心（xxl-job-admin）注册心跳、接收 `/run` 触发、回传 `/api/callback` 结果。**以 `aifei.Plugin` 形式集成，业务侧只需 `p.RegTask("myHandler", func)`——调度、阻塞策略、panic 兜底、日志回传全部由插件托管。
+> **执行器自起一个 HTTP 服务，向调度中心（xxl-job-admin）注册心跳、接收 `/run` 触发、回传 `/api/callback` 结果。** 以 `aifei.Plugin` 形式集成，业务侧只需 `p.RegTask("myHandler", func)`——调度、阻塞策略、panic 兜底、日志回传全部由插件托管。
 
 ---
 

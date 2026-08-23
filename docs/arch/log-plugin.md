@@ -525,6 +525,7 @@ func main() {
 建议拆为两期，每期可独立编译、独立合入：
 
 ### Phase A — 插件主体（不含 `log` 库改动）
+
 1. 新建 `plugins/log` 模块（`go.mod` + `go.work`）。
 2. `config.go`：`Config` + `LoadConfig`。
 3. `file_logger.go`：`FileLogger` + `NewFileLogger`（含 `parseLevel`、`defaultInt`；按 §7.3 写日志不加锁；按 §7.1 起 timeRotate goroutine；加 `SetLevel`/`Close`）。
@@ -535,6 +536,7 @@ func main() {
 此期采用 §7.4 方案 A（不改 `log` 库）即可工作，运行时改 level 走 `plugin.FileLogger().SetLevel()`。
 
 ### Phase B — `log` 库最小增强（§7.4 方案 B）
+
 1. `log` 加 `levelSetter` 接口 + `SetLevel` 优先断言（5 行）。
 2. `_test/log_test` 增一条：`SetLevel` 对自定义 logger 生效。
 

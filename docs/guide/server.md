@@ -1,6 +1,6 @@
 # Aifei-Go Server 启动层（./server）：生产级 Web 装配
 
-> **`In` 读请求、`Out` 建响应、`Register` 把方法名变路由、`Run` 管启停。**本层在 [`http`](http.md) 之上补齐生产所需：`IoHandler` 多模式响应分派、内置中间件、struct 方法→RESTful 路由的命名约定、声明式事务。
+> **`In` 读请求、`Out` 建响应、`Register` 把方法名变路由、`Run` 管启停。** 本层在 [`http`](http.md) 之上补齐生产所需：`IoHandler` 多模式响应分派、内置中间件、struct 方法→RESTful 路由的命名约定、声明式事务。
 
 ---
 

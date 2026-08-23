@@ -1,6 +1,6 @@
 # Aifei-Go 存储插件：本地与 S3 统一抽象
 
-> **本地文件系统 + S3 兼容后端，按 bucket 路由。**以插件方式（`plugins/storage`）为应用提供文件存储能力，基于 minio-go，应用代码只面向 `Client` 接口与顶层 `storage.Put/Get/...` 助手。
+> **本地文件系统 + S3 兼容后端，按 bucket 路由。** 以插件方式（`plugins/storage`）为应用提供文件存储能力，基于 minio-go，应用代码只面向 `Client` 接口与顶层 `storage.Put/Get/...` 助手。
 
 ---
 

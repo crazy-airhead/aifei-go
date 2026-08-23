@@ -1,6 +1,6 @@
 # Aifei-Go Elasticsearch 插件：多集群搜索统一封装
 
-> **以 `Client` 接口 + `Manager` 多集群路由 + 包级默认函数这三层结构，把 go-elasticsearch v8 封装成一行 `elasticsearch.Search(ctx, idx, query)` 即可用的形态。**应用代码不直接依赖 ES 客户端，隔离了第三方库耦合，并在未配置时以 `errClient` 优雅降级而非 panic。
+> **以 `Client` 接口 + `Manager` 多集群路由 + 包级默认函数这三层结构，把 go-elasticsearch v8 封装成一行 `elasticsearch.Search(ctx, idx, query)` 即可用的形态。** 应用代码不直接依赖 ES 客户端，隔离了第三方库耦合，并在未配置时以 `errClient` 优雅降级而非 panic。
 
 ---
 

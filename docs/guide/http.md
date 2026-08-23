@@ -1,6 +1,6 @@
 # Aifei-Go HTTP 适配器（./http）：net/http 与 aifei 内核的桥梁
 
-> **`HttpContext` 实现 `aifei.Input`，`HttpHandler` 把 `*http.Request` 翻译成一次 aifei 调用。**本包只做桥接——不自带中间件、不做模板渲染；生产级响应分派交给 [`server`](server.md)。
+> **`HttpContext` 实现 `aifei.Input`，`HttpHandler` 把 `*http.Request` 翻译成一次 aifei 调用。** 本包只做桥接——不自带中间件、不做模板渲染；生产级响应分派交给 [`server`](server.md)。
 
 ---
 

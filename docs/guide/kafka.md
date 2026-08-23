@@ -1,6 +1,6 @@
 # Aifei-Go Kafka 插件：多集群生产/消费集成
 
-> **生产/消费客户端分离 + 标记式提交 = 可控的 at-least-once。**每个 `Subscribe` 起一个独立 franz-go 消费 client，handler 返回 `nil` 才 `MarkCommitRecords`，失败记录不提交、下次 rebalance/重启重投。
+> **生产/消费客户端分离 + 标记式提交 = 可控的 at-least-once。** 每个 `Subscribe` 起一个独立 franz-go 消费 client，handler 返回 `nil` 才 `MarkCommitRecords`，失败记录不提交、下次 rebalance/重启重投。
 
 ---
 

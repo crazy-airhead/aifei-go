@@ -1,7 +1,7 @@
 # Aifei-Go：为 AI Coding 而生的 Go 服务端框架
 
 > Aifei-Go 是 [Aifei](https://github.com/jfinal/aifei)（Java 版）的 Go 语言移植版。它继承了 Aifei 的核心设计理念 —— **Just Service** 扁平架构、**HIO** 自主 IO 模型、**Enjoy** 自研模板引擎、**Db + Row** 数据库模式，并在 Go 的语言特性与生态上重新落地：用接口与 Handler 包装链替代动态代理，用 `net/http` 替代 Undertow，用 Radix 树路由替代注解扫描，同时又参考了 Solon，引入 Dami 提供进程内事件总线，引入 Nami 作为 HTTP RPC **客户端**框架，用于支撑微服务。
-> 
+>
 > **注意事项：Aifei-Go 由 GLM5.2 生成，不喜勿入**。Aifei 是基准，AI 翻译。我做决策，AI 生成。
 >
 > Java 版文档：<https://aifei.cn/doc>

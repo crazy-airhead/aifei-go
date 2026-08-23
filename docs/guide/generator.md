@@ -378,7 +378,7 @@ func init() { db.RegisterTable(Table) }       // ← 自注册到 db 全局表�
 关键设计：
 
 - **JSON 列从 base.go 里剔除**（不出 typed getter/setter）——把方法名让给 `model.go`，方便用户在 model 里覆盖成结构体类型（见 §9）。
-- **短 setter（`Age_(v)`）**默认开启（`GenerateShortSetter=true`），让链式构造更顺眼：`New().Name_("alice").Age_(30).Insert()`。列名是 Go 关键字时（如 `type`、`select`）自动加 `_`（`EscapeKeyword`）避免冲突。
+- **短 setter（`Age_(v)`）** 默认开启（`GenerateShortSetter=true`），让链式构造更顺眼：`New().Name_("alice").Age_(30).Insert()`。列名是 Go 关键字时（如 `type`、`select`）自动加 `_`（`EscapeKeyword`）避免冲突。
 - **`init()` 自注册**：`db.RegisterTable(Table)` 让框架在启动时就能找到表元数据，给 [dataisolate](data-isolate.md) 这类插件做字段过滤、给 JSON 自动解码等。
 
 ### 8.2 model.go 产物（首次生成）

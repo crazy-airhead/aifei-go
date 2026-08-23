@@ -59,7 +59,7 @@ _test/flow_test/
 
 - **包声明**：`package flow_test`，导入 `flow "github.com/crazy-airhead/aifei-go/flow"`，别名子包（`flowdriver "github.com/.../flow/driver"` 等）。
 - **`go.work`** 增加 `use ./flow` 与 `use ./_test/flow_test`。
-- **自包含**：YAML/JSON 图用字面量字符串（`const yamlDoc = \`...\``）或 `testdata/`；无外部服务。
+- **自包含**：YAML/JSON 图用字面量字符串（``const yamlDoc = `...` ``）或 `testdata/`；无外部服务。
 - **对照原版**：文件名尽量映射 solon-flow 的 `features/flow/generated/coverage/*.java`（如 `SimpleFlowDriverTest`→`driver_test.go`）。
 
 ### 1.2 测试辅助

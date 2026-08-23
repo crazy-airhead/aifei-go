@@ -1,6 +1,6 @@
 # Aifei-Go 缓存插件：两级缓存统一抽象
 
-> **本地 L1 + Redis L2 两级缓存，按实例隔离。**以插件方式（`plugins/cache`）为应用提供缓存能力，基于 jetcache-go，应用代码只面向 `Cache` 接口与顶层 `cache.Get/Set/...` 助手。
+> **本地 L1 + Redis L2 两级缓存，按实例隔离。** 以插件方式（`plugins/cache`）为应用提供缓存能力，基于 jetcache-go，应用代码只面向 `Cache` 接口与顶层 `cache.Get/Set/...` 助手。
 
 ---
 

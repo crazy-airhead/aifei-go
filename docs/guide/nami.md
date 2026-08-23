@@ -1,6 +1,6 @@
 # Aifei-Go nami：HTTP RPC 客户端框架
 
-> **aifei 服务端的对偶客户端。**以 `Channel` 传输 + `Encoder`/`Decoder` 编解码 + `Filter` 拦截链 + `Upstream`/`Discovery` 服务发现的可插拔分层，把"调一次远端 HTTP 接口"做得像本地调用一样直接；零外部依赖。
+> **aifei 服务端的对偶客户端。** 以 `Channel` 传输 + `Encoder`/`Decoder` 编解码 + `Filter` 拦截链 + `Upstream`/`Discovery` 服务发现的可插拔分层，把"调一次远端 HTTP 接口"做得像本地调用一样直接；零外部依赖。
 
 ---
 
@@ -467,4 +467,3 @@ Aifei-Go 的 nami 围绕几个核心设计原则构建：
 - [dami 事件总线](dami.md) — 进程内 RPC 的另一种选择（不走网络）
 - 设计文档：[../arch/nami/01-java-comparison.md](../arch/nami/01-java-comparison.md)（Solon Nami 逐项对照与移植矩阵）、[../arch/nami/02-design.md](../arch/nami/02-design.md)（契约设计、调用时序、已知限制）
 - `docs/arch/dami/01-go-comparison.md` — nami / dami / kafka 的定位对比
-

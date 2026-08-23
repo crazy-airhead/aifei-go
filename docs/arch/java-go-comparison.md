@@ -233,6 +233,7 @@
 ## 附录：关键文件路径
 
 ### Go 侧
+
 - aifei core：`aifei/{input.go,output.go,aifei.go,router.go,handler.go,interceptor.go,config.go,plugin.go}`
 - Input 实现：`http/context.go`、`server/in.go`
 - db 事务：`db/transaction.go`、`db/executor.go`
@@ -244,6 +245,7 @@
 - enjoy 语义：`enjoy/stat_parser.go`、`enjoy/expr_parser.go`、`enjoy/expr_eval.go`、`enjoy/scope.go`、`enjoy/engine_config.go`、`enjoy/lexer.go`
 
 ### Java 侧（对照基准）
+
 - core：`aifei/src/main/java/cn/aifei/core/{Input.java,Output.java}`
 - enjoy：`aifei-enjoy/src/main/java/cn/aifei/enjoy/stat/Parser.java`、`stat/ast/{For.java,ReturnIf.java,Define.java}`、`stat/Scope.java`、`expr/ExprParser.java`、`expr/ast/{Arith.java,Assign.java}`、`EngineConfig.java`
 - db：`aifei-db/src/main/java/cn/aifei/db/{core,transaction,dialect,executor,hook,sql}/`

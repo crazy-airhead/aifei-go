@@ -1,6 +1,6 @@
 # Aifei-Go 核心包（./aifei）：传输无关的 Web 框架内核
 
-> **`Aifei` = Router + Handler 链 + Plugin。**核心包不绑定任何 HTTP 实现——它只定义 `Input`/`Output`/`Handler` 契约与一棵 radix 路由树，由 [`http`](http.md)/[`server`](server.md) 适配器驱动。
+> **`Aifei` = Router + Handler 链 + Plugin。** 核心包不绑定任何 HTTP 实现——它只定义 `Input`/`Output`/`Handler` 契约与一棵 radix 路由树，由 [`http`](http.md)/[`server`](server.md) 适配器驱动。
 
 ---
 

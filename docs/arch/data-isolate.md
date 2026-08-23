@@ -453,7 +453,7 @@ type FieldRuleProvider interface {
 ```
 
 > **默认脱敏策略 = `MaskNull`（`NULL AS col`），保留列形状**——下游 `row.Get("password")` 与生成的 typed Dao getter 仍能取到列（值为零值），不破坏兼容。逐规则可改 `MaskRemove`/`MaskConstant`。
-
+>
 > 字段规则**动态**：由**应用实现**的 `FieldRuleProvider` 按 `(表, Principal)` 运行时解析（数据源/表结构由应用自定）；插件只定义接口。`field.default_mask`（§15）仅作全局默认脱敏策略，逐规则可在 `FieldRule.Mask` 覆盖。同 §9.3：启用即须注册、缓存由应用负责。
 
 ### 10.2 投影改写

@@ -166,7 +166,7 @@ DamiBus 的 `lpc.createConsumer(iface)` 依赖 Java 的 `java.lang.reflect.Proxy
 
 | DamiBus 能力 | Go 迁移出路 |
 |--------------|------------|
-| send（事件分发） | map[topic][]listener + 同步遍历，**直接可移植** |
+| send（事件分发） | `map[topic][]listener` + 同步遍历，**直接可移植** |
 | call（请求-响应） | 自造 `Future[R]`（chan + ctx）作为 sink，**可移植** |
 | stream（响应式流） | 用 `chan R` + ctx 表达背压（不引入 rxgo），**可移植（语义略改）** |
 | lpc provider（反射注册） | `reflect` 注册方法 → listener，**可移植**（aifei-go `server.Register` 已验证） |

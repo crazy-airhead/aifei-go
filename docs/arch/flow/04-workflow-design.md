@@ -102,7 +102,7 @@ func (e *Executor) SubmitTaskFor(t *Task, action Action, ctx flow.Context) error
 ### 2.2 实例的「物化」与「推进」
 
 - **无显式 createInstance**：实例 = `flow.NewContext(instanceID)` + `Graph`。`instanceID` 是 repo 的存储 key。首次 `ClaimTask`/`SubmitTask` 写 WAITING/COMPLETED 即物化。
-- **「重算整图」**：`RecordClear()` 清 trace → `lastNode` 退回 start → 引擎从 START 重走整图；**持久状态（repo）**告诉 `WorkflowDriver` 哪些节点已完成（不是 trace）。trace 仅在一次运行内支持 `Task.IsEnd()`/`LastRecord()`。
+- **「重算整图」**：`RecordClear()` 清 trace → `lastNode` 退回 start → 引擎从 START 重走整图；**持久状态（repo）** 告诉 `WorkflowDriver` 哪些节点已完成（不是 trace）。trace 仅在一次运行内支持 `Task.IsEnd()`/`LastRecord()`。
 - **自动前进**（跳过无 actor 节点）：`forwardHandle`——提交节点标 COMPLETED 并跑其 task 后，遍历 `node.NextNodes()`：若是网关，`FindTask` 让引擎解分支；若 `ctrl.IsAutoForward(ctx, next)`，`RecordClear()` 从该节点重算，级联穿过所有非人工节点，直到停在下一个 WAITING 人工任务或到 END。
 
 > **reverting 与 workflow 的关系**：workflow 每次 `RecordClear()`，故 `lastNode` 总退回 start，`reverting` 立即翻 false——不需要核心的「深恢复」。状态权威在 repo。
