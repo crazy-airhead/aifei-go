@@ -14,22 +14,35 @@ import (
 // interface (so it can be passed to workflow.NewExecutor).
 var _ workflow.StateRepository = (*flowplugin.MysqlStateRepository)(nil)
 
-// memStore is a fake instance->states store backing PersistFunc/LoadFunc.
-type memStore struct{ data map[string]map[string]int }
+// memStore is a fake instance->states/vars store backing PersistFunc/LoadFunc.
+type memStore struct {
+	data map[string]map[string]int
+	vars map[string]map[string]any
+}
 
-func newMemStore() *memStore { return &memStore{data: map[string]map[string]int{}} }
+func newMemStore() *memStore {
+	return &memStore{
+		data: map[string]map[string]int{},
+		vars: map[string]map[string]any{},
+	}
+}
 
-func (s *memStore) persist(_ flow.Context, id string, states map[string]int, _ bool) error {
+func (s *memStore) persist(_ flow.Context, id string, states map[string]int, vars map[string]any, _ bool) error {
 	cp := map[string]int{}
 	for k, v := range states {
 		cp[k] = v
 	}
 	s.data[id] = cp
+	vcp := map[string]any{}
+	for k, v := range vars {
+		vcp[k] = v
+	}
+	s.vars[id] = vcp
 	return nil
 }
 
-func (s *memStore) load(_ flow.Context, id string) (map[string]int, error) {
-	return s.data[id], nil
+func (s *memStore) load(_ flow.Context, id string) (map[string]int, map[string]any, error) {
+	return s.data[id], s.vars[id], nil
 }
 
 func buildGraph(t *testing.T) (*flow.Graph, *flow.Node) {
@@ -62,11 +75,23 @@ func TestStateKeyAndRoundTrip(t *testing.T) {
 		t.Errorf("persisted states = %v, want key g:a", states)
 	}
 
+	// persisted vars snapshot (SaveCtx filters transient keys)
+	ctx.Put("amount", 42)
+	if err := repo1.SaveCtx(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.vars["inst1"]["amount"]; got != 42 {
+		t.Errorf("persisted vars = %v, want amount=42", store.vars["inst1"])
+	}
+
 	// a fresh repo (same store) loads it back via lazy load
 	repo2 := flowplugin.NewMysqlStateRepository(nil)
 	repo2.SetStatePersisters(store.persist, store.load)
 	if got := repo2.StateGet(ctx, a); got != workflow.TaskStateWaiting {
 		t.Errorf("StateGet = %v, want WAITING", got)
+	}
+	if got := repo2.VarsGet(ctx, a)["amount"]; got != 42 {
+		t.Errorf("VarsGet amount = %v, want 42 (vars snapshot restored)", got)
 	}
 }
 
@@ -96,7 +121,7 @@ func TestStateCacheLazyLoad(t *testing.T) {
 	_, a := buildGraph(t)
 	loads := 0
 	store := newMemStore()
-	load := func(c flow.Context, id string) (map[string]int, error) {
+	load := func(c flow.Context, id string) (map[string]int, map[string]any, error) {
 		loads++
 		return store.load(c, id)
 	}
