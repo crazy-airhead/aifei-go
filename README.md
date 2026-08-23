@@ -1,6 +1,6 @@
 # Aifei-Go
 
-轻量级 Go Web 框架，从 [Aifei](https://github.com/jfinal/aifei)（Java 版）移植。遵循"Just Service"理念——扁平架构，无 Controller/Service/DAO 分层。
+轻量级 Go Web 框架，从 [Aifei](https://github.com/jfinal/aifei)（Java 版）移植。遵循"Just Service"理念——扁平架构，免写 Controller 层，Dao 弱化为可选薄层。
 
 > 📖 在线文档：<https://crazy-airhead.github.io/aifei-go/>
 

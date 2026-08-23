@@ -333,7 +333,7 @@ u.SetName("new name").Update()
 
 Aifei-Go 的定位很明确：**把 Aifei「为 AI Coding 而生」的设计哲学，用 Go 的方式重新实现一遍**。
 
-它不追求大而全。核心框架零外部依赖，只依赖标准库；它不引入 Controller/Service/DAO 的冗余分层，一个 struct 方法就是一条路由；它把模板引擎、SQL 模板、ORM、代码生成、配置、缓存、消息、存储、数据隔离做成正交的模块，按需取用。
+它不追求大而全。核心框架零外部依赖，只依赖标准库；它免去了 Controller 这一层——Service 的一个 struct 方法就是一条路由，Dao 弱化为可选的薄层；它把模板引擎、SQL 模板、ORM、代码生成、配置、缓存、消息、存储、数据隔离做成正交的模块，按需取用。
 
 如果你用过 JFinal 或 Java Aifei，你会对 Db + Row、Enjoy SQL 指令、集中式配置感到熟悉；如果你是 Go 开发者，你会发现它的接口设计、错误处理、并发模型都是地道的 Go 风格。而无论哪种背景，**Just Service 让你把注意力放在业务上** —— 这正是 Aifei 一开始就想做到的事。
 

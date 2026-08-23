@@ -22,7 +22,7 @@ hero:
 features:
   - icon: 🚀
     title: Just Service
-    details: 方法名即路由：Register() 按命名约定（动词前缀 + 默认动作）自动映射 struct 方法为 RESTful 端点，无 Controller/Service/DAO 分层。
+    details: 方法名即路由：Register() 按命名约定（动词前缀 + 默认动作）把 Service 方法直接映射为 RESTful 端点——免写 Controller 层，Dao 弱化为可选薄层。
   - icon: 🧊
     title: 零外部依赖核心
     details: 核心库与独立框架（aifei/enjoy/db/json/log/nami/dami）仅用 Go 标准库；插件按需引入第三方库。
