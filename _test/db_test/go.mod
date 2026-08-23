@@ -9,6 +9,7 @@ require (
 
 require (
 	github.com/crazy-airhead/aifei-go/enjoy v0.0.46 // indirect
+	github.com/crazy-airhead/aifei-go/log v0.0.46
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -23,3 +24,5 @@ require (
 replace github.com/crazy-airhead/aifei-go/db => ../../db
 
 replace github.com/crazy-airhead/aifei-go/enjoy => ../../enjoy
+
+replace github.com/crazy-airhead/aifei-go/log => ../../log
