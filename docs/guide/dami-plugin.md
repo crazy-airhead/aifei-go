@@ -28,28 +28,16 @@
 
 ## 2. 总体架构
 
-```
-   dami.NewPlugin(logger, opts...)
-            │
-            ├── bus := dami.New(opts...)         新建自有 Bus
-            └── lpc := dami.NewLpc(bus)          在其上建 Lpc
-            │
-            ▼
-   Plugin{ bus, lpc }                             编译期断言实现 aifei.Plugin
-            │
-   ┌────────┴─────────┐
-   │ Start()          │  adami.SetDefaultBus(p.bus)
-   │                  │  → dami.Send/Listen/Call/Stream 顶层 helper 全部指向它
-   └──────────────────┘
-            │
-            ▼
-   业务代码：
-     • Service 通过 p.Lpc().RegisterProvider("user", &userService{})
-     • 任何模块通过 dami.Send("user.created", payload) / dami.Listen(...)
-            │
-   ┌────────┴─────────┐
-   │ Stop()           │  p.bus.Stop() 清空所有 topic 的所有 listener
-   └──────────────────┘
+```mermaid
+flowchart TD
+    NP["dami.NewPlugin(logger, opts...)"]
+    NP --> BUS["bus := dami.New(opts...)<br/>新建自有 Bus"]
+    NP --> LPC["lpc := dami.NewLpc(bus)<br/>在其上建 Lpc"]
+    BUS --> P["Plugin{ bus, lpc }<br/>编译期断言实现 aifei.Plugin"]
+    LPC --> P
+    P --> ST["Start()<br/>adami.SetDefaultBus(p.bus)<br/>→ dami.Send/Listen/Call/Stream 顶层 helper 全部指向它"]
+    ST --> BIZ["业务代码：<br/>• Service 通过 p.Lpc().RegisterProvider(&quot;user&quot;, &amp;userService{})<br/>• 任何模块通过 dami.Send(&quot;user.created&quot;, payload) / dami.Listen(...)"]
+    BIZ --> SP["Stop()<br/>p.bus.Stop() 清空所有 topic 的所有 listener"]
 ```
 
 关键点：**插件做的事极其有限，但都是必要的事**。没有它，开发者要么在 `main()` 里手写 `dami.Configure(...)` 并自己接生命周期，要么各模块各建一条总线——后者会直接破坏事件总线的意义（事件分到不同总线上就互相看不见了）。

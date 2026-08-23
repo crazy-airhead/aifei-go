@@ -42,27 +42,12 @@ github.com/crazy-airhead/aifei-go/plugins/nacos // 服务发现
 
 请求生命周期（定制后的全貌）：
 
-```
-HTTP 请求
-   │
-   ▼
-┌──────────────────────────────────────────────┐
-│ HTTP 层中间件（func(http.Handler) http.Handler）│
-│  RequestID → CORS → JWTAuth → Authorization  │
-└──────────────────┬───────────────────────────┘
-                   ▼  (WithRootHandler 可短路原始路径)
-┌──────────────────────────────────────────────┐
-│ IoHandler (http.Handler)                      │
-│  路由查找 → 构建 *In → 跑 Handler 链 → forward │
-└──────────────────┬───────────────────────────┘
-                   ▼
-              Service 方法（经 Register 反射注册）
-                   │  返回 *Out（携带渲染意图）
-                   ▼
-┌──────────────────────────────────────────────┐
-│ IoHandler.Handle 多模式分发                    │
-│  redirect → view(HTML) → file → raw → json   │
-└──────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    REQ["HTTP 请求"] --> MW["HTTP 层中间件（func(http.Handler) http.Handler）<br/>RequestID → CORS → JWTAuth → Authorization"]
+    MW -->|"WithRootHandler 可短路原始路径"| IOH["IoHandler (http.Handler)<br/>路由查找 → 构建 *In → 跑 Handler 链 → forward"]
+    IOH --> SVC["Service 方法（经 Register 反射注册）"]
+    SVC -->|"返回 *Out（携带渲染意图）"| HD["IoHandler.Handle 多模式分发<br/>redirect → view(HTML) → file → raw → json"]
 ```
 
 ---
@@ -266,17 +251,11 @@ func (s *UserService) Profile(in aifei.Input) aifei.Output {
 
 微服务场景下，网关验完的 JWT 要在服务间 RPC 调用时继续传递。用「HTTP 层取 token → context 透传 → nami filter 注入」三步打通：
 
-```
-请求带 Authorization
-   │ AuthorizationMiddleware (HTTP 层) ── 把 token 存进 ctx
-   ▼
-Service 调用下游
-   │ NewClientFactory 创建的 nami 客户端
-   ▼
-NamiAuthorizationFilter (nami.Filter) ── 从 invocation.Ctx 取 token，塞进 RPC header
-   │
-   ▼
-下游服务收到 Authorization
+```mermaid
+flowchart TD
+    REQ["请求带 Authorization"] -->|"AuthorizationMiddleware (HTTP 层) ── 把 token 存进 ctx"| SVC["Service 调用下游"]
+    SVC -->|"NewClientFactory 创建的 nami 客户端"| FIL["NamiAuthorizationFilter (nami.Filter)<br/>从 invocation.Ctx 取 token，塞进 RPC header"]
+    FIL --> DOWN["下游服务收到 Authorization"]
 ```
 
 ```go

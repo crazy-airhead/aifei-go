@@ -25,29 +25,13 @@
 
 nami 的核心抽象有四层，自底向上叠加：
 
-```
-                ┌─────────────────────────────────────────┐
-   应用代码 ───▶ │ Nami（fluent 客户端） / util.GetJSON[T]  │
-                │  Call / CallOrThrow / CallAndBind        │
-                └───────────────────┬─────────────────────┘
-                                    │ Invocation
-                ┌───────────────────┴─────────────────────┐
-   可插拔拦截层 │ Filter 链（config + 全局 RegFilter）     │
-                │ FilterFunc / 自定义 / actuator 终结       │
-                └───────────────────┬─────────────────────┘
-                                    │
-            ┌───────────────────────┴───────────────────────┐
-   传输层   │ Channel（channel/http 默认；按 scheme 注册）   │
-            │   HttpChannel.Call(ctx *Context) *Result      │
-            └───────────────────────┬───────────────────────┘
-                                    │
-            ┌───────────────────────┴───────────────────────┐
-   编解码   │ Encoder（请求体）/ Decoder（响应体）           │
-            │ coder/json 默认；按 Content-Type/Accept 匹配   │
-            └───────────────────────────────────────────────┘
-
-   服务发现 ─▶ Upstream（func() string）/ Discovery（GetServer(group,name)）
-                 NewUpstreamFixed 轮询；plugins/nacos.NewNamiUpstream 桥接
+```mermaid
+flowchart TD
+    APP["应用代码"] --> NAMI["Nami（fluent 客户端） / util.GetJSON[T]<br/>Call / CallOrThrow / CallAndBind"]
+    NAMI -->|"Invocation"| FLT["可插拔拦截层：Filter 链<br/>（config + 全局 RegFilter）<br/>FilterFunc / 自定义 / actuator 终结"]
+    FLT --> CH["传输层：Channel<br/>（channel/http 默认，按 scheme 注册）<br/>HttpChannel.Call(ctx *Context) *Result"]
+    CH --> CODEC["编解码：Encoder（请求体）/ Decoder（响应体）<br/>coder/json 默认<br/>按 Content-Type / Accept 匹配"]
+    SD["服务发现：Upstream（func() string）<br/>Discovery（GetServer(group, name)）<br/>NewUpstreamFixed 轮询<br/>plugins/nacos.NewNamiUpstream 桥接"] -.-> NAMI
 ```
 
 核心类型一览：

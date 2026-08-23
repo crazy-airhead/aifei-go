@@ -60,30 +60,12 @@
 
 ## 3. 总体架构
 
-```
-              HTTP 请求（已认证）
-                    │
-   ┌────────────────┴────────────────┐
-   │ dataisolate.Middleware          │  ← 解析 Principal
-   │   Principal{Tenant,User,Dept,   │     （子域/header 仅租户；JWT/session 全量）
-   │     DeptTree,Roles,Perms}       │
-   │   in.SetContext(WithPrincipal)  │
-   └────────────────┬────────────────┘
-                    │ in.Context() 携带 Principal
-                    ▼
-            Service → db.WithCtx(ctx)
-                    │
-                    ▼
-              *Dao（dao.ctx 携带 Principal）
-                    │ hook 触发
-   ┌────────────────┴────────────────┐
-   │ 解析 SQL → AST（一次）         │
-   │ Policy 链依次改写 AST：        │
-   │   ① FieldMask（投影脱敏）      │
-   │   ② Tenant（WHERE）            │
-   │   ③ DataScope（WHERE 范围）    │
-   │ 重建 SQL + 参数重排            │
-   └─────────────────────────────────┘
+```mermaid
+flowchart TD
+    REQ["HTTP 请求（已认证）"] --> MW["dataisolate.Middleware<br/>解析 Principal（子域/header 仅租户；JWT/session 全量）<br/>Principal{Tenant,User,Dept,DeptTree,Roles,Perms}<br/>in.SetContext(WithPrincipal)"]
+    MW -->|"in.Context() 携带 Principal"| SVC["Service → db.WithCtx(ctx)"]
+    SVC --> DAO["*Dao（dao.ctx 携带 Principal）"]
+    DAO -->|"hook 触发"| RW["解析 SQL → AST（一次）<br/>Policy 链依次改写 AST：<br/>① FieldMask（投影脱敏）<br/>② Tenant（WHERE）<br/>③ DataScope（WHERE 范围）<br/>重建 SQL + 参数重排"]
 ```
 
 - **Principal**：当前用户完整身份（租户 + 用户 + 部门 + 部门树 + 角色 + 权限），进 context。

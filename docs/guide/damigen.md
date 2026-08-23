@@ -43,26 +43,15 @@ id, err := dami.Call1[OrderID](bus, ctx, "order.Create", req)
 
 ## 2. 总体架构
 
-```
-   源码目录 srcDir（含 //dami:provider 接口）
-                    │
-                    ▼
-   ┌─────────────────────────────────────────┐
-   │ damigen.Generate(srcDir, outDir)         │
-   │                                          │
-   │  1. parser.ParseDir（跳过 _test.go）      │
-   │  2. collectInterfaces                    │
-   │     - 找 type ... interface             │
-   │     - 读 doc comment 取 //dami:provider  │
-   │     - parseMethods → methodInfo         │
-   │  3. render                               │
-   │     - Enjoy 渲染 clientTemplate          │
-   │     - go/format 格式化                   │
-   │  4. 写 outDir/dami_gen.go                │
-   └─────────────────────────────────────────┘
-                    │
-                    ▼
-   dami_gen.go（包含全部 XxxClient，一个文件）
+```mermaid
+flowchart TD
+    subgraph GEN["damigen.Generate(srcDir, outDir)"]
+        S1["1. parser.ParseDir（跳过 _test.go）"] --> S2["2. collectInterfaces<br/>找 type ... interface<br/>读 doc comment 取 //dami:provider<br/>parseMethods → methodInfo"]
+        S2 --> S3["3. render<br/>Enjoy 渲染 clientTemplate<br/>go/format 格式化"]
+        S3 --> S4["4. 写 outDir/dami_gen.go"]
+    end
+    SRC["源码目录 srcDir（含 //dami:provider 接口）"] --> S1
+    S4 --> OUT["dami_gen.go（包含全部 XxxClient，一个文件）"]
 ```
 
 核心抽象：

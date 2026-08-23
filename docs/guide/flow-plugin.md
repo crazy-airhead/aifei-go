@@ -28,26 +28,21 @@
 
 ## 2. 总体架构
 
-```
-   flowplugin.NewPlugin(logger, opts...)
-            │  WithGraphURIs / WithGraphDir / WithGraphDB / WithMySQL
-            │  / WithRecordHistory / WithStateController
-            ▼
-   Plugin.Start()
-     ├── container := flow.NewMapContainer()
-     ├── engine   := flow.NewEngine(flow.NewSimpleDriver(WithContainer(container)))
-     ├── repo     := MysqlStateRepository（WithMySQL）或 InMemoryStateRepository
-     ├── recorder := TaskHistoryRecorder（WithRecordHistory）
-     ├── executor := workflow.NewExecutor(engine, controller, repo)
-     ├── 加载图：URI 文件 → flow.GraphFromText → engine.Load
-     │          （WithGraphDB：oa_process.graph_bpmn，valid=1 的行）
-     └── setDefault(...)  → flowplugin.DefaultEngine/DefaultExecutor/...
-            │
-   业务代码（Service 方法内）：
-     • p.Container().PutComponent("approve", ...)   注册 @组件
-     • flowplugin.DefaultExecutor().ClaimTaskByID(...)
-     • repo.LoadCtx(instanceID) / SaveCtx(ctx)       跨请求还原/保存运行变量
-     • recorder.Record(ctx, rec)                     记审批历史（业务埋点）
+```mermaid
+flowchart TD
+    NP["flowplugin.NewPlugin(logger, opts...)"] -->|"WithGraphURIs / WithGraphDir / WithGraphDB / WithMySQL / WithRecordHistory / WithStateController"| START["Plugin.Start()"]
+    START --> A1["container := flow.NewMapContainer()"]
+    START --> A2["engine := flow.NewEngine(flow.NewSimpleDriver(WithContainer(container)))"]
+    START --> A3["repo := MysqlStateRepository（WithMySQL）或 InMemoryStateRepository"]
+    START --> A4["recorder := TaskHistoryRecorder（WithRecordHistory）"]
+    START --> A5["executor := workflow.NewExecutor(engine, controller, repo)"]
+    START --> A6["加载图：URI 文件 → flow.GraphFromText → engine.Load<br/>（WithGraphDB：oa_process.graph_bpmn，valid=1 的行）"]
+    START --> A7["setDefault(...) → flowplugin.DefaultEngine / DefaultExecutor / ..."]
+    A7 --> BIZ["业务代码（Service 方法内）"]
+    BIZ --> B1["p.Container().PutComponent(#quot;approve#quot;, ...) 注册 @组件"]
+    BIZ --> B2["flowplugin.DefaultExecutor().ClaimTaskByID(...)"]
+    BIZ --> B3["repo.LoadCtx(instanceID) / SaveCtx(ctx) 跨请求还原/保存运行变量"]
+    BIZ --> B4["recorder.Record(ctx, rec) 记审批历史（业务埋点）"]
 ```
 
 两处关键协作：
@@ -129,10 +124,11 @@ func DefaultRecorder() *TaskHistoryRecorder    // 未启用历史时 nil
 
 引擎每次进节点都要读状态（`StateGet`）、每次变更都要写（`StatePut`），不能每个动作都打数据库：
 
-```
-StateGet/StatePut ─▶ 实例级 stateCache（sync.Map: instanceID → cache）
-                        ├── 未加载 → 单次 SELECT 反序列化 states+vars（ensureLoaded）
-                        └── 变更  → 更新缓存 + 单次 upsert 直写（flush，InsertOrUpdateRow）
+```mermaid
+flowchart LR
+    OP["StateGet / StatePut"] --> CACHE["实例级 stateCache<br/>（sync.Map: instanceID → cache）"]
+    CACHE -->|"未加载"| LOAD["单次 SELECT 反序列化 states+vars（ensureLoaded）"]
+    CACHE -->|"变更"| FLUSH["更新缓存 + 单次 upsert 直写（flush，InsertOrUpdateRow）"]
 ```
 
 - `Evict(instanceID)`：实例终结后清缓存，防长期运行内存增长。

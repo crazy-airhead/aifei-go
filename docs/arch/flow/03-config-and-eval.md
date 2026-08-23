@@ -93,23 +93,15 @@ layout:
 
 ### 2.1 加载管线
 
-```
-Engine.LoadGraphs("flow/*.yml") / LoadGraph(g) / LoadURI(uri)
-  └─ URI 解析：
-       含 "*"  → filepath.Glob（目录/embed glob）→ 逐个 LoadURI
-       ".json"/".yml"/".yaml" → 校验扩展名 → 读字节 → FromText
-  └─ FromText(bytes):
-       按扩展名/首字符派发 → yaml.Unmarshal 或 json.Unmarshal → map[string]any
-       → GraphSpec.FromDom(map)
-  └─ FromDom(map):
-       读 id/title/driver/meta
-       读 layout（弃用别名 nodes）
-       【逆序遍历】layout：对缺 link 的节点自动连到「文档序下一个」（nodesLat）
-       link 值归一化（单串/单对象/数组混合）→ LinkSpec
-       缺 id → "n-{index}"
-       【正序】AddNode 保留插入序
-  └─ spec.Create() → *Graph（冻结；推导 start：显式 start 类型，否则首个无入边节点）
-  └─ engine.Load(g) → graphMap[g.ID] = g
+```mermaid
+flowchart TD
+    A["Engine.LoadGraphs(flow/*.yml) / LoadGraph(g) / LoadURI(uri)"] --> B["URI 解析"]
+    B -->|"含 *"| C["filepath.Glob（目录/embed glob）<br/>→ 逐个 LoadURI"]
+    B -->|".json / .yml / .yaml"| D["校验扩展名 → 读字节 → FromText"]
+    D --> E["FromText(bytes)<br/>按扩展名/首字符派发 → yaml.Unmarshal 或 json.Unmarshal → map[string]any"]
+    E --> F["GraphSpec.FromDom(map)<br/>读 id/title/driver/meta；读 layout（弃用别名 nodes）<br/>【逆序遍历】layout：对缺 link 的节点自动连到「文档序下一个」（nodesLat）<br/>link 值归一化（单串/单对象/数组混合）→ LinkSpec；缺 id → n-{index}<br/>【正序】AddNode 保留插入序"]
+    F --> G["spec.Create() → *Graph（冻结）<br/>推导 start：显式 start 类型，否则首个无入边节点"]
+    G --> H["engine.Load(g)<br/>graphMap[g.ID] = g"]
 ```
 
 ### 2.2 注册表（Engine）

@@ -65,26 +65,24 @@
 
 ## 3. 总体架构
 
-```
-┌─ app (aifei.New) ───────────────────────────────────────┐
-│  aifei.WithPlugin(logPlugin)                            │
-│       │                                                  │
-│       ▼ Start()                                          │
-│  LoadConfig("log")  ──► config.Props (app.yml)          │
-│  NewFileLogger(cfg) ──► lumberjack.Logger + MultiWriter │
-│  log.SetDefault(fileLogger)  ◄── 全局替换 defaultLog    │
-│       │                                                  │
-│       ▼ 业务代码 log.Info(...)                           │
-│  委托 fileLogger ──► io.MultiWriter                      │
-│                        ├── os.Stdout                     │
-│                        └── lumberjack.Logger             │
-│                              ├── 写当前文件 ./logs/app.log│
-│                              ├── 超 MaxSize → 切割+压缩（size 触发）│
-│                              └── 定时器到期 → Rotate（time 触发）│
-│       │                                                  │
-│       ▼ Stop()                                           │
-│  lumberjack.Close()  (flush 缓冲，归档最后一片)          │
-└──────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph APP["app（aifei.New）"]
+        P["aifei.WithPlugin(logPlugin)"] -->|"Start()"| LC["LoadConfig(log)"]
+        LC --> PROPS["config.Props（app.yml）"]
+        LC --> NFL["NewFileLogger(cfg)"]
+        NFL --> SINKS["lumberjack.Logger + MultiWriter"]
+        NFL --> SD["log.SetDefault(fileLogger)<br/>（全局替换 defaultLog）"]
+        SD --> BIZ["业务代码 log.Info(...)"]
+        BIZ --> FL["委托 fileLogger"]
+        FL --> MW["io.MultiWriter"]
+        MW --> STDOUT["os.Stdout"]
+        MW --> LJ["lumberjack.Logger"]
+        LJ --> F1["写当前文件 ./logs/app.log"]
+        LJ --> F2["超 MaxSize → 切割+压缩（size 触发）"]
+        LJ --> F3["定时器到期 → Rotate（time 触发）"]
+        SD -->|"Stop()"| CLOSE["lumberjack.Close()（flush 缓冲，归档最后一片）"]
+    end
 ```
 
 与 storage/cache 的唯一结构差异：log 无 `Manager`。`Start` 不调 `SetDefault(mgr)`（包级路由表），而是调 `log.SetDefault(fl)`（核心库全局 logger）。
@@ -353,10 +351,12 @@ func (p *Plugin) FileLogger() *FileLogger
 
 lumberjack 原生只支持 **size 触发**（文件达 `MaxSize` 即切）。本方案在其上叠加 **time 触发**——一个定时 goroutine 周期性调 `lumberjack.Rotate()` 强制切割，二者**正交并存、先到先切**：
 
-```
-文件增长 ──┐
-           ├──► 任一触发 → 切割 → 压缩/清理（lumberjack 统一管理）
-定时器到期 ┘
+```mermaid
+flowchart LR
+    GROW["文件增长"] --> ANY{"任一触发"}
+    TIMER["定时器到期"] --> ANY
+    ANY --> CUT["切割"]
+    CUT --> CC["压缩/清理（lumberjack 统一管理）"]
 ```
 
 **为什么不换轮转库**（如 `lestrrat-go/file-rotatelogs`）：lumberjack 暴露的 `Rotate()` 足以表达"按时间切"，复用其久经验证的备份/清理/压缩逻辑，不引入第二个外部依赖、不推翻选型。

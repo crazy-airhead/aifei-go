@@ -41,11 +41,16 @@ flow/workflow/                  （见 04-workflow-design.md）
 ```
 
 **依赖方向（无环）**：
-```
-workflow ──► driver ──► evaluation ──► enjoy
-   │           │          └► flow(根接口)
-   │           └► container ──► flow(根接口)
-   └──────────► flow(根) ──► dami, log, json
+```mermaid
+flowchart LR
+    WF["workflow"] --> DR["driver"]
+    DR --> EV["evaluation"]
+    EV --> ENJ["enjoy"]
+    EV --> ROOT["flow（根 / 根接口）"]
+    DR --> CT["container"]
+    CT --> ROOT
+    WF --> ROOT
+    ROOT --> DEPS["dami, log, json"]
 ```
 > `Evaluation`/`Container`/`Driver` **接口**都在根包 `flow`；具体实现（EnjoyEvaluation/MapContainer/AbstractDriver）在子包，依赖根接口。这样根包不反向依赖子包。
 
@@ -53,25 +58,19 @@ workflow ──► driver ──► evaluation ──► enjoy
 
 ## 2. 核心类型关系图
 
-```
-            ┌─────────── Engine ───────────┐
-            │  graphMap[id]*Graph           │
-            │  driverMap[name]Driver        │
-            │  interceptors []ranked        │
-            └──┬─────────────────────────┬──┘
-   Register/Load│                         │eval
-               ▼                          ▼
-            *Graph ──nodes──► *Node ──nextLinks──► Link ──nextNode──► *Node
-              │ start        │ when:ConditionDesc  when:ConditionDesc
-              │              │ task:TaskDesc
-              │              ▼
-              │          Driver.HandleCondition / HandleTask
-              │              │
-              ▼              ▼
-          Exchanger ◄──── Context（vars/trace/stop/eventBus）
-          (steps/stepCount/Temporary/interrupted/stopped/reverting)
-              │
-              ▼ RunGraph(子图) → 新 Exchanger（共享 stepCount）
+```mermaid
+flowchart TD
+    ENG["Engine<br/>graphMap[id]*Graph · driverMap[name]Driver · interceptors []ranked"]
+    ENG -->|"Register / Load"| G["*Graph"]
+    ENG -->|"eval"| G
+    G -->|"nodes"| N1["*Node<br/>when:ConditionDesc · task:TaskDesc"]
+    N1 -->|"nextLinks"| LK["Link<br/>when:ConditionDesc"]
+    LK -->|"nextNode"| N2["*Node"]
+    G -->|"start"| EX["Exchanger<br/>（steps/stepCount/Temporary/interrupted/stopped/reverting）"]
+    N1 --> DRV["Driver.HandleCondition / HandleTask"]
+    DRV --> EX
+    CTX["Context（vars/trace/stop/eventBus）"] --> EX
+    EX -->|"RunGraph(子图)"| NEW["新 Exchanger（共享 stepCount）"]
 ```
 
 - **Graph** 是不可变结构（构造后冻结 nodes/links/metas）。
@@ -264,12 +263,12 @@ engine.Eval(graph, ctx)                     // 从 trace.lastNode 恢复继续
 
 ## 7. 配置加载与图注册（简述，详见 03）
 
-```
-Engine.LoadGraphsFromDir("flow/")           // glob *.yml / *.json
-   → GraphFromText(bytes)                   // 按扩展名派发 yaml/json
-   → GraphSpec.FromDom(map)                 // 逆序自动连边
-   → spec.Create()                          // 冻结成 *Graph
-   → engine.Load(*graph)                    // graphMap[id] = graph
+```mermaid
+flowchart TD
+    A["Engine.LoadGraphsFromDir(flow/)<br/>glob *.yml / *.json"] --> B["GraphFromText(bytes)<br/>按扩展名派发 yaml/json"]
+    B --> C["GraphSpec.FromDom(map)<br/>逆序自动连边"]
+    C --> D["spec.Create()<br/>冻结成 *Graph"]
+    D --> E["engine.Load(*graph)<br/>graphMap[id] = graph"]
 ```
 
 ---

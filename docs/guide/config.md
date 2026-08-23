@@ -48,48 +48,21 @@ Java Aifei 的 `props` / `config` 模块基于 Solon 的 `Solon.cfg()`，支持 
 
 ### L1-L5 加载流程
 
-```
-   config.Init(os.Args, opts...)
-            │
-            ▼
-┌───────────────────────────────────────────────────────────┐
-│  config.Load(args, opts...)        ← 执行 L1-L3            │
-│                                                           │
-│  L1) 基础配置文件                                          │
-│      • 默认 app.yml，可配（WithBaseFiles）                 │
-│      • 自动叠加 app-{env}.yml（env 解析见下）              │
-│                                                           │
-│  L2) 扩展配置（include）                                   │
-│      • YAML 里 config.include: [common/*.yml]             │
-│      • 环境变量 <prefix>_CONFIG_INCLUDE=extra/*.yml        │
-│      • 支持 glob，按字母序合并                              │
-│                                                           │
-│  L3) 动态覆盖                                              │
-│      • 环境变量 <prefix>_* → 点分键（__ 表单层边界）        │
-│      • CLI 参数 --key=value / -key=value                   │
-│      • CLI 优先级最高                                      │
-│                                                           │
-│  最后 SetProps(globalProps) → 包级函数立即可用              │
-└───────────────────────────────────────────────────────────┘
-            │
-            ▼
-┌───────────────────────────────────────────────────────────┐
-│  L4) 编程式（可选）                                        │
-│      config.LoadFiles("a.yml", "b.yml")                   │
-│      config.Set("key", value)                             │
-│      或直接操作 config.Props                               │
-└───────────────────────────────────────────────────────────┘
-            │
-            ▼
-┌───────────────────────────────────────────────────────────┐
-│  L5) 云配置（Init 内自动）                                 │
-│      遍历已注册的 CloudLoader                              │
-│      每个 loader 拿到当前 Props，返回 YAML 字节流           │
-│      → globalProps.MergeYAML(content) 深度合并              │
-│                                                           │
-│      [plugins/nacos] 在 init() 里 RegisterCloudLoader      │
-│      读 nacos.serverAddr + nacos.dataId，自动拉取           │
-└───────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    INIT["config.Init(os.Args, opts...)"]
+    INIT --> LOAD
+    subgraph LOAD["config.Load(args, opts...) ← 执行 L1-L3"]
+        L1["L1) 基础配置文件<br/>• 默认 app.yml，可配（WithBaseFiles）<br/>• 自动叠加 app-{env}.yml（env 解析见下）"]
+        L2["L2) 扩展配置（include）<br/>• YAML 里 config.include: [common/*.yml]<br/>• 环境变量 &lt;prefix&gt;_CONFIG_INCLUDE=extra/*.yml<br/>• 支持 glob，按字母序合并"]
+        L3["L3) 动态覆盖<br/>• 环境变量 &lt;prefix&gt;_* → 点分键（__ 表单层边界）<br/>• CLI 参数 --key=value / -key=value<br/>• CLI 优先级最高"]
+        SP["最后 SetProps(globalProps)<br/>→ 包级函数立即可用"]
+        L1 --> L2
+        L2 --> L3
+        L3 --> SP
+    end
+    LOAD --> L4["L4) 编程式（可选）<br/>config.LoadFiles(&quot;a.yml&quot;, &quot;b.yml&quot;)<br/>config.Set(&quot;key&quot;, value)<br/>或直接操作 config.Props"]
+    L4 --> L5["L5) 云配置（Init 内自动）<br/>遍历已注册的 CloudLoader<br/>每个 loader 拿到当前 Props，返回 YAML 字节流<br/>→ globalProps.MergeYAML(content) 深度合并<br/>[plugins/nacos] 在 init() 里 RegisterCloudLoader<br/>读 nacos.serverAddr + nacos.dataId，自动拉取"]
 ```
 
 核心规则：**后加载的层覆盖前面的层**，对 map 做 `deepMerge`（递归合并），对 scalar 值直接覆盖。
@@ -480,15 +453,15 @@ export AIFEI_CONFIG_INCLUDE="extra/*.yml,secrets/*.yml"
 
 这个设计是为 L5 云配置的**动态更新**服务的：
 
-```
-请求读 config.GetStr("db.driver")   ← RLock，可并发
-        │
-        │  Nacos 推送新配置
-        ▼
-config.Props.MergeYAML(newContent)   ← Lock，等待所有读完成
-        │
-        ▼
-请求继续读 config.GetStr("db.driver") ← 读到新值
+```mermaid
+sequenceDiagram
+    participant R as 请求读方
+    participant P as config.Props
+    participant N as Nacos
+    R->>P: GetStr("db.driver") ← RLock，可并发
+    N->>P: 推送新配置
+    P->>P: MergeYAML(newContent) ← Lock，等待所有读完成
+    R->>P: GetStr("db.driver") ← 读到新值
 ```
 
 [plugins/nacos](nacos.md) 的 `BindProps` 方法就是利用这个机制——当 Nacos 推送配置变更时，回调里调用 `props.LoadYAMLBytes(content)`，Props 在写锁保护下完成深度合并，业务代码下一次 `config.GetStr` 就能拿到新值。

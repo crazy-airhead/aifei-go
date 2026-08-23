@@ -70,20 +70,28 @@
 
 ## 3. 总体路线图
 
-```
-            ┌──────────────────── 可观测层（P1-B）────────────────────┐
-            │  trace（OTel）   metrics（Prometheus /metrics）         │
-            └─────────────────────────────────────────────────────────┘
-            ┌──────────────────── 治理层（P1-A）──────────────────────┐
-            │  breaker（熔断）  ratelimit（限流）  retry（重试）       │
-            └─────────────────────────────────────────────────────────┘
-   ┌─────────────────── 通信层（P0）─────────────────────────┐
-   │  LB（nami Balancer + nacos 接入）  Actuator（/health…） │   ← 本期最关键
-   └────────────────────────────────────────────────────────┘
-   ┌─────────────────── 已有地基 ────────────────────────────┐
-   │  nacos 注册/发现/配置 · nami RPC · kafka/dami/xxljob   │
-   │  aifei+server · dataisolate · cache · storage · swagger│
-   └─────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph OBS["可观测层 (P1-B)"]
+        TRACE["trace (OTel)"]
+        METRICS["metrics (Prometheus /metrics)"]
+    end
+    subgraph GOV["治理层 (P1-A)"]
+        BRK["breaker (熔断)"]
+        RL["ratelimit (限流)"]
+        RTY["retry (重试)"]
+    end
+    subgraph COMM["通信层 (P0) — 本期最关键"]
+        LB["LB (nami Balancer + nacos 接入)"]
+        ACT["Actuator (/health…)"]
+    end
+    subgraph BASE["已有地基"]
+        B1["nacos 注册/发现/配置 · nami RPC · kafka/dami/xxljob"]
+        B2["aifei+server · dataisolate · cache · storage · swagger"]
+    end
+    OBS --> GOV
+    GOV --> COMM
+    COMM --> BASE
 ```
 
 依赖方向自下而上：trace / metrics 依赖 actuator（端点）与 nami Filter（透传）；breaker / retry 作为 nami Filter 依赖 LB 已修（否则打到固定实例的熔断无意义）。

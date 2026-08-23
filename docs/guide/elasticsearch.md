@@ -36,31 +36,12 @@ Java Aifei 生态中 ES 集成一般直接用 Spring Data Elasticsearch 或 Rest
 
 插件分三层：**Client（单集群）→ Manager（多集群路由）→ Plugin（框架集成 + 包级默认）**。上层依赖下层，包级便捷函数直通默认 Manager。
 
-```
-                  ┌─────────────────────────────────────────┐
-   应用代码  ────► │ elasticsearch.Search / Index / Get / …  │  包级便捷函数
-                  │           （默认集群，es_default.go）    │
-                  └────────────────────┬────────────────────┘
-                                       │ DefaultClient() / Use(name)
-                                       ▼
-                  ┌─────────────────────────────────────────┐
-                  │              Manager                    │  多集群路由
-                  │   clients map[name]Client, def Client   │
-                  │   Default() Instance(name) Names()     │
-                  └────────────────────┬────────────────────┘
-                                       │ newClient(name, cfg)
-                                       ▼
-                  ┌─────────────────────────────────────────┐
-                  │              Client (接口)               │  单集群 API
-                  │   Search Index Get Delete BulkIndex     │
-                  │   IndicesExists/Create/Delete Ping      │
-                  │   ESClient() ← 逃逸到原生客户端         │
-                  └────────────────────┬────────────────────┘
-                                       │
-                                       ▼
-                  ┌─────────────────────────────────────────┐
-                  │     go-elasticsearch v8 *elasticsearch8.Client    │
-                  └─────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    APP["应用代码"] --> FN["elasticsearch.Search / Index / Get / …<br/>（默认集群，es_default.go）<br/>包级便捷函数"]
+    FN -->|"DefaultClient() / Use(name)"| MGR["Manager（多集群路由）<br/>clients map[name]Client, def Client<br/>Default() Instance(name) Names()"]
+    MGR -->|"newClient(name, cfg)"| CLI["Client 接口（单集群 API）<br/>Search Index Get Delete BulkIndex<br/>IndicesExists/Create/Delete Ping<br/>ESClient() ← 逃逸到原生客户端"]
+    CLI --> ES8["go-elasticsearch v8<br/>*elasticsearch8.Client"]
 ```
 
 组件职责一览：

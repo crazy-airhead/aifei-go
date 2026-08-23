@@ -33,22 +33,12 @@
 
 `Aifei` 是三样东西的组合：一棵路由树、一组全局 Handler、一组 Plugin。它本身**不接 socket**——把 `Router` 和 `Handlers` 暴露给适配器（`http.HttpHandler` 或 `server.IoHandler`），由适配器驱动整个请求生命周期。
 
-```
-                 ┌─────────────── aifei.Aifei ───────────────┐
-   适配器          │  router *Router      handlers []Handler    │
-   (http/server)─▶│  plugins []Plugin    config *Config        │
-                 │                                            │
-                 │  Router() Handlers() Plugins() OnStartFunc()│  ← 适配器读取这些
-                 └──────────────────┬───────────────────────────┘
-                                   │
-                                   ▼
-           Lookup(method, path) → (handlers, params, found)
-                                   │
-                                   ▼
-           ChainHandlers(globalHandlers, routeFinal)(in) → Output
-                                   │
-                                   ▼
-                       适配器把 Output 写回 socket
+```mermaid
+flowchart TD
+    AD["适配器（http / server）"] -->|"驱动"| CORE["aifei.Aifei<br/>router · handlers · plugins · config"]
+    CORE --> LOOKUP["Lookup(method, path)<br/>→ (handlers, params, found)"]
+    LOOKUP --> CHAIN["ChainHandlers(globalHandlers, routeFinal)(in)<br/>→ Output"]
+    CHAIN -->|"返回 Output"| AD
 ```
 
 核心包的职责到"返回 `Output`"为止；序列化、HTTP 状态码、模板渲染都在适配器层。这条边界是核心包能保持零依赖、可被任意传输驱动的根本。

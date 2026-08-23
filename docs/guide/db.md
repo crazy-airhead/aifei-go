@@ -28,28 +28,18 @@
 
 ## 2. 总体架构
 
-```
-                    应用代码
-                       │
-   ┌───────────────────┼───────────────────┐
-   │                   │                   │
-   ▼                   ▼                   ▼
-db.Use()         db.Sql(...)          db.WithCtx(ctx)
-   │                   │                   │
-   └──────┬────────────┴───────────────────┘
-          ▼
-        *Dao（链式构建器）
-          │  sqlStr / sqlArgs / sqlPara(dbsql.SqlPara)
-          │  selFields / fromTable / table / multi / autoTables
-          │  ctx（携带 *sql.Tx 时走事务）
-          ▼
-       executor.go（30+ 个 execXxx）
-          │   组装 SQL → DbHookKit.Before → Config.runner(ctx)
-          ▼
-       DBConn（*sql.DB 池 或 *sql.Tx）
-          │
-          ▼
-     database/sql 驱动
+```mermaid
+flowchart TD
+    APP["应用代码"] --> USE["db.Use()"]
+    APP --> SQL["db.Sql(...)"]
+    APP --> CTX["db.WithCtx(ctx)"]
+    DAO["*Dao（链式构建器）<br/>sqlStr / sqlArgs / sqlPara(dbsql.SqlPara)<br/>selFields / fromTable / table / multi / autoTables<br/>ctx（携带 *sql.Tx 时走事务）"]
+    USE --> DAO
+    SQL --> DAO
+    CTX --> DAO
+    DAO --> EXE["executor.go（30+ 个 execXxx）"]
+    EXE -->|"组装 SQL → DbHookKit.Before → Config.runner(ctx)"| CONN["DBConn（*sql.DB 池 或 *sql.Tx）"]
+    CONN --> DRV["database/sql 驱动"]
 ```
 
 核心类型一览：

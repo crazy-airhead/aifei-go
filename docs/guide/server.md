@@ -28,30 +28,18 @@
 
 ## 2. 总体架构
 
-```
-                      *http.Request
-                            │
-                            ▼
-                     server.IoHandler.ServeHTTP
-                     (implements http.Handler)
-                            │
-            ┌───────────────┼───────────────────────┐
-            ▼               ▼                       ▼
-        NewIn(r)      Router.Lookup           全局 Handler 链
-        (内嵌          (方法+路径 →             (app.Handlers()
-        HttpContext)    handlers, params)       反向包装 final)
-            │               │                       │
-            └───────┬───────┴───────────────────────┘
-                    ▼
-            wrapped(in) → aifei.Output  （通常是 *server.Out）
-                    │
-                    ▼
-            IoHandler.Handle  ── 按 Out 的渲染意图分派 ──┐
-       ┌────────────────────────────────────────────────┤
-       1. redirect  2. headers  3. view  4. file
-       5. raw       6. json                              │
-                                                          ▼
-                                              http.ResponseWriter
+```mermaid
+flowchart TD
+    REQ["*http.Request"] --> SVC["server.IoHandler.ServeHTTP<br/>implements http.Handler"]
+    SVC --> IN["NewIn(r)<br/>（内嵌 HttpContext）"]
+    SVC --> LK["Router.Lookup<br/>（方法+路径 → handlers, params）"]
+    SVC --> CH["全局 Handler 链<br/>（app.Handlers() 反向包装 final）"]
+    IN --> W["wrapped(in) → aifei.Output<br/>（通常是 *server.Out）"]
+    LK --> W
+    CH --> W
+    W --> HD["IoHandler.Handle<br/>按 Out 的渲染意图分派"]
+    HD --> MODES["1. redirect　2. headers　3. view　4. file<br/>5. raw　6. json"]
+    MODES --> RESP["http.ResponseWriter"]
 ```
 
 关键类型一览：

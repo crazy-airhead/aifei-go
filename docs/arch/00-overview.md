@@ -40,111 +40,141 @@
 
 ## 二、Go 版实际结构
 
-```
-aifei-go/
-├── go.work                       # Go workspace (多模块)
-│
-├── aifei/                        # 核心框架（零外部依赖）
-│   ├── aifei.go                  # Aifei 入口: New(), Use(), 路由方法, ServeHTTP
-│   ├── handler.go                # HandlerFunc + ChainHandlers
-│   ├── input.go                  # Input 接口 (请求参数抽象)
-│   ├── output.go                 # Output 接口 (响应抽象)
-│   ├── router.go                 # 路由系统 (Radix Tree) + RouterGroup + Register
-│   ├── interceptor.go            # Interceptor 接口 (方法级 AOP)
-│   ├── config.go                 # Config + Option (函数式选项)
-│   └── plugin.go                 # Plugin 接口
-│
-├── http/                      # net/http 适配器
-│   ├── context.go                # HttpContext 实现 aifei.Input
-│   ├── handler.go                # HttpHandler 实现 http.Handler
-│   └── server.go                 # Server 接口 + DefaultServer
-│
-├── server/                       # 服务启动层
-│   ├── in.go                     # In 实现 aifei.Input
-│   ├── out.go                    # Out 实现 aifei.Output (Ok/Fail/Of/OfField)
-│   ├── middleware.go              # Logger, Recover, Timeout, CORS, BasicAuth, RequestID, StaticFile
-│   ├── run.go                    # Run() 启动 + 优雅关闭 + 信号处理
-│   ├── service.go                # RegisterService, AutoRegisterServices
-│   └── tx_interceptor.go         # TxInterceptor 事务拦截器
-│
-├── enjoy/                        # Enjoy 模板引擎（扁平文件结构）
-│   ├── engine.go                 # Engine 入口 + 模板缓存
-│   ├── engine_config.go          # 引擎配置
-│   ├── template.go               # Template 编译执行
-│   ├── env.go                    # 模板执行环境
-│   ├── directive.go              # Directive 接口
-│   ├── scope.go                  # Scope 变量作用域
-│   ├── ctrl.go                   # 执行控制 (break/continue/return)
-│   ├── lexer.go                  # 模板词法分析器 (DKFF 算法)
-│   ├── stat_parser.go            # 模板语法分析器 (DLRD 递归下降)
-│   ├── tok.go                    # Token 定义
-│   ├── stat.go                   # 语句 AST 节点
-│   ├── expr.go                   # 表达式 AST 接口
-│   ├── expr_eval.go              # 表达式求值
-│   ├── expr_lexer.go             # 表达式词法分析器
-│   ├── expr_parser.go            # 表达式语法分析器 (运算符优先级)
-│   ├── expr_list.go              # 表达式列表
-│   └── source/                   # 模板源加载
-│       └── source.go             # FileSource + StringSource
-│
-├── db/
-│   ├── db.go                     # Db 入口 (链式 API)
-│   ├── dao.go                    # Dao 数据访问对象
-│   ├── row.go                    # Row 数据行 (Active Record, 变更追踪)
-│   ├── page.go                   # 分页结果
-│   ├── batch.go                  # 批量操作
-│   ├── dialect.go                # 数据库方言实现 (MySQL/PostgreSQL/SQLite)
-│   ├── config.go                 # 数据库配置 + 连接池
-│   ├── type_converter.go         # 类型转换器
-│   ├── transaction.go            # 事务管理
-│   ├── table.go                  # Table 运行时元数据
-│   │
-│   └── sql/                      # Enjoy SQL (基于 enjoy 引擎)
-│       ├── kit.go                # SqlKit — Enjoy SQL 引擎封装
-│       ├── para.go               # SqlPara — SQL + 参数容器
-│       ├── directive.go          # Directive 接口
-│       ├── para_directive.go     # #para 指令 — 参数占位 (支持 like/in)
-│       ├── where_directive.go    # #where 指令 — 动态 WHERE 条件
-│       ├── and_directive.go      # #and 指令 — 动态 AND 条件
-│       ├── orderby_directive.go  # #orderBy 指令 — 动态排序 (白名单防注入)
-│       ├── condition.go          # Condition 类型
-│       ├── keys.go               # SQL 模板内部 key 常量
-│       └── operator.go           # Operator 枚举 (18种操作符)
-│
-├── generator/                    # 代码生成器
-│   ├── generator.go              # Generator — 主入口
-│   ├── meta_reader.go            # MetaReader — 读取数据库元数据
-│   ├── meta_dialect.go           # MetaDialect — generator 专用方言接口
-│   ├── type_mapping.go           # TypeMapping — SQL 类型 → Go 类型
-│   ├── field_to_attr.go          # FieldToAttr — 字段名 → 属性名
-│   ├── go_keyword.go             # GoKeyword — Go 保留字检查
-│   ├── types.go                  # TableInfo / FieldInfo 数据结构
-│   ├── template_util.go          # TemplateUtil — Enjoy 模板辅助方法
-│   ├── base_generator.go         # BaseGenerator — 生成 base.go (覆盖写入)
-│   ├── model_generator.go        # ModelGenerator — 生成 model 文件 (存在则跳过)
-│   ├── dao_generator.go          # DaoGenerator — 生成 dao.go (存在则跳过)
-│   ├── service_generator.go      # ServiceGenerator — 生成 service.go (存在则跳过)
-│   ├── tables_generator.go       # TablesGenerator — 生成 tables.go (覆盖写入)
-│   └── templates/                # Enjoy 模板文件 (.af)
-│       ├── _base.af              # 生成 BaseXxx + Table + getter/setter
-│       ├── _model.af             # 生成 Xxx struct
-│       ├── _dao.af               # 生成 Dao + 查询函数
-│       ├── _service.af           # 生成 Service + HTTP 路由
-│       └── _tables.af            # 生成 Tables 集合
-│
-├── json/
-│   └── json.go                   # JSON 工具封装
-│
-├── log/
-│   └── log.go                    # 日志接口 + 默认实现
-│
-└── _test/
-    ├── demo/                     # 完整示例应用
-    │   ├── main.go
-    │   ├── generated_test.go     # 生成代码集成测试
-    │   └── internal/user/        # 生成的 user 表代码 (base.go, user.go, dao.go, service.go)
-    └── db_test/           # SQLite 集成测试 (971行)
-        └── db_test.go
+```mermaid
+flowchart TD
+    WORK["go.work — Go workspace (多模块)"]
+
+    subgraph CORE["核心层"]
+        subgraph AIFEI["aifei/ — 核心框架（零外部依赖）"]
+            A1["aifei.go — Aifei 入口: New(), Use(), 路由方法, ServeHTTP"]
+            A2["handler.go — HandlerFunc + ChainHandlers"]
+            A3["input.go — Input 接口 (请求参数抽象)"]
+            A4["output.go — Output 接口 (响应抽象)"]
+            A5["router.go — 路由系统 (Radix Tree) + RouterGroup + Register"]
+            A6["interceptor.go — Interceptor 接口 (方法级 AOP)"]
+            A7["config.go — Config + Option (函数式选项)"]
+            A8["plugin.go — Plugin 接口"]
+        end
+    end
+
+    subgraph LIB["核心库层"]
+        subgraph JSONP["json/"]
+            J1["json.go — JSON 工具封装"]
+        end
+        subgraph LOGP["log/"]
+            L1["log.go — 日志接口 + 默认实现"]
+        end
+        subgraph ENJOY["enjoy/ — Enjoy 模板引擎（扁平文件结构）"]
+            E1["engine.go — Engine 入口 + 模板缓存"]
+            E2["engine_config.go — 引擎配置"]
+            E3["template.go — Template 编译执行"]
+            E4["env.go — 模板执行环境"]
+            E5["directive.go — Directive 接口"]
+            E6["scope.go — Scope 变量作用域"]
+            E7["ctrl.go — 执行控制 (break/continue/return)"]
+            E8["lexer.go — 模板词法分析器 (DKFF 算法)"]
+            E9["stat_parser.go — 模板语法分析器 (DLRD 递归下降)"]
+            E10["tok.go — Token 定义"]
+            E11["stat.go — 语句 AST 节点"]
+            E12["expr.go — 表达式 AST 接口"]
+            E13["expr_eval.go — 表达式求值"]
+            E14["expr_lexer.go — 表达式词法分析器"]
+            E15["expr_parser.go — 表达式语法分析器 (运算符优先级)"]
+            E16["expr_list.go — 表达式列表"]
+            subgraph ENJOYSRC["source/ — 模板源加载"]
+                E17["source.go — FileSource + StringSource"]
+            end
+        end
+        subgraph DBP["db/"]
+            D1["db.go — Db 入口 (链式 API)"]
+            D2["dao.go — Dao 数据访问对象"]
+            D3["row.go — Row 数据行 (Active Record, 变更追踪)"]
+            D4["page.go — 分页结果"]
+            D5["batch.go — 批量操作"]
+            D6["dialect.go — 数据库方言实现 (MySQL/PostgreSQL/SQLite)"]
+            D7["config.go — 数据库配置 + 连接池"]
+            D8["type_converter.go — 类型转换器"]
+            D9["transaction.go — 事务管理"]
+            D10["table.go — Table 运行时元数据"]
+            subgraph DBSQL["db/sql/ — Enjoy SQL (基于 enjoy 引擎)"]
+                S1["kit.go — SqlKit — Enjoy SQL 引擎封装"]
+                S2["para.go — SqlPara — SQL + 参数容器"]
+                S3["directive.go — Directive 接口"]
+                S4["para_directive.go — #para 指令 — 参数占位 (支持 like/in)"]
+                S5["where_directive.go — #where 指令 — 动态 WHERE 条件"]
+                S6["and_directive.go — #and 指令 — 动态 AND 条件"]
+                S7["orderby_directive.go — #orderBy 指令 — 动态排序 (白名单防注入)"]
+                S8["condition.go — Condition 类型"]
+                S9["keys.go — SQL 模板内部 key 常量"]
+                S10["operator.go — Operator 枚举 (18种操作符)"]
+            end
+        end
+    end
+
+    subgraph RT["运行时层"]
+        subgraph HTTPP["http/ — net/http 适配器"]
+            H1["context.go — HttpContext 实现 aifei.Input"]
+            H2["handler.go — HttpHandler 实现 http.Handler"]
+            H3["server.go — Server 接口 + DefaultServer"]
+        end
+        subgraph SERVERP["server/ — 服务启动层"]
+            V1["in.go — In 实现 aifei.Input"]
+            V2["out.go — Out 实现 aifei.Output (Ok/Fail/Of/OfField)"]
+            V3["middleware.go — Logger, Recover, Timeout, CORS, BasicAuth, RequestID, StaticFile"]
+            V4["run.go — Run() 启动 + 优雅关闭 + 信号处理"]
+            V5["service.go — RegisterService, AutoRegisterServices"]
+            V6["tx_interceptor.go — TxInterceptor 事务拦截器"]
+        end
+    end
+
+    subgraph GENL["代码生成层"]
+        subgraph GENP["generator/ — 代码生成器"]
+            G1["generator.go — Generator — 主入口"]
+            G2["meta_reader.go — MetaReader — 读取数据库元数据"]
+            G3["meta_dialect.go — MetaDialect — generator 专用方言接口"]
+            G4["type_mapping.go — TypeMapping — SQL 类型 → Go 类型"]
+            G5["field_to_attr.go — FieldToAttr — 字段名 → 属性名"]
+            G6["go_keyword.go — GoKeyword — Go 保留字检查"]
+            G7["types.go — TableInfo / FieldInfo 数据结构"]
+            G8["template_util.go — TemplateUtil — Enjoy 模板辅助方法"]
+            G9["base_generator.go — BaseGenerator — 生成 base.go (覆盖写入)"]
+            G10["model_generator.go — ModelGenerator — 生成 model 文件 (存在则跳过)"]
+            G11["dao_generator.go — DaoGenerator — 生成 dao.go (存在则跳过)"]
+            G12["service_generator.go — ServiceGenerator — 生成 service.go (存在则跳过)"]
+            G13["tables_generator.go — TablesGenerator — 生成 tables.go (覆盖写入)"]
+            subgraph GENTPL["templates/ — Enjoy 模板文件 (.af)"]
+                T1["_base.af — 生成 BaseXxx + Table + getter/setter"]
+                T2["_model.af — 生成 Xxx struct"]
+                T3["_dao.af — 生成 Dao + 查询函数"]
+                T4["_service.af — 生成 Service + HTTP 路由"]
+                T5["_tables.af — 生成 Tables 集合"]
+            end
+        end
+    end
+
+    subgraph EX["示例层"]
+        subgraph TESTP["_test/"]
+            subgraph DEMOP["demo/ — 完整示例应用"]
+                M1["main.go"]
+                M2["generated_test.go — 生成代码集成测试"]
+                M3["internal/user/ — 生成的 user 表代码 (base.go, user.go, dao.go, service.go)"]
+            end
+            subgraph DBTESTP["db_test/ — SQLite 集成测试 (971行)"]
+                M4["db_test.go"]
+            end
+        end
+    end
+
+    HTTPP --> AIFEI
+    SERVERP --> HTTPP
+    SERVERP --> AIFEI
+    SERVERP --> DBP
+    SERVERP --> ENJOY
+    SERVERP --> LOGP
+    DBP --> ENJOY
+    DBP --> LOGP
+    GENP --> DBP
+    GENP --> ENJOY
 ```
 
 ---

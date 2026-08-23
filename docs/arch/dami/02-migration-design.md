@@ -92,14 +92,16 @@ plugins/dami/                 # P2：aifei.Plugin 适配（独立模块，依赖
 ```
 
 分层（自底向上）：
-```
-Router（hash/path/tag）  ──┐
-Dispatcher + Interceptor链 ─┼── Bus.Send ──→ 产生 Event → 分发到 listener
-Coder / EventFactory      ──┘                    │
-                                                 │ payload 自带 sink
-              Call(call) ─── CallPayload ────────┤ sink = Future[R]
-              Stream(stream) ── StreamPayload ───┘ sink = chan R
-              Lpc(lpc) ── 在 call 之上：provider 反射注册 / consumer code-gen
+```mermaid
+flowchart LR
+    R["Router（hash/path/tag）"] --> B["Bus.Send"]
+    D["Dispatcher + Interceptor链"] --> B
+    C["Coder / EventFactory"] --> B
+    B -->|"产生"| E["Event<br/>payload 自带 sink"]
+    E --> L["分发到 listener"]
+    CALL["Call（call）"] -.->|"CallPayload<br/>sink = Future[R]"| E
+    ST["Stream（stream）"] -.->|"StreamPayload<br/>sink = chan R"| E
+    LPC["Lpc（lpc）：在 call 之上<br/>provider 反射注册 / consumer code-gen"] -.-> CALL
 ```
 
 ---

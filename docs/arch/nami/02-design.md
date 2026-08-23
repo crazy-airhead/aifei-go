@@ -41,50 +41,68 @@ aifei-go 是 [Aifei Java](https://github.com/jfinal/aifei)（Solon 生态）的 
 
 ### 2.1 分层与注册表
 
-```
-                ┌──────────── util（GetJSON[T] 一行调用；固定装配，不走全局表）
-   易用层        ├──────────── ClientFactory（一服务一模板，For(path) 克隆客户端）
-                └──────────── Builder → Nami（fluent 客户端：Action/URL/Call*）
-
-   客户端层      Nami + Config（timeout/encoder/decoder/channel/upstream/
-                              url/name/path/group/filters/headers）
-                        │ CallOrThrow
-                        ▼
-   调用链层      Invocation（= Context + filters[index] + actuator）
-                        │ Invoke() 逐个过滤器，末位是通道执行器
-                        ▼
-   传输层        Channel ── channel/http（init 注册 "http"/"https"）
-                        │ Call(ctx)：Pretreatment → 构请求（body/form/query 三态）
-                        ▼
-   序列化层      Encoder（请求体）+ Decoder（响应；Pretreatment 设 Accept）
-                ── coder/json（init 注册 "application/json"）
-
-   寻址层        Upstream func() string ←─ UpstreamFixed（轮询）
-                              ↑ NewDiscoveryUpstream ←─ Discovery 接口
-                                              ↑ plugins/nacos NewNamiUpstream
-
-   全局注册表    manager.go：channelMap[scheme] / encoderMap[enctype] /
-                decoderMap[enctype] / filterSet（+ First 默认语义）
+```mermaid
+flowchart TD
+    subgraph S1["易用层"]
+        UTIL["util（GetJSON[T] 一行调用；固定装配，不走全局表）"]
+        CF["ClientFactory（一服务一模板，For(path) 克隆客户端）"]
+        BN["Builder → Nami（fluent 客户端：Action/URL/Call*）"]
+    end
+    subgraph S2["客户端层"]
+        NAMI["Nami + Config（timeout/encoder/decoder/channel/upstream/url/name/path/group/filters/headers）"]
+    end
+    subgraph S3["调用链层"]
+        INV["Invocation（= Context + filters[index] + actuator）"]
+    end
+    subgraph S4["传输层"]
+        CH["Channel<br/>── channel/http（init 注册 http/https）"]
+    end
+    subgraph S5["序列化层"]
+        ED["Encoder（请求体）+ Decoder（响应；Pretreatment 设 Accept）<br/>── coder/json（init 注册 application/json）"]
+    end
+    subgraph S6["寻址层"]
+        UP["Upstream func() string"]
+        UF["UpstreamFixed（轮询）"]
+        NDU["NewDiscoveryUpstream"]
+        DISC["Discovery 接口"]
+        NACOS["plugins/nacos NewNamiUpstream"]
+    end
+    subgraph S7["全局注册表"]
+        MGR["manager.go：channelMap[scheme] / encoderMap[enctype] / decoderMap[enctype] / filterSet（+ First 默认语义）"]
+    end
+    NAMI -->|"CallOrThrow"| INV
+    INV -->|"Invoke() 逐个过滤器，末位是通道执行器"| CH
+    CH -->|"Call(ctx)：Pretreatment → 构请求（body/form/query 三态）"| ED
+    UF --> UP
+    DISC --> NDU
+    NDU --> UP
+    NACOS --> NDU
 ```
 
 ### 2.2 一次调用的时序
 
-```text
-n.CallOrThrow(headers, args, body)
-  ├─ URL 解析优先级：n.url 直设 > Upstream()() + config.Path() 拼接
-  │    （Upstream 返回空 → error "upstream not found server instance"）
-  ├─ NewInvocation(config, target, method, action, callURL, body, actuator)
-  │    └─ 合并 config.headers → ctx.Headers；filters = config.Filters() + [actuator]
-  ├─ inv.Invoke()  → 用户 Filter 依次执行（可改 Headers/Body/…）
-  │    └─ 末位 actuator = n.callDo
-  │         ├─ channel = config.Channel() ?? GetChannel(url 的 scheme)
-  │         └─ channel.Call(&inv.Context)
-  │              ├─ ChannelBase.Pretreatment：按 Accept/Content-Type 头兜底解析 decoder/encoder
-  │              ├─ GET 或 body+args 并存 → args 追加为 query string
-  │              ├─ 非 GET：Content-Type 是 form 系 → form 编码；否则 encoder 编码 body（或回落 form）
-  │              ├─ decoder.Pretreatment（如 JSON decoder 设 Accept: application/json）
-  │              └─ 发请求（Config.Timeout>0 时每请求新建 client）→ NewResult(code, body) + 响应头/charset
-  └─ Result：AssertSuccess（≥400 报错）/ Bind(val) / AsAny()
+```mermaid
+sequenceDiagram
+    participant APP as 业务调用方
+    participant N as Nami 客户端
+    participant INV as Invocation（过滤器链）
+    participant CH as Channel（channel/http）
+    participant ED as Encoder / Decoder
+
+    APP->>N: CallOrThrow(headers, args, body)
+    Note over N: URL 解析优先级：n.url 直设 > Upstream()() + config.Path() 拼接<br/>（Upstream 返回空 → error "upstream not found server instance"）
+    N->>INV: NewInvocation(config, target, method, action, callURL, body, actuator)<br/>合并 config.headers → ctx.Headers；filters = config.Filters() + [actuator]
+    N->>INV: inv.Invoke() → 用户 Filter 依次执行（可改 Headers/Body/…）
+    Note over INV: 末位 actuator = n.callDo<br/>channel = config.Channel() ?? GetChannel(url 的 scheme)
+    INV->>CH: channel.Call(&inv.Context)
+    Note over CH: ChannelBase.Pretreatment：按 Accept/Content-Type 头兜底解析 decoder/encoder
+    CH->>CH: GET 或 body+args 并存 → args 追加为 query string
+    CH->>CH: 非 GET：Content-Type 是 form 系 → form 编码；否则 encoder 编码 body（或回落 form）
+    CH->>ED: decoder.Pretreatment（如 JSON decoder 设 Accept: application/json）
+    CH->>ED: 发请求（Config.Timeout>0 时每请求新建 client）
+    ED-->>CH: NewResult(code, body) + 响应头/charset
+    CH-->>N: Result
+    N-->>APP: Result：AssertSuccess（≥400 报错）/ Bind(val) / AsAny()
 ```
 
 ---

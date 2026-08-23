@@ -128,21 +128,29 @@ solon-flow-dataflow/           # 数据流（设计文档阶段，README only）
 
 ### 4.1 在 aifei-go 工作区中的位置
 
-```
-Core library（零外部依赖）
-  enjoy ──┐  （表达式/模板引擎 → 默认 Evaluation 后端）
-  dami  ──┤  （进程内事件总线 → Context.EventBus）
-  json    │
-  log     │
-Standalone framework
-  flow ◄──┘  （本设计：核心编排引擎 + 工作流；零外部依赖，InMemory 仓储）
-  nami
-Runtime
-  server / http
-Plugin（可选）
-  plugins/flow  （aifei.Plugin 装配 + 内置 MysqlStateRepository + 任务历史；见 06）
-Example / Test
-  _test/flow_test
+```mermaid
+flowchart TD
+    subgraph CORE["Core library（零外部依赖）"]
+        ENJOY["enjoy（表达式/模板引擎 → 默认 Evaluation 后端）"]
+        DAMI["dami（进程内事件总线 → Context.EventBus）"]
+        JSON["json"]
+        LOG["log"]
+    end
+    subgraph STANDALONE["Standalone framework"]
+        FLOW["flow（本设计：核心编排引擎 + 工作流；零外部依赖，InMemory 仓储）"]
+        NAMI["nami"]
+    end
+    subgraph RUNTIME["Runtime"]
+        SERVER["server / http"]
+    end
+    subgraph PLUGIN["Plugin（可选）"]
+        PFLOW["plugins/flow（aifei.Plugin 装配 + 内置 MysqlStateRepository + 任务历史；见 06）"]
+    end
+    subgraph TEST["Example / Test"]
+        FT["_test/flow_test"]
+    end
+    ENJOY --> FLOW
+    DAMI --> FLOW
 ```
 
 ### 4.2 `./flow` 内部包结构（建议）

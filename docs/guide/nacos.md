@@ -23,27 +23,17 @@ Nacos 在国内微服务生态里同时扮演三个角色：**服务注册中心
 
 插件用一对共享的 SDK client（`INamingClient` + `IConfigClient`）服务三种关注点，避免每个能力各起一条 gRPC 连接：
 
-```
-              ┌───────────────────────────┐
-              │  nacos-sdk-go/v2          │
-              │  INamingClient            │  ← 一对 process-wide 共享 client
-              │  IConfigClient            │     按 (server, namespace, user) 缓存
-              └─────────────┬─────────────┘
-                            │
-        ┌───────────────────┼───────────────────┐
-        ▼                   ▼                   ▼
-   ① 服务注册          ② 配置中心           ③ 服务发现
-   registerInstance    startConfigListen    NewNamiUpstream
-   (ephemeral)         ListenConfig         → nami.Upstream
-   SDK 自动心跳         OnChange → 回调      Discovery.GetServer
-        │                   │                   │
-        ▼                   ▼                   ▼
-   Stop 时注销         推送变更到回调       nami RPC 客户端解析地址
-                        (+ BindProps 自动
-                         更新 config.Props)
+```mermaid
+flowchart TD
+    SDK["nacos-sdk-go/v2<br/>INamingClient / IConfigClient<br/>（一对 process-wide 共享 client<br/>按 (server, namespace, user) 缓存）"]
+    SDK --> REG["① 服务注册<br/>registerInstance (ephemeral)<br/>SDK 自动心跳"]
+    SDK --> CFG["② 配置中心<br/>startConfigListen<br/>ListenConfig / OnChange → 回调"]
+    SDK --> DSC["③ 服务发现<br/>NewNamiUpstream → nami.Upstream<br/>Discovery.GetServer"]
+    REG --> R2["Stop 时注销"]
+    CFG --> C2["推送变更到回调<br/>（+ BindProps 自动更新 config.Props）"]
+    DSC --> D2["nami RPC 客户端解析地址"]
 
-   ───────────────  另：init() 自动注册  ───────────────
-   config.RegisterCloudLoader  →  config.Init() 在 L5 自动从 Nacos 拉配置
+    INIT["另：init() 自动注册<br/>config.RegisterCloudLoader"] --> L5["config.Init() 在 L5<br/>自动从 Nacos 拉配置"]
 ```
 
 核心类型清单：
@@ -252,15 +242,17 @@ func init() {
 
 这意味着应用只要 `import _ "github.com/crazy-airhead/aifei-go/plugins/nacos"`，`config.Init()` 的 L5 阶段就会**自动**从 Nacos 拉配置——前提是本地 `nacos.serverAddr` + `nacos.dataId` 已配。流程：
 
-```
-config.Init(args)
-   ├── L1 app.yml + app-{env}.yml
-   ├── L2 extension configs (config.include)
-   ├── L3 env vars + CLI args         ← 此层提供 nacos.serverAddr / nacos.dataId
-   ├── L4 programmatic Load()
-   └── L5 CloudLoaders                ← nacos 的 loader 在这里读 L1-L4 的结果
-                  │
-                  └→ FetchConfig → YAML 字节 → MergeYAML 进全局 props
+```mermaid
+flowchart TD
+    INIT["config.Init(args)"]
+    INIT --> L1["L1 app.yml + app-{env}.yml"]
+    INIT --> L2["L2 extension configs (config.include)"]
+    INIT --> L3["L3 env vars + CLI args<br/>（此层提供 nacos.serverAddr / nacos.dataId）"]
+    INIT --> L4["L4 programmatic Load()"]
+    INIT --> L5["L5 CloudLoaders<br/>（nacos 的 loader 在这里读 L1-L4 的结果）"]
+    L5 --> FC["FetchConfig"]
+    FC --> YML["YAML 字节"]
+    YML --> MERGE["MergeYAML 进全局 props"]
 ```
 
 > **先有鸡还是先有蛋**：loader 从 `props`（L1-L4 已合并）里读 `nacos.*` 连接信息，再去 Nacos 拉远程配置——所以 Nacos 连接信息必须放在本地配置（`app.yml` / 环境变量），不能放在 Nacos 自己里。

@@ -23,33 +23,28 @@ Kafka 是高吞吐消息系统的事实标准。Aifei-Go 应用接入 Kafka 通�
 
 插件的核心设计是**生产 client 与消费 client 物理隔离**：一个集群对应一个 producer `*kgo.Client`，但每次 `Subscribe` 都新建一个独立的 consumer `*kgo.Client`，跑在独立 goroutine 里。生产与消费互不阻塞、可独立停止。
 
-```
-                  Manager（按 cluster 路由）
-                          │
-        ┌─────────────────┼──────────────────┐
-        ▼                 ▼                  ▼
-   cluster "main"    cluster "events"   cluster "audit"
-   ┌────────────┐    ┌────────────┐
-   │ Producer   │    │ Producer   │      …每个 cluster 一个 producer client
-   │ *kgo.Client│    │ *kgo.Client│
-   └─────┬──────┘    └─────┬──────┘
-         │                 │
-   ProduceSync/      ProduceSync/
-   Produce/Flush     Produce/Flush
-         │
-         ▼  消息进入 Kafka topic
-   ┌─────────────────────────────────┐
-   │   Subscribe(topic, handler)     │  ← 每次 Subscribe 新建独立 consumer client
-   │   ┌───────────────────────────┐ │     + 独立 goroutine 跑 PollFetches
-   │   │ PollFetches 循环          │ │
-   │   │  handler nil → MarkCommit │ │     handler 返回 nil 才标记提交
-   │   │  handler err → 跳过不标记 │ │     失败 → 不提交 → 重投
-   │   └───────────────────────────┘ │
-   │   Subscription.Close():         │
-   │     cancel → 等 loop 退出       │
-   │     → CommitMarkedOffsets       │
-   │     → 关闭 client               │
-   └─────────────────────────────────┘
+```mermaid
+flowchart TD
+    MGR["Manager（按 cluster 路由）"]
+    MGR --> M["cluster main"]
+    MGR --> E["cluster events"]
+    MGR --> A["cluster audit"]
+
+    subgraph PROD["生产端：每个 cluster 一个 producer client"]
+        M --> P1["Producer<br/>*kgo.Client"]
+        E --> P2["Producer<br/>*kgo.Client"]
+        A --> P3["Producer<br/>*kgo.Client"]
+    end
+
+    P1 -->|"ProduceSync / Produce / Flush"| TOPIC["Kafka topic<br/>（消息进入 topic）"]
+    P2 -->|"ProduceSync / Produce / Flush"| TOPIC
+    P3 -->|"ProduceSync / Produce / Flush"| TOPIC
+
+    TOPIC --> SUB["Subscribe(topic, handler)<br/>每次 Subscribe 新建独立 consumer client<br/>+ 独立 goroutine 跑 PollFetches"]
+    SUB --> LOOP["PollFetches 循环"]
+    LOOP -->|"handler 返回 nil 才标记提交"| MARK["MarkCommit"]
+    LOOP -->|"handler err 跳过不标记"| RED["失败 → 不提交 → 重投"]
+    SUB -.-> CLOSE["Subscription.Close()：<br/>cancel → 等 loop 退出<br/>→ CommitMarkedOffsets → 关闭 client"]
 ```
 
 关键类型清单：

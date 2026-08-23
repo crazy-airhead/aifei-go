@@ -84,31 +84,29 @@ traces 落 `opentelemetry_traces` 表，按 `trace_id` 分区；metrics 按 metr
 
 ## 3. 总体架构
 
-```
- ┌─────────────────────────── aifei-go 应用进程 ───────────────────────────┐
- │  plugins/trace   (OTel SDK: HTTP 中间件建 span + nami.Filter 透传)       │
- │  plugins/metrics (OTel meter / prom client)                             │
- │  log 抽象 + OTLP logs handler                                           │
- └───────┬───────────────────────┬──────────────────────────┬──────────────┘
-         │ traces (OTLP)         │ metrics (OTLP/remote_write)│ logs (OTLP)
-         ▼                       ▼                           ▼
- ┌───────────────────┐    ┌─────────────────────────────────────────────┐
- │ SkyWalking OAP    │    │ GreptimeDB（统一存储）                        │
- │ killme2008 fork   │    │  opentelemetry_traces / _logs / metric 表    │
- │ receiver-otel     │    │  PromQL + SQL · 存算分离 · 对象存储           │
- │ :4317 (OTLP in)   │    └──────────┬──────────────┬────────────────────┘
- │ :11800 (native)   │               │              │
- │ :12800 (HTTP/UI)  │   gRPC write  │              │ SQL/PromQL
- │ :9411  (Zipkin)   │ ─────────────►│              │
- └─────────┬─────────┘   :4001       │              │
-           │  query(MySQL:4002)      │              │
-           └─────────────────────────┘              │
-           ▼                                        ▼
- ┌────────────────────┐                 ┌────────────────────┐
- │ SkyWalking Horizon │                 │ Grafana            │
- │  拓扑/链路/告警     │                 │  指标/日志看板      │
- │  :12800            │                 │  GreptimeDB 插件    │
- └────────────────────┘                 └────────────────────┘
+```mermaid
+flowchart TD
+    subgraph APP["aifei-go 应用进程"]
+        TRC["plugins/trace<br/>OTel SDK: HTTP 中间件建 span + nami.Filter 透传"]
+        MET["plugins/metrics<br/>OTel meter / prom client"]
+        LOGH["log 抽象 + OTLP logs handler"]
+    end
+
+    subgraph OAP["SkyWalking OAP (killme2008 fork)"]
+        OAPN["receiver-otel · :4317 (OTLP in)<br/>:11800 (native) · :12800 (HTTP/UI) · :9411 (Zipkin)"]
+    end
+
+    subgraph GT["GreptimeDB (统一存储)"]
+        GTN["opentelemetry_traces / _logs / metric 表<br/>PromQL + SQL · 存算分离 · 对象存储"]
+    end
+
+    TRC -->|"traces (OTLP)"| OAPN
+    MET -->|"metrics (OTLP/remote_write)"| GTN
+    LOGH -->|"logs (OTLP)"| GTN
+    OAPN -->|"gRPC write :4001"| GTN
+    OAPN -->|"query (MySQL:4002)"| GTN
+    OAPN --> HZ["SkyWalking Horizon<br/>拓扑/链路/告警 · :12800"]
+    GTN --> GRA["Grafana<br/>指标/日志看板 · GreptimeDB 插件"]
 ```
 
 三信号**最终都在 GreptimeDB**：

@@ -41,42 +41,23 @@
 
 执行器需要同时扮演「HTTP 服务端」（接收调度中心的触发）和「HTTP 客户端」（向调度中心注册/回调）。注意执行器端口 **独立于** aifei 应用自身的业务端口。
 
-```
-       ┌──────────────────────────────────────────────┐
-       │       调度中心 xxl-job-admin (Java)          │
-       │       （定时触发、路由、重试、日志查看）       │
-       └─────────┬───────────────────────┬────────────┘
-                 │                       │
-     ①注册/心跳  │                       │ ⑤查日志
-   POST /api/registry│                 POST /log
-   (每20s, EXECUTOR │                       │
-    注册组)          ▼                       │
-       ┌──────────────────────────────────────────────┐
-       │              xxljob Plugin (执行器)           │
-       │                                              │
-       │  ┌─────────────┐    ┌────────────────────┐   │
-       │  │ registry()  │    │ HTTP server        │   │
-       │  │ goroutine   │    │ :9999              │   │
-       │  │ 20s 心跳    │    │  /run  /kill       │   │
-       │  │             │    │  /log  /beat       │   │
-       │  │ Stop→       │    │  /idleBeat         │   │
-       │  │ registryRemove│  │                    │   │
-       │  └─────────────┘    └─────────┬──────────┘   │
-       │                               │ ②触发任务    │
-       │                               ▼              │
-       │     ┌──────────────────────────────────┐     │
-       │     │ regList (handler 名 → TaskFunc)  │     │
-       │     │ runList (jobId → 运行中 Task)    │     │
-       │     └────────────────┬─────────────────┘     │
-       │                      │ ③go task.Run()        │
-       │                      ▼                       │
-       │     ┌──────────────────────────────────┐     │
-       │     │ Task: 执行 → recover → callback  │     │
-       │     └────────────────┬─────────────────┘     │
-       │                      │ ④结果回调             │
-       └──────────────────────┼───────────────────────┘
-                              ▼
-                   POST /api/callback (code/msg)
+```mermaid
+flowchart TD
+    subgraph ADMIN["调度中心 xxl-job-admin (Java)"]
+        ADM["定时触发、路由、重试、日志查看"]
+    end
+    subgraph EXEC["xxljob Plugin (执行器)"]
+        REG["registry() goroutine<br/>20s 心跳<br/>Stop → registryRemove"]
+        SRV["HTTP server :9999<br/>/run　/kill　/log　/beat　/idleBeat"]
+        LISTS["regList (handler 名 → TaskFunc)<br/>runList (jobId → 运行中 Task)"]
+        TASK["Task: 执行 → recover → callback"]
+    end
+    CB["POST /api/callback (code/msg)"]
+    REG -->|"① 注册/心跳：POST /api/registry（每20s，EXECUTOR 注册组）"| ADM
+    ADM -->|"⑤ 查日志：POST /log"| SRV
+    SRV -->|"② 触发任务"| LISTS
+    LISTS -->|"③ go task.Run()"| TASK
+    TASK -->|"④ 结果回调"| CB
 ```
 
 数据流时序：①`Plugin.Start`→`Init`→registry goroutine 立即 `POST /api/registry`（后每 20s）→ ②admin 按 cron `POST /run` 携带 `RunReq` → ③查 `regList`、按阻塞策略分流、`go task.Run()` → ④跑完 `POST /api/callback` → ⑤admin 查日志时 `POST /log` 调 `LogHandler`。
@@ -211,30 +192,19 @@ exec.RegTask("cleanupOrders", ...)
 
 `/run` 收到请求后的处理逻辑：
 
-```
-解析 RunReq JSON
-   │
-   ▼
-regList.Exists(handler)?
-   │否 → 回 FailureCode "Task not registered"
-   │是
-   ▼
-runList.Exists(jobId)?                  ← 阻塞策略判定
-   │否 → 直接进执行
-   │是
-   ├── ExecutorBlockStrategy == COVER_EARLY
-   │     → Cancel 旧任务、从 runList 删、继续执行新任务
-   └── 其他（SERIAL_EXECUTION / DISCARD_LATER）
-         → 回 FailureCode "There are tasks running"，结束
-   │
-   ▼
-构造 task.ctx = WithTimeout(ExecutorTimeout) 或 WithCancel
-task.Id = JobID; task.Param = param
-runList.Set(jobId, task)
-go task.Run(callback)           ← 异步执行，主流程立即返回
-   │
-   ▼
-回 SuccessCode（表示已接收，不代表执行完毕）
+```mermaid
+flowchart TD
+    P["解析 RunReq JSON"] --> D1{"regList.Exists(handler)?"}
+    D1 -->|"否"| F1["回 FailureCode「Task not registered」"]
+    D1 -->|"是"| D2{"runList.Exists(jobId)?<br/>阻塞策略判定"}
+    D2 -->|"否"| E["直接进执行"]
+    D2 -->|"是"| D3{"ExecutorBlockStrategy == COVER_EARLY ?"}
+    D3 -->|"COVER_EARLY"| C["Cancel 旧任务、从 runList 删<br/>继续执行新任务"]
+    D3 -->|"其他（SERIAL_EXECUTION / DISCARD_LATER）"| F2["回 FailureCode「There are tasks running」，结束"]
+    E --> B["构造 task.ctx = WithTimeout(ExecutorTimeout) 或 WithCancel<br/>task.Id = JobID<br/>task.Param = param<br/>runList.Set(jobId, task)"]
+    C --> B
+    B --> GO["go task.Run(callback)<br/>异步执行，主流程立即返回"]
+    GO --> S["回 SuccessCode<br/>（表示已接收，不代表执行完毕）"]
 ```
 
 注意：

@@ -52,11 +52,13 @@ generator/                # 代码生成器独立模块（import db + enjoy）
 ```
 
 **依赖方向（无循环）：**
-```
-generator/       ──import──→  db/, enjoy/
-生成的 user/ etc ──import──→  db/
-db/              ──不依赖──→  generator 和生成代码
-enjoy/           ──零依赖
+```mermaid
+flowchart LR
+    GEN["generator/"] -->|"import"| DB["db/"]
+    GEN -->|"import"| ENJ["enjoy/ (零依赖)"]
+    USER["生成的 user/ 等代码"] -->|"import"| DB
+    DB -.->|"不依赖"| GEN
+    DB -.->|"不依赖"| USER
 ```
 
 ---
@@ -69,11 +71,11 @@ Enjoy SQL 模板引擎是 Aifei db 的核心亮点之一。它利用 Enjoy 模�
 
 ### 架构
 
-```
-SqlKit
-  └── Enjoy Engine (含 SQL 指令注册)
-        └── 模板缓存 (sync.Map)
-              └── SqlPara (SQL + 参数列表)
+```mermaid
+flowchart TD
+    SK["SqlKit"] --> ENG["Enjoy Engine (含 SQL 指令注册)"]
+    ENG --> CACHE["模板缓存 (sync.Map)"]
+    CACHE --> PARA["SqlPara (SQL + 参数列表)"]
 ```
 
 ### 核心 API

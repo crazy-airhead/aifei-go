@@ -25,21 +25,18 @@
 
 ## 2. 总体架构
 
-```
- *http.Request                                  http.ResponseWriter
-     │                                                  ▲
-     ▼                                                  │
- HttpContext  ◀── NewInput(r)                          │
- implements aifei.Input (Param+Meta) + HTTPMeta        │
-     │                                                  │
-     ▼                                                  │
- HttpHandler.ServeHTTP                                  │
-   ├─ app.Router().Lookup(method, path) ── handlers, params, found
-   ├─ in.SetParams(params)
-   ├─ final = 按序调用路由 handlers
-   ├─ wrapped = 用 app.Handlers() 反向包装 final
-   ├─ out = wrapped(in)
-   └─ writeJSON(w, out)  ◀─────────────────────────────┘  {code,msg,data}, HTTP 200
+```mermaid
+flowchart TD
+    subgraph SERVE["HttpHandler.ServeHTTP"]
+        LOOKUP["app.Router().Lookup(method, path)<br/>── handlers, params, found"] --> SETP["in.SetParams(params)"]
+        SETP --> FINAL["final = 按序调用路由 handlers"]
+        FINAL --> WRAP["wrapped = 用 app.Handlers() 反向包装 final"]
+        WRAP --> RUN["out = wrapped(in)"]
+    end
+    REQ["*http.Request"] -->|"NewInput(r)"| CTX["HttpContext<br/>implements aifei.Input (Param+Meta) + HTTPMeta"]
+    CTX --> LOOKUP
+    RUN --> WJ["writeJSON(w, out)<br/>{code,msg,data}, HTTP 200"]
+    WJ --> RESP["http.ResponseWriter"]
 ```
 
 `HttpHandler` 持有一个 `*aifei.Aifei`，实现 `http.Handler`。它把全局 Handler 链（`app.Handlers()`）作用在"依次调用所有路由 handlers"的最内层函数上——等价于 [`aifei.ChainHandlers`](core.md) 的从外到内折叠。

@@ -46,23 +46,26 @@ Aifei-Go 的 `plugins/storage` 借鉴 ficus 的 `ficus-starter-storage`，提供
 
 ### 数据流
 
-```
-              应用代码
-                 │
-   ┌─────────────┴──────────────┐
-   │ 顶层助手 storage.Put/Get/... │  ← 作用于默认 bucket
-   │ storage.Use("avatar").Put() │  ← 切换到命名 bucket
-   └─────────────┬──────────────┘
-                 │ defaultManager (包级)
-                 ▼
-              Manager
-     ┌──────────┼──────────┐
-     ▼          ▼          ▼
-  "default"  "avatar"   "export"     ← 命名 bucket（各自一份 Client）
-     │          │          │
-     ▼          ▼          ▼
-  LocalClient  S3Client  S3Client    ← driver 决定后端
-  (磁盘)     (Minio)   (阿里云OSS)
+```mermaid
+flowchart TD
+    APP["应用代码"] --> HELP["顶层助手 storage.Put/Get/... ← 作用于默认 bucket<br/>storage.Use('avatar').Put() ← 切换到命名 bucket"]
+    HELP -->|"defaultManager (包级)"| MGR["Manager"]
+    subgraph BUCKETS["命名 bucket（各自一份 Client）"]
+        D1["default"]
+        D2["avatar"]
+        D3["export"]
+    end
+    subgraph BACKENDS["driver 决定后端"]
+        C1["LocalClient（磁盘）"]
+        C2["S3Client（Minio）"]
+        C3["S3Client（阿里云OSS）"]
+    end
+    MGR --> D1
+    MGR --> D2
+    MGR --> D3
+    D1 --> C1
+    D2 --> C2
+    D3 --> C3
 ```
 
 关键设计点：

@@ -42,27 +42,26 @@ knife4j 原本是 Java 生态的 swagger-ui 增强（knife4j-vue3 是其 Vue3 �
 
 插件的核心是一条"**启动时构建、请求时拦截**"的链：
 
-```
-   swag init 生成 docs/        ┐
-   应用 import _ ".../docs"    │  编译期：docs 包 init() 注册 spec 到 swag 全局
-                               ┘
-          ┌────────────────────┘
-          ▼
-   Plugin.Start()                       运行期：加载 Config
-          │
-          ├── readDoc = swag.ReadDoc    读出完整 OpenAPI 文档（一次）
-          ├── resolveGroups(cfg)        解析为 1..N 个分组（含 filter）
-          ├── filterDocByPath(...)      按路径正则切出每个分组的子 spec（缓存）
-          ├── 生成 services.json / swagger-config
-          └── buildHandler()            组装 http.ServeMux + //go:embed 的 web/ 静态资源
-                 │
-                 ▼
-   p.handler (http.Handler)             Plugin 持有
-          │
-          ▼
-   Plugin.Handler() ── server.WithHTTPHandler(...)
-   func(next) http.Handler              包装器：命中 basePath/services.json 走文档，
-                                       其余 next.ServeHTTP 交给 aifei 主链
+```mermaid
+flowchart TD
+    subgraph BUILD["编译期"]
+        SWAG["swag init 生成 docs/"]
+        IMP["应用 import _ '.../docs'"]
+        SWAG --> REG["docs 包 init() 注册 spec 到 swag 全局"]
+        IMP --> REG
+    end
+    REG --> START["Plugin.Start()<br/>运行期：加载 Config"]
+    START --> RD["readDoc = swag.ReadDoc<br/>读出完整 OpenAPI 文档（一次）"]
+    START --> RG["resolveGroups(cfg)<br/>解析为 1..N 个分组（含 filter）"]
+    START --> FD["filterDocByPath(...)<br/>按路径正则切出每个分组的子 spec（缓存）"]
+    START --> SJ["生成 services.json / swagger-config"]
+    START --> BH["buildHandler()<br/>组装 http.ServeMux + //go:embed 的 web/ 静态资源"]
+    RD --> HND["p.handler (http.Handler)<br/>Plugin 持有"]
+    RG --> HND
+    FD --> HND
+    SJ --> HND
+    BH --> HND
+    HND --> WRAP["Plugin.Handler() ── server.WithHTTPHandler(...)<br/>func(next) http.Handler<br/>包装器：命中 basePath/services.json 走文档，<br/>其余 next.ServeHTTP 交给 aifei 主链"]
 ```
 
 请求时只有一次 `strings.HasPrefix` 判断；命中后由启动期就构建好的 `http.ServeMux` 直接写出缓存字节，无运行时解析开销。

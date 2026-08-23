@@ -31,10 +31,16 @@ enjoy/
 
 ## 2. 编译管线
 
-```
-Source (文件/字符串) → Lexer (词法分析) → Token 流 → Parser (语法分析) → AST → Template (缓存)
-                                                                         ↓
-执行: Template.render(data) → 创建 Scope → AST 递归执行 → Writer 输出
+```mermaid
+flowchart TD
+    SRC["Source (文件/字符串)"] --> LEX["Lexer (词法分析)"]
+    LEX --> TOK["Token 流"]
+    TOK --> PAR["Parser (语法分析)"]
+    PAR --> AST["AST"]
+    AST --> TPL["Template (缓存)"]
+    TPL -->|"Template.render(data)"| SCOPE["创建 Scope"]
+    SCOPE --> EXE["AST 递归执行"]
+    EXE --> OUT["Writer 输出"]
 ```
 
 ## 3. Engine (对应 `cn.aifei.enjoy.Engine`)

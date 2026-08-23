@@ -21,34 +21,19 @@ Enjoy 是 Aifei 的**签名特性**：独立设计、独立实现的模板语言
 
 Enjoy 的执行模型是一条经典的「Source → 词法 → 语法 → AST → 缓存 → 渲染」管线：
 
-```
-          编译期（一次性，结果缓存到 Engine.templateCache）
-┌───────────────────────────────────────────────────────────┐
-│  Source (FileSource | StringSource)                       │
-│       │ GetContent()                                      │
-│       ▼                                                   │
-│  Lexer (DKFF)  ──►  Token 流  ──►  Parser (DLRD)          │
-│                                          │                │
-│                                          ▼                │
-│                                    Stat AST  +  Expr AST  │
-│                                          │                │
-│                                          ▼                │
-│                                    *Template (env+ast)    │
-└───────────────────────────────────────────────────────────┘
-
-          渲染期（每次 Render 都跑一遍，无再解析）
-┌───────────────────────────────────────────────────────────┐
-│  Template.Render(data, writer)                            │
-│       │                                                   │
-│       ▼                                                   │
-│  Scope(data, sharedObjectMap)  +  Ctrl  +  IOAdapter      │
-│       │                                                   │
-│       ▼                                                   │
-│  Stat.Exec(env, scope, writer, ctrl)  （AST 递归）        │
-│       │  遇到表达式节点                                    │
-│       ▼                                                   │
-│  Expr.Eval(scope, ctrl)  （反射 + 共享方法/扩展方法）       │
-└───────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph COMPILE["编译期（一次性，结果缓存到 Engine.templateCache）"]
+        SRC["Source (FileSource | StringSource)"] -->|"GetContent()"| LEX["Lexer (DKFF)"]
+        LEX -->|"Token 流"| PAR["Parser (DLRD)"]
+        PAR --> AST["Stat AST + Expr AST"]
+        AST --> TPL["*Template (env+ast)"]
+    end
+    subgraph RENDER["渲染期（每次 Render 都跑一遍，无再解析）"]
+        TPLR["Template.Render(data, writer)"] --> SCOPE["Scope(data, sharedObjectMap)<br/>+ Ctrl + IOAdapter"]
+        SCOPE --> EXEC["Stat.Exec(env, scope, writer, ctrl)<br/>（AST 递归）"]
+        EXEC -->|"遇到表达式节点"| EVAL["Expr.Eval(scope, ctrl)<br/>（反射 + 共享方法/扩展方法）"]
+    end
 ```
 
 核心类型职责：

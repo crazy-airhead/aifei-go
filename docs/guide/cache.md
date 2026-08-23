@@ -48,28 +48,18 @@ Aifei-Go 的 `plugins/cache` 选用成熟的 [jetcache-go](https://github.com/mg
 
 ### 数据流
 
-```
-              应用代码
-                 │
-   ┌─────────────┴──────────────┐
-   │ 顶层助手 cache.Get/Set/...   │  ← 作用于默认实例
-   │ cache.Use("user").Get(...)  │  ← 切换到命名实例
-   └─────────────┬──────────────┘
-                 │ defaultManager (包级)
-                 ▼
-             Manager
-        ┌───────┼───────┐
-        ▼       ▼       ▼
-   "default" "user"  "session"   ← 命名实例（各自一份 JetCache）
-        │       │       │
-        ▼       ▼       ▼
-     JetCache（prefix 隔离）
-        │
-   ┌────┴────┐
-   ▼         ▼
-  L1        L2 (Redis)        ← 由 CacheType 决定挂哪些层
- freecache  go-redis
- /tinylfu
+```mermaid
+flowchart TD
+    APP["应用代码"] --> TOP["顶层助手 cache.Get/Set/...（作用于默认实例）<br/>cache.Use(&quot;user&quot;).Get(...)（切换到命名实例）"]
+    TOP -->|"defaultManager（包级）"| MGR["Manager"]
+    MGR -->|"命名实例（各自一份 JetCache）"| DEF["&quot;default&quot;"]
+    MGR -->|"命名实例（各自一份 JetCache）"| USR["&quot;user&quot;"]
+    MGR -->|"命名实例（各自一份 JetCache）"| SES["&quot;session&quot;"]
+    DEF --> JC["JetCache（prefix 隔离）"]
+    USR --> JC
+    SES --> JC
+    JC -->|"由 CacheType 决定挂哪些层"| L1["L1<br/>freecache / tinylfu"]
+    JC -->|"由 CacheType 决定挂哪些层"| L2["L2（Redis）<br/>go-redis"]
 ```
 
 关键设计点：

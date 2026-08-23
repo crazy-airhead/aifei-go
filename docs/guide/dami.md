@@ -33,37 +33,14 @@
 
 ## 2. 总体架构
 
-```
-               ┌──────────────────────────────────────────────┐
-   应用代码 ──▶│ 包级便捷 API：Send/Listen/Call/Stream/ListenXxx │
-               │   操作 defaultBus（对应 Java Dami.bus()）       │
-               └──────────────────────┬───────────────────────┘
-                                      │ SendOn/ListenOn/CallOn/StreamOn 显式传 *Bus
-               ┌──────────────────────┴───────────────────────┐
-   Bus 实例   │ Bus{ router, dispatcher }                      │
-               │   Router()/Intercept()/UnlistenAll()/Stop()   │
-               └──────────────────────┬───────────────────────┘
-                                      │ dispatcher.Dispatch(ev, router)
-               ┌──────────────────────┴───────────────────────┐
-   调度层     │ Dispatcher：① Router.Match(topic)              │
-               │   ② Interceptor 链（按 index 升序）           │
-               │   ③ distribute 按序调 listener，首错即止       │
-               │   ④ 全部命中后 markHandled                    │
-               └──────────────────────┬───────────────────────┘
-                                      │
-            ┌─────────────────────────┴────────────────────────┐
-   路由层   │ Router（hash 默认 / path 通配 / tag 标签）         │
-            │   Match(topic) → []*holder（按 index 排序）        │
-            └─────────────────────────┬────────────────────────┘
-                                      │ holder.handle(ev) → 类型断言 *Event[P] → Listener[P]
-            ┌─────────────────────────┴────────────────────────┐
-   监听层   │ Listener[P] func(*Event[P]) error                 │
-            │   P 的类型在 Send/Listen 两侧约定一致（运行时断言） │
-            └──────────────────────────────────────────────────┘
-
-   call/stream：payload 是 *RequestPayload[D]
-      └─ Sink（Future[R] / chan StreamItem[R]）由发送方创建并塞进 payload
-         listener 通过 Sink.Next / Sink.Complete 回复，与 send 同管道
+```mermaid
+flowchart TD
+    APP["应用代码"] --> API["包级便捷 API：Send/Listen/Call/Stream/ListenXxx<br/>操作 defaultBus（对应 Java Dami.bus()）"]
+    API -->|"SendOn/ListenOn/CallOn/StreamOn 显式传 *Bus"| BUS["Bus 实例<br/>Bus{ router, dispatcher }<br/>Router()/Intercept()/UnlistenAll()/Stop()"]
+    BUS -->|"dispatcher.Dispatch(ev, router)"| DISP["调度层 Dispatcher：<br/>① Router.Match(topic)<br/>② Interceptor 链（按 index 升序）<br/>③ distribute 按序调 listener，首错即止<br/>④ 全部命中后 markHandled"]
+    DISP --> ROUTE["路由层 Router（hash 默认 / path 通配 / tag 标签）<br/>Match(topic) → []*holder（按 index 排序）"]
+    ROUTE -->|"holder.handle(ev) → 类型断言 *Event[P] → Listener[P]"| LISTEN["监听层 Listener[P] func(*Event[P]) error<br/>P 的类型在 Send/Listen 两侧约定一致（运行时断言）"]
+    LISTEN -.->|"call/stream 走同一管道"| NOTE["call/stream：payload 是 *RequestPayload[D]<br/>Sink（Future[R] / chan StreamItem[R]）由发送方创建并塞进 payload<br/>listener 通过 Sink.Next / Sink.Complete 回复，与 send 同管道"]
 ```
 
 核心类型一览：

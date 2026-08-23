@@ -30,29 +30,17 @@ Aifei-Go 的数据访问层 [db](db.md) 提供 `Row`（Active Record）与 `Dao`
 
 ## 2. 总体架构
 
-```
-                  ┌──────────────────────────────────┐
-                  │  Generator.Generate()            │
-                  │  （入口：generator.go）            │
-                  └──────────────┬───────────────────┘
-                                 │
-        ┌────────────────────────┼─────────────────────────┐
-        │ 1. 元数据读取           │ 2. 命名派生              │ 3. 逐表生成
-        │   MetaReader.Read       │   PkgName/StructName     │   base → model
-        │   ↓                    │   /BaseName              │     → dao → service
-        │   MySQL/PG/SQLite       │                         │ 4. tables.go
-        │   MetaDialect           │                         │   汇总空白导入
-        └────────────────────────┴─────────────────────────┘
-                                 │
-                                 ▼
-                 ┌────────────────────────────────────┐
-                 │  Enjoy Engine（共享 u: TemplateUtil）│
-                 │  渲染 5 个 .af 模板                  │
-                 └────────────────────────────────────┘
-                                 │
-                                 ▼
-   outputDir/<pkg>/base.go     model.go     dao.go     service.go
-   outputDir/tables.go   （空白 import 触发各 base/service 的 init()）
+```mermaid
+flowchart TD
+    GEN["Generator.Generate()<br/>（入口：generator.go）"] --> P1["1. 元数据读取<br/>MetaReader.Read ↓<br/>MySQL/PG/SQLite MetaDialect"]
+    GEN --> P2["2. 命名派生<br/>PkgName / StructName / BaseName"]
+    GEN --> P3["3. 逐表生成<br/>base → model → dao → service"]
+    GEN --> P4["4. tables.go<br/>汇总空白导入"]
+    P1 --> ENJ["Enjoy Engine（共享 u: TemplateUtil）<br/>渲染 5 个 .af 模板"]
+    P2 --> ENJ
+    P3 --> ENJ
+    P4 --> ENJ
+    ENJ --> OUT["outputDir/&lt;pkg&gt;/base.go · model.go · dao.go · service.go<br/>outputDir/tables.go（空白 import 触发各 base/service 的 init()）"]
 ```
 
 核心抽象（关键类型一览）：
@@ -198,16 +186,16 @@ mr.SetSkip(func(t string) bool { return strings.HasPrefix(t, "bak_") })
 
 判定顺序（`shouldProcess`）：
 
-```
-whitelist 非空 → 只取白名单
-    ↓ 否则
-filter 已设 → 走 filter
-    ↓ 否则
-blacklist 命中 → 跳过
-    ↓
-skip 命中 → 跳过
-    ↓
-默认处理
+```mermaid
+flowchart TD
+    W{"whitelist 非空？"} -->|"是"| WL["只取白名单"]
+    W -->|"否则"| F{"filter 已设？"}
+    F -->|"是"| FT["走 filter"]
+    F -->|"否则"| B{"blacklist 命中？"}
+    B -->|"是"| SKIP["跳过"]
+    B -->|"否"| S{"skip 命中？"}
+    S -->|"是"| SKIP
+    S -->|"否"| DEF["默认处理"]
 ```
 
 ### 4.3 NULL 处理与 KeyFormat
@@ -321,13 +309,12 @@ tm.RemoveMapping("JSON")              // 删除，回退到 string
 
 `TablePrefix` 剥离发生在命名之前：
 
-```
-sys_login_log  ──[strip sys_]──►  login_log
-                                       │
-                          ┌────────────┼─────────────┐
-                          ▼            ▼             ▼
-                     PkgName      StructName     TableName（代码里）
-                     loginlog     LoginLog       "sys_login_log"   ← 原始名保留
+```mermaid
+flowchart LR
+    SRC["sys_login_log"] -->|"strip sys_"| STRIP["login_log"]
+    STRIP --> P["PkgName<br/>loginlog"]
+    STRIP --> S["StructName<br/>LoginLog"]
+    STRIP --> T["TableName（代码里）<br/>#quot;sys_login_log#quot; ← 原始名保留"]
 ```
 
 测试明确验证：包名/结构体名用去前缀的版本，但 `base.go` 里 `Table.Name` 字段仍是原始 `sys_login_log`，保证运行时 SQL 打到正确的表。

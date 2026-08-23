@@ -53,12 +53,14 @@ pnpm docs:dev       # 本地开发（http://localhost:5173/aifei-go/，注意 ba
 pnpm docs:build     # 构建到 docs/.vitepress/dist（构建即死链检查，失败会报 file:line）
 pnpm docs:preview   # 预览构建产物
 pnpm docs:clean     # 清理 dist 与缓存
+pnpm docs:mermaid   # 校验所有 ```mermaid 块语法（构建不查 mermaid，改图后必跑）
 ```
 
 内容规则：
 
 - 站点收录 `docs/guide/` 与 `docs/arch/`；`docs/issues/` 和 `**/_*.md`（如 `guide/_STYLE.md`）通过 `srcExclude` 排除，不发布。
 - 不要添加指向 `issues/`、`_` 前缀文件或 `docs/` 之外的相对链接——死链会让构建直接失败（这是有意的质量门禁）。
+- 架构/流程/时序**图一律用 ```mermaid 代码块**（`vitepress-plugin-mermaid` 渲染）：flowchart 表架构与数据流、sequenceDiagram 表交互时序；节点文本必须双引号包裹、标签内勿用裸 `"`（用 `#quot;` 或去引号）、id 用短英文。**文件树（├──/└──）保持 ASCII 不转图**。新写/修改 mermaid 后跑 `pnpm docs:mermaid`——VitePress 构建不校验 mermaid 语法，错误只会在浏览器渲染时才暴露。
 - 侧边栏/导航为手工维护的 curated 配置（`config.ts` 里的 `sidebar`），新增文档需同步更新。
 - 部署：push 到 GitHub 远端 `master` 触发 `.github/workflows/docs.yml`，构建产物以孤儿单提交推到 `gh-pages` 分支，由 GitHub Pages（base `/aifei-go/`）对外服务。
 

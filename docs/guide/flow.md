@@ -24,25 +24,23 @@
 
 ### 2.1 两层能力：自动编排 vs 人工工作流
 
-```
-            【第一层：flow —— 自动编排（跑到完）】
-  配置文本 / GraphSpec ──Create──▶ Graph（不可变：Nodes + Links + Start）
-                                        │
-        Engine.Load(graph)              ▼
-        Engine.Eval(graph, ctx) ─▶ Exchanger（单次求值状态：步数/网关聚合/中断标志）
-                                        │ 递归 nodeRun：节点任务 → 出边 when → 下一节点
-                                        ▼
-              Driver（默认 SimpleDriver ← AbstractDriver）
-                 ├── Evaluation（默认 EnjoyEvaluation：when/task 表达式）
-                 ├── Container（@组件 查找）
-                 └── task 前缀分发：@组件 / #子图 / $meta / 表达式
-              Context（实例变量域 + Trace + Stop/Interrupt + ToJSON 快照）
-
-            【第二层：flow/workflow —— 人工任务（停在节点等人办）】
-  Executor（claim/find/submit 门面）
-     └── WorkflowDriver（包一层 Driver，把"跑到完"翻译成"停在可操作节点"）
-           ├── StateController：谁可操作 / 是否自动前进
-           └── StateRepository：每实例每节点状态（插件提供 MySQL 实现）
+```mermaid
+flowchart TD
+    subgraph L1["第一层：flow —— 自动编排（跑到完）"]
+        SRC["配置文本 / GraphSpec"] -->|"Create"| G["Graph（不可变：Nodes + Links + Start）"]
+        ENG["Engine.Load(graph)<br/>Engine.Eval(graph, ctx)"] --> EX["Exchanger<br/>（单次求值状态：步数/网关聚合/中断标志）"]
+        G --> EX
+        EX -->|"递归 nodeRun：节点任务 → 出边 when → 下一节点"| DRV["Driver（默认 SimpleDriver ← AbstractDriver）"]
+        DRV --> D1["Evaluation（默认 EnjoyEvaluation：when/task 表达式）"]
+        DRV --> D2["Container（@组件 查找）"]
+        DRV --> D3["task 前缀分发：@组件 / #子图 / $meta / 表达式"]
+        CTX["Context（实例变量域 + Trace + Stop/Interrupt + ToJSON 快照）"]
+    end
+    subgraph L2["第二层：flow/workflow —— 人工任务（停在节点等人办）"]
+        EXEC["Executor（claim/find/submit 门面）"] --> WD["WorkflowDriver（包一层 Driver，把#quot;跑到完#quot;翻译成#quot;停在可操作节点#quot;）"]
+        WD --> SC["StateController：谁可操作 / 是否自动前进"]
+        WD --> SR["StateRepository：每实例每节点状态（插件提供 MySQL 实现）"]
+    end
 ```
 
 ### 2.2 关键类型一览

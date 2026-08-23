@@ -58,26 +58,14 @@ Java 版（`aifei-db` 的 `RowFactory`）也只调 `getColumnLabel(i)`，**并�
 
 ## 4. 总体方案
 
-```
- 渲染后的 SQL 串
-        │
-        ▼
- ┌──────────────────┐    ┌──────────────────────┐
- │ db/sqlparse 扫描  │ ─► │ []TableRef{Table,Alias}│   FROM/JOIN
- │ (FROM/JOIN/SELECT)│    │ alias→*Table          │   别名表
- └──────────────────┘    │ colLabel→*Table(投影)  │   SELECT 投影
-        │                └──────────────────────┘
-        ▼                          │
- ┌──────────────────┐              ▼
- │ TableMapping     │ ◄── 合并所有涉及表的 FieldTypes / PKs
- │  primary         │
- │  colOwner        │
- │  mergedFieldTypes│
- └──────────────────┘
-        │
-        ▼
- decodeRows(rows, mapping)  ──►  每行 SetTable(primary)、SetPrimaryKeys、
-                                  用 mergedFieldTypes 解码 JSON 列
+```mermaid
+flowchart TD
+    SQL["渲染后的 SQL 串"] --> SCAN["db/sqlparse 扫描<br/>(FROM/JOIN/SELECT)"]
+    SCAN --> MAP["TableMapping<br/>primary · colOwner · mergedFieldTypes"]
+    SCAN --> RES["[]TableRef{Table,Alias} — FROM/JOIN<br/>alias→*Table — 别名表<br/>colLabel→*Table — SELECT 投影"]
+    RES -->|"合并所有涉及表的 FieldTypes / PKs"| MAP
+    MAP --> DEC["decodeRows(rows, mapping)"]
+    DEC --> ROWS["每行 SetTable(primary)、SetPrimaryKeys、<br/>用 mergedFieldTypes 解码 JSON 列"]
 ```
 
 三个层次的入口（控制力从强到弱，见 §9）：
@@ -308,12 +296,14 @@ type Dao struct {
 
 ### 9.2 选择优先级（在 `execFind` 等入口计算一次 mapping）
 
-```
-显式 Tables(...)        → buildMappingFromRefs(dao.multi, sql)     // 不解析 SQL，只查注册表
-否则 Config.AutoTableMapping=true 或 dao.AutoTables()
-                        → buildMappingFromSQL(sql)                 // 自动解析
-否则 dao.table 非空      → buildSingleTableMapping(dao.table)      // 现状
-否则                     → nil（不解码，现状）
+```mermaid
+flowchart TD
+    Q1{"显式 Tables(...)"} -->|"是"| R1["buildMappingFromRefs(dao.multi, sql)<br/>不解析 SQL，只查注册表"]
+    Q1 -->|"否"| Q2{"Config.AutoTableMapping=true<br/>或 dao.AutoTables()"}
+    Q2 -->|"是"| R2["buildMappingFromSQL(sql)<br/>自动解析"]
+    Q2 -->|"否"| Q3{"dao.table 非空"}
+    Q3 -->|"是"| R3["buildSingleTableMapping(dao.table)<br/>现状"]
+    Q3 -->|"否"| R4["nil (不解码，现状)"]
 ```
 
 mapping 按 SQL 串缓存（`sync.Map`），避免每次查询重复解析。

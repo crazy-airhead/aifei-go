@@ -1,8 +1,9 @@
 import { defineConfig } from 'vitepress'
+import { withMermaid } from 'vitepress-plugin-mermaid'
 
 // 站点内容：docs/guide（模块指南）+ docs/arch（架构设计）。
 // docs/issues 与 **/_*.md（如 guide/_STYLE.md）通过 srcExclude 排除，不发布到站点。
-export default defineConfig({
+export default withMermaid(defineConfig({
   lang: 'zh-CN',
   title: 'Aifei-Go',
   description:
@@ -186,4 +187,8 @@ export default defineConfig({
       copyright: 'Copyright © 2026 crazy-airhead',
     },
   },
-})
+  // 文档中的 ```mermaid 代码块（ASCII 架构图逐步迁移为 Mermaid）
+  mermaid: {
+    theme: 'default',
+  },
+}))

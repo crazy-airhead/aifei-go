@@ -44,29 +44,18 @@ WHERE status = ?
 
 插件的核心设计思想是：**从 context 取主体 → Policy 链改写 AST → 重建 SQL**。整个流程对业务代码完全透明。
 
-```
-             HTTP 请求（已认证）
-                   │
-  ┌────────────────┴────────────────┐
-  │ dataisolate.Middleware          │  ← 解析 Principal（租户/用户/部门/角色/权限）
-  │   Principal{Tenant, User, …}    │     内置 SubdomainHeaderResolver（仅租户）
-  │   in.SetContext(WithPrincipal)  │     应用可换 JWT/Session resolver（全量）
-  └────────────────┬────────────────┘
-                   │ in.Context() 携带 Principal
-                   ▼
-           Service → db.WithCtx(ctx)
-                   │
-                   ▼
-             *Dao（dao.ctx 携带 Principal）
-                   │ hook 触发
-  ┌────────────────┴────────────────┐
-  │ 1. 解析 SQL → AST               │
-  │ 2. Policy 链依次改写 AST：       │
-  │    ① FieldMask（投影脱敏）       │
-  │    ② Tenant（WHERE 注入）        │
-  │    ③ DataScope（WHERE 注入）     │
-  │ 3. 重建 SQL + 参数重排           │
-  └─────────────────────────────────┘
+```mermaid
+flowchart TD
+    REQ["HTTP 请求（已认证）"] --> MW["dataisolate.Middleware<br/>Principal{Tenant, User, …}<br/>in.SetContext(WithPrincipal)"]
+    NOTE["← 解析 Principal（租户/用户/部门/角色/权限）<br/>内置 SubdomainHeaderResolver（仅租户）<br/>应用可换 JWT/Session resolver（全量）"]
+    MW -.- NOTE
+    MW -->|"in.Context() 携带 Principal"| SVC["Service → db.WithCtx(ctx)"]
+    SVC --> DAO["*Dao（dao.ctx 携带 Principal）"]
+    subgraph REWRITE["AST 改写"]
+        R1["1. 解析 SQL → AST"] --> R2["2. Policy 链依次改写 AST：<br/>① FieldMask（投影脱敏）<br/>② Tenant（WHERE 注入）<br/>③ DataScope（WHERE 注入）"]
+        R2 --> R3["3. 重建 SQL + 参数重排"]
+    end
+    DAO -->|"hook 触发"| R1
 ```
 
 核心组件及其职责：
