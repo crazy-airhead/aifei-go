@@ -89,7 +89,7 @@ This project uses a Go workspace (`go.work`) of independent modules, layered by 
 |-------|--------|------|--------------|
 | Core | `github.com/crazy-airhead/aifei-go` | `./aifei` | — |
 | Core library | `…/aifei-go/enjoy` | `./enjoy` | — |
-| Core library | `…/aifei-go/db` | `./db` | enjoy |
+| Core library | `…/aifei-go/db` | `./db` | enjoy, log |
 | Core library | `…/aifei-go/json` | `./json` | — |
 | Core library | `…/aifei-go/log` | `./log` | — |
 | Core library | `…/aifei-go/config` | `./config` | `yaml.v3` |

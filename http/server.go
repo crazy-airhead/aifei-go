@@ -17,6 +17,10 @@ type Server interface {
 type DefaultServer struct {
 	addr   string
 	server *http.Server
+	// MaxHeaderBytes limits the size of request headers accepted by the
+	// server, in bytes. 0 keeps the net/http default (1MB). Set it (e.g.
+	// 16<<10) to reject oversized headers early.
+	MaxHeaderBytes int
 }
 
 // NewDefaultServer creates a DefaultServer listening on addr.
@@ -27,8 +31,9 @@ func NewDefaultServer(addr string) *DefaultServer {
 // Start starts the net/http server.
 func (s *DefaultServer) Start(handler http.Handler) error {
 	s.server = &http.Server{
-		Addr:    s.addr,
-		Handler: handler,
+		Addr:           s.addr,
+		Handler:        handler,
+		MaxHeaderBytes: s.MaxHeaderBytes,
 	}
 	return s.server.ListenAndServe()
 }

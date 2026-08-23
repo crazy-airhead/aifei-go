@@ -16,9 +16,10 @@ import (
 type Option func(*options)
 
 type options struct {
-	httpHandlers []func(http.Handler) http.Handler
-	rootWrapper  func(http.Handler) http.Handler
-	ioOptions    []IoOption
+	httpHandlers   []func(http.Handler) http.Handler
+	rootWrapper    func(http.Handler) http.Handler
+	ioOptions      []IoOption
+	maxHeaderBytes int
 }
 
 // WithCORS adds CORS handler to the HTTP handler chain.
@@ -63,6 +64,13 @@ func WithIoOptions(opts ...IoOption) Option {
 	return func(o *options) { o.ioOptions = append(o.ioOptions, opts...) }
 }
 
+// WithMaxHeaderBytes limits accepted request header size in bytes (对照 Java
+// undertow.maxHeaderSize). 0 keeps the net/http default (1MB); a typical
+// tightening is 16 << 10.
+func WithMaxHeaderBytes(n int) Option {
+	return func(o *options) { o.maxHeaderBytes = n }
+}
+
 // Run starts the server and blocks until a shutdown signal is received.
 func Run(app *aifei.Aifei, addr string, opts ...Option) {
 	o := &options{}
@@ -82,6 +90,7 @@ func Run(app *aifei.Aifei, addr string, opts ...Option) {
 	}
 
 	srv := aifeihttp.NewDefaultServer(addr)
+	srv.MaxHeaderBytes = o.maxHeaderBytes
 
 	for _, p := range app.Plugins() {
 		if err := p.Start(); err != nil {
@@ -112,8 +121,11 @@ func Run(app *aifei.Aifei, addr string, opts ...Option) {
 		f()
 	}
 
-	for _, p := range app.Plugins() {
-		_ = p.Stop()
+	// Stop plugins in reverse start order (对照 Java 29a46c6): a plugin
+	// started later may depend on earlier ones, so it must stop first.
+	plugins := app.Plugins()
+	for i := len(plugins) - 1; i >= 0; i-- {
+		_ = plugins[i].Stop()
 	}
 
 	fmt.Println("[AIFEI] Server stopped")

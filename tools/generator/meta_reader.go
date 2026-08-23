@@ -3,7 +3,9 @@ package generator
 import (
 	"database/sql"
 	"fmt"
+	"reflect"
 	"strings"
+	"time"
 
 	"github.com/crazy-airhead/aifei-go/db"
 )
@@ -319,7 +321,12 @@ func (mr *MetaReader) readFieldsFromDriver(pool *sql.DB, dialect MetaDialect, ta
 	for _, ct := range columnTypes {
 		fieldName := ct.Name()
 		dbType := strings.ToUpper(ct.DatabaseTypeName())
-		goType := mr.TypeMapping.GetType(dbType)
+		goType, mapped := mr.TypeMapping.Lookup(dbType)
+		if !mapped {
+			// Unmapped type name: infer from the driver's scan type instead of
+			// blindly defaulting to string.
+			goType = scanTypeToGoType(ct)
+		}
 
 		// NULL-able columns map to sql.Null* only when explicitly enabled.
 		if mr.ResolveNullable {
@@ -346,6 +353,36 @@ func (mr *MetaReader) readFieldsFromDriver(pool *sql.DB, dialect MetaDialect, ta
 		})
 	}
 	return nil
+}
+
+// scanTypeToGoType infers a Go field type from the driver's scan type when the
+// type name has no mapping (对照 Java JDBC 类型兜底:未命名类型按运行时读取
+// 路径推断,而非一律 string)。
+func scanTypeToGoType(ct *sql.ColumnType) string {
+	st := ct.ScanType()
+	if st == nil {
+		return "string"
+	}
+	if st == reflect.TypeFor[time.Time]() {
+		return "time.Time"
+	}
+	switch st.Kind() {
+	case reflect.String:
+		return "string"
+	case reflect.Bool:
+		return "bool"
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32:
+		return "int"
+	case reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return "int64"
+	case reflect.Float32, reflect.Float64:
+		return "float64"
+	case reflect.Slice:
+		if st.Elem().Kind() == reflect.Uint8 {
+			return "[]byte"
+		}
+	}
+	return "string"
 }
 
 // resolveNullableType maps a Go type to its sql.Null* variant for NULL-able

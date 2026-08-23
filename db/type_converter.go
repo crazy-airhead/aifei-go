@@ -2,7 +2,9 @@ package db
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -98,24 +100,73 @@ func ToFloat64(v interface{}) float64 {
 	return 0
 }
 
-// ToBool converts interface{} to bool.
+// ToBool converts interface{} to bool. Numbers are checked before strings
+// (对照 Java 828ce12: Number 先于 String), so any numeric type maps 0→false,
+// non-zero→true; strings use strconv.ParseBool plus the legacy yes/no forms
+// (case-insensitive).
 func ToBool(v interface{}) bool {
-	if v == nil {
-		return false
+	if n, ok := toBoolNumber(v); ok {
+		return n
 	}
 	switch n := v.(type) {
+	case nil:
+		return false
 	case bool:
 		return n
-	case int:
-		return n != 0
-	case int64:
-		return n != 0
-	case float64:
-		return n != 0
 	case string:
-		return n == "true" || n == "1" || n == "yes" || n == "TRUE" || n == "YES"
+		if b, err := strconv.ParseBool(strings.ToLower(n)); err == nil {
+			return b
+		}
+		switch strings.ToLower(n) {
+		case "yes", "y", "on":
+			return true
+		}
+		return false
+	case []byte:
+		return ToBool(string(n))
+	}
+	// Remaining numeric kinds not covered by toBoolNumber (other float widths).
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return rv.Int() != 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return rv.Uint() != 0
+	case reflect.Float32, reflect.Float64:
+		return rv.Float() != 0
 	}
 	return false
+}
+
+// toBoolNumber covers the common concrete numeric types without reflection.
+func toBoolNumber(v interface{}) (bool, bool) {
+	switch n := v.(type) {
+	case int:
+		return n != 0, true
+	case int8:
+		return n != 0, true
+	case int16:
+		return n != 0, true
+	case int32:
+		return n != 0, true
+	case int64:
+		return n != 0, true
+	case uint:
+		return n != 0, true
+	case uint8:
+		return n != 0, true
+	case uint16:
+		return n != 0, true
+	case uint32:
+		return n != 0, true
+	case uint64:
+		return n != 0, true
+	case float32:
+		return n != 0, true
+	case float64:
+		return n != 0, true
+	}
+	return false, false
 }
 
 // ToString converts interface{} to string.
@@ -136,30 +187,45 @@ func ToString(v interface{}) string {
 		return strconv.FormatBool(n)
 	case []byte:
 		return string(n)
+	case time.Time:
+		return n.Format(TimeFormat)
 	}
 	return fmt.Sprintf("%v", v)
 }
 
-// ToTime converts interface{} to time.Time.
-func ToTime(v interface{}) time.Time {
-	if v == nil {
-		return time.Time{}
-	}
+// timeParseLayouts are the layouts tried (in order) when converting a string
+// to time.Time. RFC3339Nano also covers RFC3339 and offset-less ISO forms.
+var timeParseLayouts = []string{
+	TimeFormat,       // "2006-01-02 15:04:05" (SQL DATETIME / TimeFormat)
+	time.RFC3339Nano, // "2006-01-02T15:04:05[.frac]Z07:00" (JSON / PG)
+	"2006-01-02",     // date-only (SQL DATE)
+	"15:04:05",       // time-only (SQL TIME)
+}
+
+// ToTime converts interface{} to time.Time. A nil value yields the zero time
+// with a nil error (a NULL column is a missing value, not a dirty one); a
+// string matching no known layout is an error — dirty data never silently
+// becomes the zero time.
+func ToTime(v interface{}) (time.Time, error) {
 	switch n := v.(type) {
+	case nil:
+		return time.Time{}, nil
 	case time.Time:
-		return n
+		return n, nil
 	case string:
-		for _, layout := range []string{
-			"2006-01-02 15:04:05",
-			"2006-01-02T15:04:05Z07:00",
-			"2006-01-02",
-			time.RFC3339,
-			time.RFC3339Nano,
-		} {
-			if t, err := time.Parse(layout, n); err == nil {
-				return t
-			}
+		return parseTimeWith(n, timeParseLayouts)
+	case []byte:
+		return parseTimeWith(string(n), timeParseLayouts)
+	}
+	return time.Time{}, fmt.Errorf("db: cannot convert %T to time.Time", v)
+}
+
+// parseTimeWith parses s with the given layouts (in order).
+func parseTimeWith(s string, layouts []string) (time.Time, error) {
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, nil
 		}
 	}
-	return time.Time{}
+	return time.Time{}, fmt.Errorf("db: cannot parse %q as time (tried layouts: %q)", s, layouts)
 }

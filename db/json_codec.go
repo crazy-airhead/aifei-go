@@ -283,23 +283,17 @@ func decodeToType(v interface{}, typ reflect.Type) (interface{}, bool) {
 	return ptr.Elem().Interface(), true
 }
 
-// parseTimeValue tries to parse a string value as time.Time using TimeFormat
-// and common fallback layouts. Non-string values are returned unchanged.
+// parseTimeValue tries to parse a string value as time.Time using the shared
+// timeParseLayouts. This is the JSON-input path and is intentionally lenient:
+// a string that matches no layout stays a string (unlike ToTime, which is the
+// strict output path). Non-string values are returned unchanged.
 func parseTimeValue(v interface{}) interface{} {
 	s, ok := v.(string)
 	if !ok {
 		return v
 	}
-	for _, layout := range []string{
-		TimeFormat,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02",
-		time.RFC3339,
-		time.RFC3339Nano,
-	} {
-		if t, err := time.Parse(layout, s); err == nil {
-			return t
-		}
+	if t, err := parseTimeWith(s, timeParseLayouts); err == nil {
+		return t
 	}
 	return v
 }

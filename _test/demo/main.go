@@ -68,6 +68,8 @@ func main() {
 	// Start with HTTP-level middleware
 	server.Run(app, ":8081",
 		server.WithCORS("*"),
+		// Limit accepted request headers to 16KB (net/http default is 1MB).
+		server.WithMaxHeaderBytes(16<<10),
 		//server.WithBasicAuth(func(u, p string) bool {
 		//	// Note: This protects ALL routes. To protect only /api/admin,
 		//	// use path-aware middleware or a separate server instance.

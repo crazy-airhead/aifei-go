@@ -324,16 +324,30 @@ func (r *Row) GetBoolDefault(field string, def bool) bool {
 	return ToBool(v)
 }
 
-// GetTime returns a field as time.Time.
-func (r *Row) GetTime(field string) time.Time { return ToTime(r.Get(field)) }
+// GetTime returns a field as time.Time. A NULL/missing field yields the zero
+// time with a nil error; a value that cannot be parsed is an error.
+func (r *Row) GetTime(field string) (time.Time, error) { return ToTime(r.Get(field)) }
 
-// GetTimeDefault returns a field as time.Time with default.
-func (r *Row) GetTimeDefault(field string, def time.Time) time.Time {
+// GetTimeDefault returns a field as time.Time, falling back to def only when
+// the field is missing or NULL. Dirty values still return an error — the
+// default must not mask bad data.
+func (r *Row) GetTimeDefault(field string, def time.Time) (time.Time, error) {
 	v := r.Get(field)
 	if v == nil {
-		return def
+		return def, nil
 	}
 	return ToTime(v)
+}
+
+// GetTimeOrZero returns a field as time.Time with the loose semantics of
+// GetInt/GetStr: NULL, missing fields and unparseable values all yield the
+// zero time, no error. It backs generated model getters (whose signatures
+// stay single-value); hand-written code that must see dirty data should use
+// GetTime. Rows from queries are already parsed at scan time, so failures
+// here only occur for hand-built rows or JSON input.
+func (r *Row) GetTimeOrZero(field string) time.Time {
+	t, _ := r.GetTime(field)
+	return t
 }
 
 // GetBytes returns a field as []byte.

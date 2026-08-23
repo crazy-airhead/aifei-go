@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+
+	"github.com/crazy-airhead/aifei-go/log"
 )
 
 // Transaction executes fn in a database transaction on the default config.
@@ -34,16 +36,17 @@ func TransactionWithID(configID string, fn func(ctx context.Context) error) erro
 // nested call), fn joins that outer transaction and is neither committed nor
 // rolled back here — the error is simply propagated for the outermost owner to
 // act on.
-func TransactionCtx(ctx context.Context, fn func(ctx context.Context) error) error {
-	return TransactionCtxWithID(defaultConfigID, ctx, fn)
+func TransactionCtx(ctx context.Context, fn func(ctx context.Context) error, opts ...TxOption) error {
+	return TransactionCtxWithID(defaultConfigID, ctx, fn, opts...)
 }
 
 // TransactionCtxWithID is like TransactionCtx but for a specific config ID.
-func TransactionCtxWithID(configID string, ctx context.Context, fn func(ctx context.Context) error) error {
+func TransactionCtxWithID(configID string, ctx context.Context, fn func(ctx context.Context) error, opts ...TxOption) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	// Nested call: join the outer transaction instead of beginning a new one.
+	// The joined transaction runs at the outer owner's isolation level.
 	if _, ok := txFromContext(ctx); ok {
 		return fn(ctx)
 	}
@@ -52,13 +55,13 @@ func TransactionCtxWithID(configID string, ctx context.Context, fn func(ctx cont
 	if err != nil {
 		return err
 	}
-	tx, err := pool.Begin()
+	tx, err := beginTx(ctx, pool, opts)
 	if err != nil {
 		return err
 	}
 	txCtx := withTx(ctx, tx)
 	if err := fn(txCtx); err != nil {
-		tx.Rollback()
+		rollbackTx(tx)
 		return err
 	}
 	return tx.Commit()
@@ -130,12 +133,12 @@ func TransactionOfWithID[R any](configID string, fn func(ctx context.Context, tx
 }
 
 // TransactionOfCtx is like TransactionOf but derived from ctx.
-func TransactionOfCtx[R any](ctx context.Context, fn func(ctx context.Context, tx *Tx) (R, error)) (R, error) {
-	return TransactionOfCtxWithID(defaultConfigID, ctx, fn)
+func TransactionOfCtx[R any](ctx context.Context, fn func(ctx context.Context, tx *Tx) (R, error), opts ...TxOption) (R, error) {
+	return TransactionOfCtxWithID(defaultConfigID, ctx, fn, opts...)
 }
 
 // TransactionOfCtxWithID is like TransactionOfCtx but for a specific config ID.
-func TransactionOfCtxWithID[R any](configID string, ctx context.Context, fn func(ctx context.Context, tx *Tx) (R, error)) (R, error) {
+func TransactionOfCtxWithID[R any](configID string, ctx context.Context, fn func(ctx context.Context, tx *Tx) (R, error), opts ...TxOption) (R, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -149,7 +152,7 @@ func TransactionOfCtxWithID[R any](configID string, ctx context.Context, fn func
 		var zero R
 		return zero, err
 	}
-	tx, err := pool.Begin()
+	tx, err := beginTx(ctx, pool, opts)
 	if err != nil {
 		var zero R
 		return zero, err
@@ -157,7 +160,7 @@ func TransactionOfCtxWithID[R any](configID string, ctx context.Context, fn func
 	txCtx := withTx(ctx, tx)
 	result, commit, err := runAtomDecision(txCtx, fn)
 	if err != nil || !commit {
-		tx.Rollback()
+		rollbackTx(tx)
 		if err != nil {
 			return result, err
 		}
@@ -167,6 +170,42 @@ func TransactionOfCtxWithID[R any](configID string, ctx context.Context, fn func
 		return result, err
 	}
 	return result, nil
+}
+
+// TxOption configures how a transaction is begun (isolation level, read-only).
+type TxOption func(*sql.TxOptions)
+
+// WithIsolation sets the transaction isolation level
+// (sql.LevelDefault keeps the driver default).
+func WithIsolation(level sql.IsolationLevel) TxOption {
+	return func(o *sql.TxOptions) { o.Isolation = level }
+}
+
+// WithReadOnly marks the transaction read-only (drivers may optimize).
+func WithReadOnly() TxOption {
+	return func(o *sql.TxOptions) { o.ReadOnly = true }
+}
+
+// beginTx begins a transaction, applying opts via BeginTx when any are given
+// and plain Begin otherwise.
+func beginTx(ctx context.Context, pool *sql.DB, opts []TxOption) (*sql.Tx, error) {
+	if len(opts) == 0 {
+		return pool.Begin()
+	}
+	o := &sql.TxOptions{}
+	for _, opt := range opts {
+		opt(o)
+	}
+	return pool.BeginTx(ctx, o)
+}
+
+// rollbackTx rolls back and reports failures to the default logger without
+// masking the error the caller is already returning (对照 Java 事务硬化:回滚失败
+// 记日志,不覆盖原始异常)。
+func rollbackTx(tx *sql.Tx) {
+	if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+		log.Warn("db: transaction rollback error: %v", err)
+	}
 }
 
 // runAtom runs fn against an already-joined (nested) transaction. An active

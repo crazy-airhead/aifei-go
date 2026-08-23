@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	dbsql "github.com/crazy-airhead/aifei-go/db/sql"
 )
@@ -768,8 +769,11 @@ func execForEach(dao *Dao, fn func(*Row) bool) error {
 	}
 	colTypes, _ := rows.ColumnTypes()
 	isBinary := make([]bool, len(colTypes))
+	temporal := make([][]string, len(colTypes))
 	for i, ct := range colTypes {
-		isBinary[i] = isBinaryColumnType(ct.DatabaseTypeName())
+		typeName := ct.DatabaseTypeName()
+		isBinary[i] = isBinaryColumnType(typeName)
+		temporal[i] = temporalLayoutsFor(typeName)
 	}
 	mapping := resolveMapping(dao, query)
 	var rowList []*Row
@@ -787,6 +791,12 @@ func execForEach(dao *Dao, fn func(*Row) bool) error {
 			if p, ok := val.(*interface{}); ok {
 				if isBinary[i] {
 					data[col] = *p
+				} else if layouts := temporal[i]; layouts != nil {
+					t, err := scanTemporal(*p, layouts)
+					if err != nil {
+						return fmt.Errorf("column %q: %w", col, err)
+					}
+					data[col] = t
 				} else {
 					data[col] = bytesToStr(*p)
 				}
@@ -1040,7 +1050,7 @@ func execTransaction(dao *Dao, fn func(ctx context.Context, d *Dao) error) error
 	txDao := *dao // shallow copy keeps builder state; only ctx is overridden
 	txDao.ctx = txCtx
 	if err := fn(txCtx, &txDao); err != nil {
-		tx.Rollback()
+		rollbackTx(tx)
 		return err
 	}
 	return tx.Commit()
@@ -1085,7 +1095,7 @@ func execTransactionOf[R any](dao *Dao, fn func(ctx context.Context, d *Dao, tx 
 	txDao.ctx = txCtx
 	result, commit, err := run(txCtx, &txDao)
 	if err != nil || !commit {
-		tx.Rollback()
+		rollbackTx(tx)
 		if err != nil {
 			return result, err
 		}
@@ -1120,8 +1130,11 @@ func scanRows(rows *sql.Rows) ([]*Row, error) {
 	}
 	colTypes, _ := rows.ColumnTypes()
 	isBinary := make([]bool, len(colTypes))
+	temporal := make([][]string, len(colTypes))
 	for i, ct := range colTypes {
-		isBinary[i] = isBinaryColumnType(ct.DatabaseTypeName())
+		typeName := ct.DatabaseTypeName()
+		isBinary[i] = isBinaryColumnType(typeName)
+		temporal[i] = temporalLayoutsFor(typeName)
 	}
 	var results []*Row
 	for rows.Next() {
@@ -1138,6 +1151,12 @@ func scanRows(rows *sql.Rows) ([]*Row, error) {
 			if p, ok := val.(*interface{}); ok {
 				if isBinary[i] {
 					data[col] = *p
+				} else if layouts := temporal[i]; layouts != nil {
+					t, err := scanTemporal(*p, layouts)
+					if err != nil {
+						return nil, fmt.Errorf("column %q: %w", col, err)
+					}
+					data[col] = t
 				} else {
 					data[col] = bytesToStr(*p)
 				}
@@ -1224,6 +1243,42 @@ func bytesToStr(v interface{}) interface{} {
 		return string(b)
 	}
 	return v
+}
+
+// temporalLayoutsFor returns the parse layouts for temporal column types, or
+// nil when the column is not temporal. DATE/TIME/DATETIME/TIMESTAMP columns
+// declared in the schema are parsed into time.Time at scan time, so Rows hold
+// one canonical temporal value regardless of driver behavior (MySQL returns
+// []byte without parseTime=true; SQLite returns TEXT).
+func temporalLayoutsFor(dbType string) []string {
+	switch strings.ToUpper(dbType) {
+	case "DATE":
+		return []string{"2006-01-02"}
+	case "TIME":
+		return []string{"15:04:05.999999999", "15:04:05"}
+	case "DATETIME", "TIMESTAMP", "TIMESTAMPTZ":
+		return timeParseLayouts
+	}
+	return nil
+}
+
+// scanTemporal converts a scanned temporal column value to time.Time:
+// time.Time passes through, strings/[]byte are parsed with layouts, nil stays
+// nil (NULL), and other types (e.g. epoch integers) are kept as-is. A string
+// that matches no layout is an error — dirty temporal data must fail loudly
+// at the query boundary instead of silently becoming the zero time.
+func scanTemporal(v interface{}, layouts []string) (interface{}, error) {
+	switch n := v.(type) {
+	case nil:
+		return nil, nil
+	case time.Time:
+		return n, nil
+	case string:
+		return parseTimeWith(n, layouts)
+	case []byte:
+		return parseTimeWith(string(n), layouts)
+	}
+	return v, nil
 }
 
 // isBinaryColumnType returns true for database column types that store binary data.

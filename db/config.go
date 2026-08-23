@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	dbsql "github.com/crazy-airhead/aifei-go/db/sql"
@@ -24,6 +25,7 @@ type Config struct {
 	HookKit          *DbHookKit
 	AutoTableMapping bool // opt-in: auto-parse raw SQL for multi-table column mapping
 	pool             *sql.DB
+	mu               sync.Mutex // guards pool and SqlKit lazy init; Config must not be copied by value
 }
 
 // ConfigOption is a functional option for Config.
@@ -76,13 +78,18 @@ func (c *Config) GetDbHookKit() *DbHookKit {
 
 // GetSqlKit returns the SqlKit, creating a default one if nil.
 func (c *Config) GetSqlKit() *dbsql.SqlKit {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.SqlKit == nil {
 		c.SqlKit = dbsql.NewSqlKit(c.ID)
 	}
 	return c.SqlKit
 }
 
-var configs = map[string]*Config{}
+var (
+	configsMu sync.RWMutex
+	configs   = map[string]*Config{}
+)
 var defaultConfigID = "main"
 
 // Init initializes the default database.
@@ -103,7 +110,9 @@ func InitWithID(configID, driverName, dsn string, opts ...ConfigOption) error {
 	if c.Dialect == nil {
 		c.Dialect = NewDialect(driverName)
 	}
+	configsMu.Lock()
 	configs[configID] = c
+	configsMu.Unlock()
 	return nil
 }
 
@@ -113,11 +122,17 @@ func GetConfig(id ...string) *Config {
 	if len(id) > 0 && id[0] != "" {
 		key = id[0]
 	}
+	configsMu.RLock()
+	defer configsMu.RUnlock()
 	return configs[key]
 }
 
-// Pool returns the sql.DB connection pool (lazy init).
+// Pool returns the sql.DB connection pool (lazy init). Concurrent calls are
+// safe: the first caller initializes the pool while others wait, and every
+// caller receives the same *sql.DB instance.
 func (c *Config) Pool() (*sql.DB, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.pool != nil {
 		return c.pool, nil
 	}
@@ -135,6 +150,7 @@ func (c *Config) Pool() (*sql.DB, error) {
 		db.SetConnMaxLifetime(c.MaxLife)
 	}
 	if err := db.Ping(); err != nil {
+		db.Close()
 		return nil, fmt.Errorf("db ping error: %w", err)
 	}
 	c.pool = db
@@ -162,8 +178,11 @@ func (c *Config) GetDialect() Dialect {
 	return c.Dialect
 }
 
-// Close releases the connection pool.
+// Close releases the connection pool. It is idempotent and safe for
+// concurrent use with Pool.
 func (c *Config) Close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.pool != nil {
 		c.pool.Close()
 		c.pool = nil
@@ -172,6 +191,8 @@ func (c *Config) Close() {
 
 // ResetConfigs removes all registered configs and closes their pools (for testing).
 func ResetConfigs() {
+	configsMu.Lock()
+	defer configsMu.Unlock()
 	for _, c := range configs {
 		c.Close()
 	}

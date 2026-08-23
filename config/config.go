@@ -168,11 +168,12 @@ func Load(args []string, opts ...Option) error {
 		}
 	}
 
-	// L2: Load extension configs
+	// L2: Load extension configs; every loaded file also gets its -{env}
+	// variant applied on top, so extension configs receive the same env
+	// propagation as L1 base files (对照 Java PropKit active profiles).
 	extPaths := collectExtensionPaths(store, cfg)
 	for _, p := range extPaths {
-		fullPath := filepath.Join(cfg.configDir, p)
-		if err := store.LoadYAMLPattern(fullPath); err != nil {
+		if err := loadExtensionWithEnv(store, cfg, env, p); err != nil {
 			return err
 		}
 	}
@@ -188,6 +189,10 @@ func Load(args []string, opts ...Option) error {
 			for _, base := range cfg.baseFiles {
 				envPath := filepath.Join(cfg.configDir, envFileName(base, env))
 				_ = store.LoadYAML(envPath) // ignore error, file may not exist
+			}
+			// Extension configs catch up on the late-resolved env too.
+			for _, p := range extPaths {
+				_ = loadEnvVariantsFor(store, cfg, env, p)
 			}
 		}
 	}
@@ -247,6 +252,45 @@ func envFileName(base, env string) string {
 		return baseName + "-" + env + ext
 	}
 	return base + "-" + env
+}
+
+// loadExtensionWithEnv loads one extension config entry (a file or glob,
+// relative to the config dir) followed by the -{env} variant of each matched
+// file, mirroring the base-then-env layering of L1. Missing files and missing
+// variants are skipped.
+func loadExtensionWithEnv(store *Props, cfg *loaderConfig, env, pattern string) error {
+	full := filepath.Join(cfg.configDir, pattern)
+	matches, err := filepath.Glob(full)
+	if err != nil {
+		return fmt.Errorf("glob pattern %s: %w", full, err)
+	}
+	for _, m := range matches {
+		if err := store.LoadYAML(m); err != nil {
+			return err
+		}
+		if env != "" {
+			if err := store.LoadYAML(envFileName(m, env)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// loadEnvVariantsFor loads only the -{env} variants of the files matched by
+// pattern; used when the env is resolved late (after L3).
+func loadEnvVariantsFor(store *Props, cfg *loaderConfig, env, pattern string) error {
+	full := filepath.Join(cfg.configDir, pattern)
+	matches, err := filepath.Glob(full)
+	if err != nil {
+		return fmt.Errorf("glob pattern %s: %w", full, err)
+	}
+	for _, m := range matches {
+		if err := store.LoadYAML(envFileName(m, env)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // collectExtensionPaths gathers extension config paths from two sources:

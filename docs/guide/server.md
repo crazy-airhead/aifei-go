@@ -387,7 +387,7 @@ func Run(app *aifei.Aifei, addr string, opts ...Option)
 5. `NewDefaultServer(addr)`
 6. **启动**：遍历 `app.Plugins()` 调 `Start()`（失败 `log.Fatal`）；调 `OnStart` 回调
 7. goroutine 里 `srv.Start(h)`；主 goroutine 等 `SIGINT`/`SIGTERM`
-8. **停机**：`srv.Stop()`（5s 优雅）；调 `OnStop`；遍历 plugins 调 `Stop()`
+8. **停机**：`srv.Stop()`（5s 优雅）；调 `OnStop`；**逆序**遍历 plugins 调 `Stop()`（与启动顺序相反，后启动的先停）
 
 ### 8.3 Run 选项
 
@@ -399,6 +399,7 @@ func Run(app *aifei.Aifei, addr string, opts ...Option)
 | `WithHTTPHandler(m)` | 任意 `func(http.Handler) http.Handler` |
 | `WithRootHandler(wrap)` | 包核心 aifei handler（短路特定路径） |
 | `WithIoOptions(opts ...)` | 配置 IoHandler（视图引擎、下载根、dev 模式） |
+| `WithMaxHeaderBytes(n)` | 限制请求头大小（字节）；0 = net/http 默认 1MB，常用收紧值 `16<<10` |
 
 ### 8.4 完整 main 模板
 

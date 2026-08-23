@@ -240,8 +240,10 @@ rows, err := db.Sql(tpl, data).Find()
 | `Keep(fields...)` | 仅保留指定字段（同时清理 data 和 change） |
 | `Remove(fields...)` / `RemoveNullFields()` / `Clear()` | 删除字段 / 移除 nil 值 / 全清 |
 | `Get` / `GetDefault` | `interface{}`（缺席返回 nil/默认） |
-| `GetStr/GetInt/GetInt64/GetFloat64/GetBool/GetTime/GetBytes` | 已转型（调用 `type_converter.go` 的 `ToString/ToInt/...`） |
-| 各类型的 `GetXxxDefault(field, def)` | 缺席返回 `def` |
+| `GetStr/GetInt/GetInt64/GetFloat64/GetBool/GetBytes` | 已转型（调用 `type_converter.go` 的 `ToString/ToInt/...`） |
+| `GetTime(field) (time.Time, error)` | 已转型；解析失败返回 error（NULL 返回零值 + nil） |
+| `GetTimeOrZero(field) time.Time` | 宽松版：NULL/缺失/脏数据→零值（生成器 base.go 时间 getter 用它，签名保持单返回值） |
+| 各类型的 `GetXxxDefault(field, def)` | 缺席返回 `def`（`GetTimeDefault` 对脏数据仍返回 error） |
 | `RowAs[T](r, field, fn)` | nil 安全的泛型读取（fn 不在 nil 时调用） |
 | `Has` / `Size` / `FieldNames` / `FieldValues` / `ForEach(fn)` | 元信息 |
 
@@ -323,8 +325,10 @@ err := db.Transaction(func(ctx context.Context) error {
 })
 ```
 
-- `Transaction(fn)` / `TransactionWithID(id, fn)` / `TransactionCtx(ctx, fn)` / `TransactionCtxWithID(...)`：四种入口，ctx 版本支持嵌套。
-- **嵌套自动 join**：检测到 ctx 已携带 tx 时直接 `fn(ctx)`，不开新事务、不重复提交——交由最外层 owner 决定 commit/rollback。
+- `Transaction(fn)` / `TransactionWithID(id, fn)` / `TransactionCtx(ctx, fn, opts...)` / `TransactionCtxWithID(...)`：四种入口，ctx 版本支持嵌套。
+- **嵌套自动 join**：检测到 ctx 已携带 tx 时直接 `fn(ctx)`，不开新事务、不重复提交——交由最外层 owner 决定 commit/rollback（join 的事务沿用最外层的隔离级别）。
+- **隔离级别**：ctx 版本接受可选 `TxOption`——`db.WithIsolation(sql.LevelSerializable)`、`db.WithReadOnly()`，经 `BeginTx` 下发驱动；不传时用驱动默认。
+- **回滚失败可见**：rollback 出错会记日志（`log.Warn`），不会覆盖 fn 已返回的原始错误。
 - **手动事务**：`TxBegin(configID...)` 返回 `*sql.Tx`，配合 `db.WithTx(ctx, tx)` 传播；`TxFromContext(ctx)` 查询当前 tx。
 
 ### 泛型事务 + 业务回滚决策
@@ -370,7 +374,9 @@ res, err := db.TransactionOf(func(ctx context.Context, tx *db.Tx) (OrderResult, 
 
 ### TypeConverter
 
-`ToInt` / `ToInt64` / `ToFloat64` / `ToBool` / `ToString` / `ToTime` 都是 nil 安全、多源适配的转换函数，`Row.GetStr/GetInt/...` 与 `Kv.GetStr/...` 都基于它们。`ToTime` 依次尝试 `"2006-01-02 15:04:05"`、RFC3339、`"2006-01-02"` 等多种 layout。
+`ToInt` / `ToInt64` / `ToFloat64` / `ToBool` / `ToString` / `ToTime` 都是 nil 安全、多源适配的转换函数，`Row.GetStr/GetInt/...` 与 `Kv.GetStr/...` 都基于它们。`ToTime` 返回 `(time.Time, error)`：依次尝试 `"2006-01-02 15:04:05"`、RFC3339(Nano)、`"2006-01-02"`、`"15:04:05"` 等 layout，**解析失败返回明确 error 而不是静默零值**；`nil`（列 NULL）返回 `(零值, nil)`——NULL 是缺值不是脏数据。`Row.GetTime(field)`、`Row.GetTimeDefault(field, def)` 同签名（Default 只兜 NULL/缺失，不兜脏数据）。
+
+**时间列在 scan 时即类型化**：查询结果中声明为 DATE/TIME/DATETIME/TIMESTAMP 的列会直接解析成 `time.Time` 存入 Row（无论驱动返回 string 还是 `[]byte`），脏数据会在查询处报错（错误信息含列名）；JSON 序列化输出仍按 `TimeFormat`（`2006-01-02 15:04:05`）格式化，与旧行为一致。MySQL 用户建议 DSN 加 `parseTime=true`（驱动原生返回 `time.Time`）。
 
 ---
 
