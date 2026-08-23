@@ -34,7 +34,7 @@ features:
     details: 自研模板语言（~2800 行）：表达式、条件、循环、宏定义、空安全（?? / ?.）、静态访问。
   - icon: 🗄️
     title: Active Record ORM
-    details: Row + Dao 链式操作与变更追踪；Enjoy SQL 模板引擎（#where / #and + 18 种操作符，条件为空自动省略）。
+    details: "Row + Dao 链式操作与变更追踪；Enjoy SQL 模板引擎（#where / #and + 18 种操作符，条件为空自动省略）。"
   - icon: ⚙️
     title: 代码生成器
     details: 从数据库 Schema 自动生成类型安全的 CRUD 代码（base / model / dao / service，每表一个独立包）。
