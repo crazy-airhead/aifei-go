@@ -2,7 +2,7 @@ module github.com/crazy-airhead/aifei-go/_test/nacos_test
 
 go 1.26
 
-require github.com/crazy-airhead/aifei-go/plugins/nacos v0.0.48
+require github.com/crazy-airhead/aifei-go/plugins/nacos v0.0.49
 
 require (
 	github.com/alibabacloud-go/alibabacloud-gateway-pop v0.0.6 // indirect
@@ -30,10 +30,10 @@ require (
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clbanning/mxj/v2 v2.5.5 // indirect
-	github.com/crazy-airhead/aifei-go/aifei v0.0.48 // indirect
-	github.com/crazy-airhead/aifei-go/config v0.0.48 // indirect
-	github.com/crazy-airhead/aifei-go/log v0.0.48 // indirect
-	github.com/crazy-airhead/aifei-go/nami v0.0.48 // indirect
+	github.com/crazy-airhead/aifei-go/aifei v0.0.49 // indirect
+	github.com/crazy-airhead/aifei-go/config v0.0.49 // indirect
+	github.com/crazy-airhead/aifei-go/log v0.0.49 // indirect
+	github.com/crazy-airhead/aifei-go/nami v0.0.49 // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect

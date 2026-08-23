@@ -3,14 +3,14 @@ module github.com/crazy-airhead/aifei-go/_test/swagger_test
 go 1.26
 
 require (
-	github.com/crazy-airhead/aifei-go/config v0.0.48
-	github.com/crazy-airhead/aifei-go/plugins/swagger v0.0.48
+	github.com/crazy-airhead/aifei-go/config v0.0.49
+	github.com/crazy-airhead/aifei-go/plugins/swagger v0.0.49
 )
 
 require (
 	github.com/KyleBanks/depth v1.2.1 // indirect
-	github.com/crazy-airhead/aifei-go/aifei v0.0.48 // indirect
-	github.com/crazy-airhead/aifei-go/log v0.0.48 // indirect
+	github.com/crazy-airhead/aifei-go/aifei v0.0.49 // indirect
+	github.com/crazy-airhead/aifei-go/log v0.0.49 // indirect
 	github.com/go-openapi/jsonpointer v1.0.0 // indirect
 	github.com/go-openapi/jsonreference v1.0.0 // indirect
 	github.com/go-openapi/spec v0.22.6 // indirect
