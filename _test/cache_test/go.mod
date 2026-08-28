@@ -1,6 +1,6 @@
 module github.com/crazy-airhead/aifei-go/_test/cache_test
 
-go 1.26
+go 1.27
 
 require (
 	github.com/alicebob/miniredis/v2 v2.33.0

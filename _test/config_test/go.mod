@@ -1,6 +1,6 @@
 module github.com/crazy-airhead/aifei-go/_test/config_test
 
-go 1.26
+go 1.27
 
 require github.com/crazy-airhead/aifei-go/config v0.1.0
 

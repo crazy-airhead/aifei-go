@@ -1,6 +1,6 @@
 module github.com/crazy-airhead/aifei-go/_test/nami_test
 
-go 1.26
+go 1.27
 
 require github.com/crazy-airhead/aifei-go/nami v0.1.0
 

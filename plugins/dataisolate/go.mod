@@ -1,6 +1,6 @@
 module github.com/crazy-airhead/aifei-go/plugins/dataisolate
 
-go 1.26.1
+go 1.27
 
 require (
 	github.com/ajitpratap0/GoSQLX v1.14.0

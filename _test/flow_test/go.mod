@@ -1,6 +1,6 @@
 module github.com/crazy-airhead/aifei-go/_test/flow_test
 
-go 1.26.1
+go 1.27
 
 require (
 	github.com/crazy-airhead/aifei-go/dami v0.1.0

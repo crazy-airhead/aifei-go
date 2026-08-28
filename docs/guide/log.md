@@ -230,7 +230,7 @@ func TestService(t *testing.T) {
 
 Go 1.21 引入了 `log/slog`，结构化日志的官方方案。Aifei-Go 没有直接绑定 slog，原因有三：
 
-1. **slog 要求 Go 1.21+**，Aifei-Go 最低支持版本是 Go 1.26，版本虽然够，但**接口契约绑死 slog 会强迫使用方接受 `context.Context` 传参**——这在「Just Service」扁平架构里是负担。
+1. **slog 要求 Go 1.21+**，Aifei-Go 最低支持版本是 Go 1.27，版本虽然够，但**接口契约绑死 slog 会强迫使用方接受 `context.Context` 传参**——这在「Just Service」扁平架构里是负担。
 2. **slog 的 `Handler` 抽象和 `Logger` 接口不在同一层**——换底层实现是替换 `Handler`，而 `log.SetDefault(slog.Default())` 并不能直接工作（slog 的 API 形态是 `Info(ctx, msg, args...)`，签名不兼容）。
 3. **零依赖原则**：默认实现用 `log.Logger` 已经足够大多数场景；需要结构化的用户自己接 slog/zap 即可。
 

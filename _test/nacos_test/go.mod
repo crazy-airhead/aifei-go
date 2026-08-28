@@ -1,6 +1,6 @@
 module github.com/crazy-airhead/aifei-go/_test/nacos_test
 
-go 1.26
+go 1.27
 
 require github.com/crazy-airhead/aifei-go/plugins/nacos v0.1.0
 

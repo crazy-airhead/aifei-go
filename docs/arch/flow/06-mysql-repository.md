@@ -71,7 +71,7 @@ plugins/flow/                      package flow（插件）
 **go.mod**（对照 `plugins/dataisolate`）：
 ```
 module github.com/crazy-airhead/aifei-go/plugins/flow
-go 1.26
+go 1.27
 require (
     github.com/crazy-airhead/aifei-go/aifei v0.0.x
     github.com/crazy-airhead/aifei-go/config v0.0.x

@@ -174,7 +174,7 @@ DamiBus 的 `lpc.createConsumer(iface)` 依赖 Java 的 `java.lang.reflect.Proxy
 | 路由器 hash/path/tag | map / 正则 / 字符串解析，**直接可移植** |
 | 拦截器链 | 复用 `aifei.Handler`/`Interceptor` 风格的 wrapper 链，**可移植** |
 | attach 附件 | `map[string]any`，**直接可移植** |
-| 泛型 | Go 1.18+ 泛型（项目要求 1.26），**直接可移植** |
+| 泛型 | Go 1.18+ 泛型（项目要求 1.27），**直接可移植** |
 | 异常透传 | Go 用 `error` 返回 + `panic/recover`，**语义需调整** |
 | @DamiTopic IoC | Go 无注解，改用 **`init()` 自注册 / code-gen / 配置式** |
 

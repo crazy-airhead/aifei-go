@@ -104,7 +104,7 @@ plugins/log/
 ```go
 module github.com/crazy-airhead/aifei-go/plugins/log
 
-go 1.26
+go 1.27
 
 require (
     github.com/crazy-airhead/aifei-go/aifei  v0.0.42

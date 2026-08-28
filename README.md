@@ -54,7 +54,7 @@
 | 示例 | `_test/kafka_test` | Kafka 集成测试 | franz-go/kfake |
 | 示例 | `_test/enjoy_test` | Enjoy 引擎测试 | enjoy |
 
-Requires Go 1.26.
+Requires Go 1.27.
 
 ## 快速开始
 

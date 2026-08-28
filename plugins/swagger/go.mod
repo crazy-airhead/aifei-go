@@ -1,6 +1,6 @@
 module github.com/crazy-airhead/aifei-go/plugins/swagger
 
-go 1.26
+go 1.27
 
 replace (
 	github.com/crazy-airhead/aifei-go/aifei => ../../aifei

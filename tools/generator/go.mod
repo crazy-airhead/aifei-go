@@ -1,6 +1,6 @@
 module github.com/crazy-airhead/aifei-go/tools/generator
 
-go 1.26
+go 1.27
 
 require (
 	github.com/crazy-airhead/aifei-go/db v0.1.0

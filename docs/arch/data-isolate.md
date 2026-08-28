@@ -666,7 +666,7 @@ plugins/dataisolate/
 ```go
 module github.com/crazy-airhead/aifei-go/plugins/dataisolate
 
-go 1.26.1   // GoSQLX 要求 go >= 1.26.1
+go 1.27      // GoSQLX 要求 go >= 1.26.1（1.27 已满足）
 
 require (
     github.com/crazy-airhead/aifei-go/aifei v0.0.41

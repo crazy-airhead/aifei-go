@@ -248,7 +248,7 @@ server.CodeFail = 90000
 ```
 module github.com/crazy-airhead/aifei-go
 
-go 1.26
+go 1.27
 
 // 零第三方依赖！仅使用 Go 标准库
 // database/sql, encoding/json, net/http, log, etc.

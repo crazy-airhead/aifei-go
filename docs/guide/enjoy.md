@@ -479,7 +479,7 @@ enjoy/
 └── source/source.go        # Source 接口 + FileSource（mtime 热重载）+ StringSource
 ```
 
-源码约 4,770 行（不含测试），测试约 2,100 行在 `_test/enjoy_test/`（覆盖表达式求值、全部指令、自定义指令、共享方法/对象、issue 回归）。`go.mod` 仅声明 `go 1.26`，**无任何外部依赖**。
+源码约 4,770 行（不含测试），测试约 2,100 行在 `_test/enjoy_test/`（覆盖表达式求值、全部指令、自定义指令、共享方法/对象、issue 回归）。`go.mod` 仅声明 `go 1.27`，**无任何外部依赖**。
 
 ---
 

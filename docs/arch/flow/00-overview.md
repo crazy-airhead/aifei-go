@@ -3,7 +3,7 @@
 > 本文是「Solon-Flow 迁移到 Go」系列的第一篇（总览与可行性）。
 > 配套：[`01-go-comparison.md`](01-go-comparison.md)（Java→Go 逐项对照）、[`02-core-design.md`](02-core-design.md)（核心引擎设计）、[`03-config-and-eval.md`](03-config-and-eval.md)（配置 / 快照 / 表达式 / 集成）、[`04-workflow-design.md`](04-workflow-design.md)（工作流子系统）、[`05-tdd-plan.md`](05-tdd-plan.md)（TDD 路线图与分期）。
 > 源码参照：`/Users/airhead/WorkSpace/goldsyear/solon-flow`（`solon-flow` 3.9.x + `solon-flow-workflow`）。
-> 目标宿主：`aifei-go` 工作区（Go 1.26，零外部依赖，多模块）。
+> 目标宿主：`aifei-go` 工作区（Go 1.27，零外部依赖，多模块）。
 >
 > 本文**不写实现代码**，只给出：solon-flow 是什么、迁什么不迁什么、概念词典、模块地图、可行性结论、设计原则——作为后续逐篇的**契约**。
 
@@ -179,7 +179,7 @@ flowchart TD
 
 ```
 module github.com/crazy-airhead/aifei-go/flow
-go 1.26
+go 1.27
 require (
     github.com/crazy-airhead/aifei-go v0.0.x   // aifei（Plugin 接口）
     github.com/crazy-airhead/aifei-go/enjoy v0.0.x

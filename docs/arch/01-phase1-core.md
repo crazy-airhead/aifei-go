@@ -9,7 +9,7 @@
 ```
 module github.com/crazy-airhead/aifei-go
 
-go 1.26
+go 1.27
 ```
 
 ### 文件: `aifei.go`
