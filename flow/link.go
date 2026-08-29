@@ -51,8 +51,6 @@ func (l *Link) Meta(key string) any {
 	return l.metas[key]
 }
 
-// MetaAs returns a meta value by key (untyped convenience).
-func (l *Link) MetaAs(key string) any { return l.Meta(key) }
 
 // MetaOrDefault returns a meta value by key, or def when absent.
 func (l *Link) MetaOrDefault(key string, def any) any {

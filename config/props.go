@@ -186,6 +186,119 @@ func (p *Props) Has(key string) bool {
 	return p.Get(key) != nil
 }
 
+// GetAs retrieves a value by dot-separated key, converted to T — the generic
+// counterpart of the GetStr/GetBool/GetInt family (which predate Go's support
+// for type parameters on methods). Like that family it is lenient about
+// numeric representation (int/int64/float64 coerce freely, so a value that
+// YAML parsed as int still reads as float64) and returns def[0] — or the zero
+// T — when the key is missing or the value cannot become T.
+//
+// Unlike GetStr it does NOT fall back to def for an empty string: "" is a
+// present string value.
+func (p *Props) GetAs[T any](key string, def ...T) T {
+	v := p.Get(key)
+	if v == nil {
+		if len(def) > 0 {
+			return def[0]
+		}
+		var zero T
+		return zero
+	}
+	if t, ok := coerceAs[T](v); ok {
+		return t
+	}
+	if len(def) > 0 {
+		return def[0]
+	}
+	var zero T
+	return zero
+}
+
+// GetAsE is the strict GetAs: a missing key or a value that cannot become T
+// without silent coercion is an error (numeric-family width conversions stay
+// allowed). Strict config reads surface typos in keys and values at startup
+// instead of yielding zero values.
+func (p *Props) GetAsE[T any](key string) (T, error) {
+	v := p.Get(key)
+	if v == nil {
+		var zero T
+		return zero, fmt.Errorf("config: key %q is missing", key)
+	}
+	return coerceAsE[T](v)
+}
+
+// coerceAs converts v to T leniently: direct assertion first, then
+// numeric-family cross conversion (mirrors GetInt/GetFloat64), then failure.
+func coerceAs[T any](v interface{}) (T, bool) {
+	if t, ok := v.(T); ok {
+		return t, true
+	}
+	var out T
+	switch p := any(&out).(type) {
+	case *int:
+		if n, ok := asInt64(v); ok {
+			*p = int(n)
+			return out, true
+		}
+	case *int64:
+		if n, ok := asInt64(v); ok {
+			*p = n
+			return out, true
+		}
+	case *float64:
+		if n, ok := asFloat64(v); ok {
+			*p = n
+			return out, true
+		}
+	case *bool:
+		if b, ok := v.(bool); ok {
+			*p = b
+			return out, true
+		}
+	}
+	var zero T
+	return zero, false
+}
+
+// coerceAsE converts v to T strictly: direct assertion, then numeric-family
+// width conversion; anything else (e.g. "8080" as a string into int, number
+// into string) is an error.
+func coerceAsE[T any](v interface{}) (T, error) {
+	t, ok := coerceAs[T](v)
+	if !ok {
+		var zero T
+		return zero, fmt.Errorf("config: cannot use %T as %T", v, &zero)
+	}
+	return t, nil
+}
+
+// asInt64 reports v as int64 when it is one of the numeric kinds YAML/JSON
+// parsers produce (no string parsing — that would be silent coercion).
+func asInt64(v interface{}) (int64, bool) {
+	switch n := v.(type) {
+	case int:
+		return int64(n), true
+	case int64:
+		return n, true
+	case float64:
+		return int64(n), true
+	}
+	return 0, false
+}
+
+// asFloat64 reports v as float64 when it is one of the numeric kinds.
+func asFloat64(v interface{}) (float64, bool) {
+	switch n := v.(type) {
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case float64:
+		return n, true
+	}
+	return 0, false
+}
+
 // Keys returns all top-level keys in the props.
 func (p *Props) Keys() []string {
 	p.mu.RLock()

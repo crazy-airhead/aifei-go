@@ -191,6 +191,10 @@ func (k Kv) Map() map[string]interface{} { return k }
 
 // KvAs returns a value converted by fn (nil-safe: fn is NOT called when the
 // value is absent or nil — the zero T is returned). Mirrors Java Kv.getAs.
+//
+// Deprecated: Go 1.27 allows type parameters on methods — use Kv.GetAs[T]
+// (scalar conversions) or Kv.GetAsE[T] (strict) instead. KvAs predates
+// generic methods, carrying the receiver as the first argument.
 func KvAs[T any](k Kv, key string, fn func(interface{}) T) T {
 	v, ok := k[key]
 	if !ok || v == nil {

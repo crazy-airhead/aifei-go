@@ -134,8 +134,6 @@ func (g *Graph) Meta(key string) any {
 	return g.metas[key]
 }
 
-// MetaAs returns a graph meta value by key (untyped convenience).
-func (g *Graph) MetaAs(key string) any { return g.Meta(key) }
 
 // MetaOrDefault returns a graph meta value by key, or def when absent.
 func (g *Graph) MetaOrDefault(key string, def any) any {

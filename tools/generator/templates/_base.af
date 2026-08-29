@@ -84,6 +84,13 @@ func initRow(row *db.Row) *db.Row {
 	return db.DecodeJSONFields(row.SetTable(Table.Name).SetPrimaryKeys(Table.PrimaryKeys...))
 }
 
+### InitRow adopts a queried Row (table + pk metadata, JSON columns decoded),
+### satisfying db.RowEntity for the generic Dao terminals: FindAs/FindFirstAs/
+### FindOneAs/PaginateAs/FindByAs/FindFirstByAs/FindByIDAs.
+func (b *#(baseName)) InitRow(row *db.Row) {
+	b.Row = initRow(row)
+}
+
 func init() {
 	db.RegisterTable(Table)
 }

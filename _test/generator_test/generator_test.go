@@ -3,6 +3,7 @@ package generator_test
 import (
 	"database/sql"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -165,6 +166,27 @@ func TestGenerator_Generate(t *testing.T) {
 	if !strings.Contains(string(baseContent), "Insert()") {
 		t.Error("base.go should contain Insert() method")
 	}
+	if !strings.Contains(string(baseContent), "func (b *BaseUser) InitRow(row *db.Row)") {
+		t.Error("base.go should contain InitRow satisfying db.RowEntity (generic Dao terminals)")
+	}
+
+	// Verify the slim typed-dao shape (Go 1.27 generic methods): no wrapper
+	// type re-declaring chainables, package-level shortcuts delegate to the
+	// *db.Dao As-family instead.
+	daoContent, _ := os.ReadFile(filepath.Join(tmpDir, "user/dao.go"))
+	t.Logf("user/dao.go:\n%s", string(daoContent))
+	if !strings.Contains(string(daoContent), "func NewDao() *db.Dao") {
+		t.Error("dao.go NewDao should return *db.Dao (typed wrapper removed)")
+	}
+	if strings.Contains(string(daoContent), "func (d *Dao) Sql(") {
+		t.Error("dao.go should not re-declare chainable Sql (return-type narrowing dropped)")
+	}
+	if strings.Contains(string(daoContent), "toRow") {
+		t.Error("dao.go should not contain hand-rolled toRow/toRows wrappers")
+	}
+	if !strings.Contains(string(daoContent), "FindByIDAs") {
+		t.Error("dao.go should delegate typed loads to db FindByIDAs")
+	}
 
 	// Verify loginlog package (prefix stripped: sys_login_log → login_log)
 	loginlogBase, _ := os.ReadFile(filepath.Join(tmpDir, "loginlog/base.go"))
@@ -190,6 +212,69 @@ func TestGenerator_Generate(t *testing.T) {
 	}
 	if !strings.Contains(string(loginlogService), "ServicePrefix = \"/loginLog\"") {
 		t.Error("loginlog/service.go should have camelCase ServicePrefix, got:", string(loginlogService))
+	}
+}
+
+// TestGeneratedCodeCompiles generates code into a temp module wired to the
+// local workspace (aifei/db/enjoy/log/aifei/http/server have zero external
+// deps) and compiles it — the generated tree must build as-is, exercising the
+// Go 1.27 generic-method calls (FindAs/PaginateAs/FindByIDAs) in base.go,
+// dao.go and service.go.
+func TestGeneratedCodeCompiles(t *testing.T) {
+	pool := setupTestDB(t)
+	defer pool.Close()
+
+	tmpDir, err := os.MkdirTemp("", "aifei-gen-compile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Generate into <tmp>/db: tables.go takes its package name from the base
+	// of the output dir, and the temp root itself is not a valid identifier.
+	modDir := filepath.Join(tmpDir, "db")
+	if err := os.Mkdir(modDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	dialect := &generator.SQLiteMetaDialect{}
+	gen := generator.New(pool, dialect, modDir, "example/db")
+	if err := gen.Generate(); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	goMod := "module example/db\n\ngo 1.27\n"
+	if err := os.WriteFile(filepath.Join(modDir, "go.mod"), []byte(goMod), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wire the temp module into a workspace with the local framework modules
+	// so `go build` resolves everything offline.
+	local := func(rel string) string {
+		abs, err := filepath.Abs(rel)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return abs
+	}
+	goWork := "go 1.27\n\nuse (\n" +
+		"\t./db\n" + // example/db itself
+		"\t" + local("../../aifei") + "\n" +
+		"\t" + local("../../db") + "\n" +
+		"\t" + local("../../enjoy") + "\n" +
+		"\t" + local("../../log") + "\n" +
+		"\t" + local("../../http") + "\n" +
+		"\t" + local("../../server") + "\n" +
+		")\n"
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.work"), []byte(goWork), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command("go", "build", "./...")
+	cmd.Dir = modDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("generated code does not compile: %v\n%s", err, out)
 	}
 }
 

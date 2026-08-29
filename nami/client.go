@@ -202,8 +202,48 @@ func (n *Nami) GetObject(val any) error {
 		return err
 	}
 
+	// An empty or null body decodes to a nil result: leave val untouched
+	// (matching Result.Bind's empty-body no-op) instead of panicking on Set.
+	if result == nil {
+		return nil
+	}
+
 	rv.Elem().Set(reflect.ValueOf(result))
 	return nil
+}
+
+// GetObjectAs deserializes the result into a fresh T — the value-returning
+// counterpart of GetObject's pointer-out form, going through the same
+// configured decoder.
+//
+//	item, err := nami.Call(...).GetObjectAs[MyStruct]()
+func (n *Nami) GetObjectAs[T any]() (T, error) {
+	var t T
+	if n.result == nil {
+		return t, nil
+	}
+	if err := n.result.AssertSuccess(); err != nil {
+		return t, err
+	}
+
+	decoder := n.config.Decoder()
+	if decoder == nil {
+		decoder = GetDecoder(JSONValue)
+	}
+
+	result, err := decoder.Decode(n.result, reflect.TypeFor[T]())
+	if err != nil {
+		return t, err
+	}
+
+	// An empty or null body decodes to a nil result: keep the zero T
+	// (matching Result.Bind's empty-body no-op) instead of panicking on Set.
+	if result == nil {
+		return t, nil
+	}
+
+	reflect.ValueOf(&t).Elem().Set(reflect.ValueOf(result))
+	return t, nil
 }
 
 // Config returns the underlying Config.

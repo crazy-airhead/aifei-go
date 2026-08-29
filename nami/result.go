@@ -112,3 +112,15 @@ func (r *Result) AsAny() (any, error) {
 	}
 	return v, nil
 }
+
+// As deserializes the result body as JSON into a fresh T — the
+// value-returning counterpart of Bind's pointer-out form (Bind predates Go's
+// support for type parameters on methods). The HTTP status is checked first;
+// an empty or null body leaves T at its zero value, matching Bind.
+//
+//	item, err := result.As[MyStruct]()
+func (r *Result) As[T any]() (T, error) {
+	var t T
+	err := r.Bind(&t)
+	return t, err
+}

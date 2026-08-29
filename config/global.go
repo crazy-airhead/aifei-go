@@ -1,5 +1,7 @@
 package config
 
+import "fmt"
+
 // globalProps is the package-level configuration instance.
 // It is automatically set by Init(). Callers may also set it explicitly via
 // SetProps() before any concurrent reads.
@@ -97,6 +99,32 @@ func Has(key string) bool {
 		return false
 	}
 	return globalProps.Has(key)
+}
+
+// GetAs retrieves a value from the global Props converted to T — the generic
+// counterpart of the GetStr/GetBool/GetInt family. Returns def[0] (or the
+// zero T) if the global is nil, the key is not found, or the value cannot
+// become T. See Props.GetAs for the conversion semantics.
+func GetAs[T any](key string, def ...T) T {
+	if globalProps == nil {
+		if len(def) > 0 {
+			return def[0]
+		}
+		var zero T
+		return zero
+	}
+	return globalProps.GetAs(key, def...)
+}
+
+// GetAsE is the strict GetAs: a missing key or a value that cannot become T
+// without silent coercion is an error. Returns an error when the global is
+// nil. See Props.GetAsE for the conversion semantics.
+func GetAsE[T any](key string) (T, error) {
+	if globalProps == nil {
+		var zero T
+		return zero, fmt.Errorf("config: global props not initialized")
+	}
+	return globalProps.GetAsE[T](key)
 }
 
 // Keys returns all top-level keys in the global Props.

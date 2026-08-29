@@ -24,10 +24,9 @@ func (d *Decoder) Enctype() string {
 
 // Decode deserializes the result body into the target type.
 func (d *Decoder) Decode(rst *nami.Result, typ reflect.Type) (any, error) {
-	if len(rst.Body()) == 0 {
-		return nil, nil
-	}
-
+	// Read via BodyAsString, not Body: the former frees the raw bytes after
+	// its first call, so a second decode (e.g. Bind followed by GetObject)
+	// must rely on the cached string instead of the consumed body.
 	str := rst.BodyAsString()
 	if str == "null" || str == "" {
 		return nil, nil

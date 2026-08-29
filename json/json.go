@@ -35,3 +35,25 @@ func UnmarshalString(s string, v interface{}) error {
 func ToJSON(v interface{}) string {
 	return MarshalString(v)
 }
+
+// Parse deserializes JSON bytes into a fresh T — the value-returning
+// counterpart of Unmarshal's pointer-out form (which exists because
+// encoding/json predates generics; there was no way to offer T directly
+// through this wrapper's non-generic API until now).
+//
+//	var cfg MyConfig
+//	if err := json.Unmarshal(data, &cfg); err != nil { ... }
+//
+// becomes:
+//
+//	cfg, err := json.Parse[MyConfig](data)
+func Parse[T any](data []byte) (T, error) {
+	var t T
+	err := json.Unmarshal(data, &t)
+	return t, err
+}
+
+// ParseString deserializes a JSON string into a fresh T.
+func ParseString[T any](s string) (T, error) {
+	return Parse[T]([]byte(s))
+}

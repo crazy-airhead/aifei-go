@@ -231,6 +231,10 @@ func (r *Row) Get(field string) interface{} {
 // RowAs returns a field value converted by fn. The converter receives the raw
 // value (nil-safe: fn is NOT called when the field is absent or nil). Mirrors
 // Java Kv.getAs(key, Function) for ad-hoc typed reads.
+//
+// Deprecated: Go 1.27 allows type parameters on methods — use Row.GetAs[T]
+// (scalar conversions) or Row.GetAsE[T] (strict) instead. RowAs predates
+// generic methods, carrying the receiver as the first argument.
 func RowAs[T any](r *Row, field string, fn func(interface{}) T) T {
 	v := r.Get(field)
 	if v == nil {

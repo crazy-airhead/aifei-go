@@ -72,8 +72,6 @@ func (n *Node) Meta(key string) any {
 	return n.metas[key]
 }
 
-// MetaAs returns a meta value by key (untyped convenience).
-func (n *Node) MetaAs(key string) any { return n.Meta(key) }
 
 // HasMeta reports whether the key exists.
 func (n *Node) HasMeta(key string) bool {

@@ -399,6 +399,20 @@ func (c *HttpContext) GetBean(obj interface{}, keys ...string) error {
 	return json.Unmarshal(data, obj)
 }
 
+// Bean binds the request's structured parameters into a fresh T and returns
+// it — the value-returning counterpart of GetBean's pointer-out form, with
+// identical binding semantics. Go 1.27 allows the type parameter on this
+// concrete method (the aifei.Input interface method stays pointer-out, since
+// interface methods cannot take type parameters); via embedding it is
+// promoted to *server.In too.
+//
+//	user, err := c.Bean[CreateUserReq]("data")
+func (c *HttpContext) Bean[T any](keys ...string) (T, error) {
+	var t T
+	err := c.GetBean(&t, keys...)
+	return t, err
+}
+
 // jsonUnmarshalerType is the reflect.Type for json.Unmarshaler, used to detect
 // targets (like *db.Row-backed models) that own their JSON/string parsing.
 var jsonUnmarshalerType = reflect.TypeOf((*json.Unmarshaler)(nil)).Elem()

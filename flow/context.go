@@ -20,6 +20,11 @@ type Context interface {
 	// Get reads a variable (nil if absent).
 	Get(key string) any
 	// GetAs reads a variable (untyped convenience; Java getAs<T>).
+	//
+	// Deprecated: GetAs returns any and needs a caller-side type assertion —
+	// a stand-in for Java's getAs<T> that Go could not express when interface
+	// methods were still barred from type parameters (they still are). Use
+	// the package-level flow.GetAs[T](ctx, key), which reads typed.
 	GetAs(key string) any
 	// GetOrDefault reads a variable, or def when absent.
 	GetOrDefault(key string, def any) any

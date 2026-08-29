@@ -8,6 +8,10 @@ import "sync"
 // Mirrors Java's Container.
 type Container interface {
 	// GetComponent returns the component registered under name (nil if absent).
+	//
+	// Deprecated: prefer the package-level flow.ComponentAs[T](c, name) for
+	// typed reads; GetComponent stays for dynamic lookups (interface methods
+	// cannot take type parameters).
 	GetComponent(name string) any
 }
 
