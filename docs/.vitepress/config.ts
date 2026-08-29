@@ -131,6 +131,7 @@ export default withMermaid(defineConfig({
             { text: '微服务规划', link: '/arch/microservice' },
             { text: '可观测性', link: '/arch/observability' },
             { text: '泛型方法升级', link: '/arch/generic-methods' },
+            { text: 'JSON v2 评估', link: '/arch/json-v2' },
           ],
         },
         {
