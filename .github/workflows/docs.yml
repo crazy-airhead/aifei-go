@@ -7,8 +7,6 @@ on:
     branches: [master]
     paths:
       - "docs/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
@@ -22,14 +20,22 @@ concurrency:
 jobs:
   deploy-docs:
     runs-on: ubuntu-latest
+    # pnpm 包（package.json/lockfile/scripts）整体在 docs/ 下
+    defaults:
+      run:
+        working-directory: docs
     steps:
       - name: Checkout（完整历史，供 lastUpdated 读取时间）
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Setup pnpm（读 package.json 的 packageManager 字段）
+      # v6 从非根 package.json 读 packageManager 有 bug（pnpm/action-setup#227），
+      # 故显式指定版本，升级 pnpm 时与 docs/package.json 的 packageManager 同步
+      - name: Setup pnpm
         uses: pnpm/action-setup@v6
+        with:
+          version: 11.17.0
 
       - name: Setup Node
         uses: actions/setup-node@v5

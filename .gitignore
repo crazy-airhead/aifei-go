@@ -5,7 +5,7 @@
 *.db
 /gen
 
-# VitePress 文档站
-/node_modules/
+# VitePress 文档站（pnpm 包整体在 docs/ 下）
+/docs/node_modules/
 /docs/.vitepress/dist/
 /docs/.vitepress/cache/
