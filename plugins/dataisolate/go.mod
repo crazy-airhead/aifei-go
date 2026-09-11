@@ -4,16 +4,16 @@ go 1.27
 
 require (
 	github.com/ajitpratap0/GoSQLX v1.14.0
-	github.com/crazy-airhead/aifei-go/aifei v0.1.0
-	github.com/crazy-airhead/aifei-go/config v0.1.0
-	github.com/crazy-airhead/aifei-go/db v0.1.0
-	github.com/crazy-airhead/aifei-go/log v0.1.0
-	github.com/crazy-airhead/aifei-go/server v0.1.0
+	github.com/crazy-airhead/aifei-go/aifei v1.0.0
+	github.com/crazy-airhead/aifei-go/config v1.0.0
+	github.com/crazy-airhead/aifei-go/db v1.0.0
+	github.com/crazy-airhead/aifei-go/log v1.0.0
+	github.com/crazy-airhead/aifei-go/server v1.0.0
 )
 
 require (
-	github.com/crazy-airhead/aifei-go/enjoy v0.1.0 // indirect
-	github.com/crazy-airhead/aifei-go/http v0.1.0 // indirect
+	github.com/crazy-airhead/aifei-go/enjoy v1.0.0 // indirect
+	github.com/crazy-airhead/aifei-go/http v1.0.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 

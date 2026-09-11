@@ -3,9 +3,9 @@ module github.com/crazy-airhead/aifei-go/plugins/xxljob
 go 1.27
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v0.1.0
-	github.com/crazy-airhead/aifei-go/config v0.1.0
-	github.com/crazy-airhead/aifei-go/log v0.1.0
+	github.com/crazy-airhead/aifei-go/aifei v1.0.0
+	github.com/crazy-airhead/aifei-go/config v1.0.0
+	github.com/crazy-airhead/aifei-go/log v1.0.0
 	github.com/go-basic/ipv4 v1.0.0
 )
 

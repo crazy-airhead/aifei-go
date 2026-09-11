@@ -3,14 +3,14 @@ module github.com/crazy-airhead/aifei-go/_test/storage_test
 go 1.27
 
 require (
-	github.com/crazy-airhead/aifei-go/config v0.1.0
-	github.com/crazy-airhead/aifei-go/plugins/storage v0.1.0
+	github.com/crazy-airhead/aifei-go/config v1.0.0
+	github.com/crazy-airhead/aifei-go/plugins/storage v1.0.0
 )
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/crazy-airhead/aifei-go/aifei v0.1.0 // indirect
-	github.com/crazy-airhead/aifei-go/log v0.1.0 // indirect
+	github.com/crazy-airhead/aifei-go/aifei v1.0.0 // indirect
+	github.com/crazy-airhead/aifei-go/log v1.0.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect

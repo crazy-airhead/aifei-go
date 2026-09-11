@@ -3,13 +3,13 @@ module github.com/crazy-airhead/aifei-go/_test/db_test
 go 1.27
 
 require (
-	github.com/crazy-airhead/aifei-go/db v0.1.0
+	github.com/crazy-airhead/aifei-go/db v1.0.0
 	modernc.org/sqlite v1.53.0
 )
 
 require (
-	github.com/crazy-airhead/aifei-go/enjoy v0.1.0 // indirect
-	github.com/crazy-airhead/aifei-go/log v0.1.0 // indirect
+	github.com/crazy-airhead/aifei-go/enjoy v1.0.0 // indirect
+	github.com/crazy-airhead/aifei-go/log v1.0.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

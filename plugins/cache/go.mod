@@ -3,9 +3,9 @@ module github.com/crazy-airhead/aifei-go/plugins/cache
 go 1.27
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v0.1.0
-	github.com/crazy-airhead/aifei-go/config v0.1.0
-	github.com/crazy-airhead/aifei-go/log v0.1.0
+	github.com/crazy-airhead/aifei-go/aifei v1.0.0
+	github.com/crazy-airhead/aifei-go/config v1.0.0
+	github.com/crazy-airhead/aifei-go/log v1.0.0
 	github.com/mgtv-tech/jetcache-go v1.2.1
 	github.com/redis/go-redis/v9 v9.21.0
 )

@@ -3,9 +3,9 @@ module github.com/crazy-airhead/aifei-go/plugins/storage
 go 1.27
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v0.1.0
-	github.com/crazy-airhead/aifei-go/config v0.1.0
-	github.com/crazy-airhead/aifei-go/log v0.1.0
+	github.com/crazy-airhead/aifei-go/aifei v1.0.0
+	github.com/crazy-airhead/aifei-go/config v1.0.0
+	github.com/crazy-airhead/aifei-go/log v1.0.0
 	github.com/minio/minio-go/v7 v7.2.0
 )
 
