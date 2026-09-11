@@ -42,6 +42,8 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+          # 缓存默认只认根目录 pnpm-lock.yaml（不递归），须显式指向 docs/
+          cache-dependency-path: docs/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
