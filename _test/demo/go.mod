@@ -3,17 +3,17 @@ module github.com/crazy-airhead/aifei-go/_test/demo
 go 1.26
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v0.1.0
-	github.com/crazy-airhead/aifei-go/db v0.1.0
-	github.com/crazy-airhead/aifei-go/server v0.1.0
-	github.com/crazy-airhead/aifei-go/tools/generator v0.1.0
+	github.com/crazy-airhead/aifei-go/aifei v0.1.1
+	github.com/crazy-airhead/aifei-go/db v0.1.1
+	github.com/crazy-airhead/aifei-go/server v0.1.1
+	github.com/crazy-airhead/aifei-go/tools/generator v0.1.1
 	modernc.org/sqlite v1.53.0
 )
 
 require (
-	github.com/crazy-airhead/aifei-go/enjoy v0.1.0 // indirect
-	github.com/crazy-airhead/aifei-go/http v0.1.0 // indirect
-	github.com/crazy-airhead/aifei-go/log v0.1.0 // indirect
+	github.com/crazy-airhead/aifei-go/enjoy v0.1.1 // indirect
+	github.com/crazy-airhead/aifei-go/http v0.1.1 // indirect
+	github.com/crazy-airhead/aifei-go/log v0.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
