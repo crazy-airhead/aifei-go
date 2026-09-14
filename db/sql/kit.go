@@ -41,6 +41,18 @@ func NewSqlKit(name string) *SqlKit {
 	engine.AddDirective("para", func() enjoy.Directive { return &ParaDirective{} })
 	engine.AddDirective("p", func() enjoy.Directive { return &ParaDirective{} })
 
+	// 产出 SQL 片段的指令注册 keepLineBlank=true（对照 Java SqlKit 的
+	// addDirective(name, class, keepLineBlank)：where/and/orderBy/para/p 为 true，
+	// 容器指令 sql 为 false；or 为 Go 增补的同族指令）。这些指令行首独占一行时
+	// 保留行尾换行——否则换行被吃掉后相邻片段直接拼成 "...?AND name LIKE ?" 的坏 SQL；
+	// #sql 不产出内容，保持吃掉换行以免 SQL 头部多一空行。
+	engine.SetKeepLineBlank("where", true)
+	engine.SetKeepLineBlank("and", true)
+	engine.SetKeepLineBlank("or", true)
+	engine.SetKeepLineBlank("orderBy", true)
+	engine.SetKeepLineBlank("para", true)
+	engine.SetKeepLineBlank("p", true)
+
 	return &SqlKit{
 		engine:         engine,
 		sqlFromSqlFile: map[string]*enjoy.Template{},

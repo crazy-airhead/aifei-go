@@ -157,6 +157,7 @@ func (e *Engine) compileSource(key string, src source.Source, isFile bool) *Temp
 	content := src.GetContent()
 	lexer := NewLexer(content)
 	lexer.SetKeepLineBlank(e.config.KeepLineBlankDirectives())
+	lexer.SetKeepLineBlankNames(e.config.keepLineBlankNames)
 	env := NewEnv(e.config)
 	env.engine = e
 	if isFile {
@@ -210,6 +211,14 @@ func (e *Engine) SetBaseTemplatePath(path string) { e.config.baseTemplatePath = 
 // AddDirective registers a custom directive.
 func (e *Engine) AddDirective(name string, factory DirectiveFactory) {
 	e.config.directiveMap[name] = factory
+}
+
+// SetKeepLineBlank 按指令名配置是否保留行首空行（对照 Java Engine.addDirective
+// (name, class, keepLineBlank) / setKeepLineBlank）。须在 AddDirective 之后调用；
+// 典型用法见 SqlKit：#where/#and/#para 等产出内容的指令注册 true，行首独占行时
+// 保留换行，避免多行模板渲染结果粘连。
+func (e *Engine) SetKeepLineBlank(name string, keepLineBlank bool) {
+	e.config.SetKeepLineBlank(name, keepLineBlank)
 }
 
 // AddSharedObject registers a shared object available in all templates.

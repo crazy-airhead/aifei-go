@@ -2,11 +2,18 @@ package enjoy
 
 // Lexer tokenizes template content.
 type Lexer struct {
-	input         string
-	pos           int
-	length        int
-	lineStarts    []int // 每行首字符的 pos（lineStarts[0]=0 对应第 1 行），用于 Token.Line 查表
-	keepLineBlank bool  // 是否保留行首指令后的空行（对照 Java keepLineBlankDirectives，默认 false）
+	input      string
+	pos        int
+	length     int
+	lineStarts []int // 每行首字符的 pos（lineStarts[0]=0 对应第 1 行），用于 Token.Line 查表
+
+	// keepLineBlank 是全局默认值；keepLineBlankNames 是按指令名的覆盖表
+	// （对照 Java EngineConfig.keepLineBlankDirectives: Set<String>，由 addDirective
+	// 的 keepLineBlank 参数 / setKeepLineBlank(name, bool) 填充）。指令名命中表的
+	// 以表为准，否则取全局默认。Java 的 set 仅含显式注册为 true 的指令名，无全局
+	// 开关；Go 版保留既有全局 API（SetKeepLineBlank）作为默认值。
+	keepLineBlank      bool
+	keepLineBlankNames map[string]bool
 }
 
 // NewLexer creates a new template lexer.
@@ -21,8 +28,21 @@ func NewLexer(input string) *Lexer {
 	return l
 }
 
-// SetKeepLineBlank 配置是否保留行首指令后的空行（对照 Java keepLineBlankDirectives）。
+// SetKeepLineBlank 配置全局默认：是否保留行首指令后的空行（对照 Java
+// keepLineBlankDirectives 的缺省行为，默认 false）。
 func (l *Lexer) SetKeepLineBlank(b bool) { l.keepLineBlank = b }
+
+// SetKeepLineBlankNames 配置按指令名的 keepLineBlank 覆盖表（对照 Java
+// EngineConfig.keepLineBlankDirectives 集合）。命中指令名以表值为准，未命中取全局默认。
+func (l *Lexer) SetKeepLineBlankNames(names map[string]bool) { l.keepLineBlankNames = names }
+
+// keepLineBlankFor 返回指令 name 是否保留行首空行：优先查按名覆盖表，缺省取全局默认。
+func (l *Lexer) keepLineBlankFor(name string) bool {
+	if v, ok := l.keepLineBlankNames[name]; ok {
+		return v
+	}
+	return l.keepLineBlank
+}
 
 // lineOf 返回 pos 所在行号（从 1 起），基于预计算的 lineStarts 二分查找（对照 Java Location.row）。
 func (l *Lexer) lineOf(pos int) int {
@@ -176,8 +196,9 @@ func (l *Lexer) scanDirective() Token {
 		// （解析器从不读取其 para，原先会吞掉 #else<文本> 的尾部文本，导致分支体丢失）。
 		// 行首（独占一行）时顺带吃掉尾随水平空白与换行，避免输出多余空行；
 		// 行内时保留尾部文本，交由后续 TokText 输出。
-		// keepLineBlankDirectives=true 时保留尾随换行（对照 Java，默认 false 仍吃掉）。
-		if !l.keepLineBlank && l.isAtLineStart(hashPos) {
+		// keepLineBlank 命中时保留尾随换行（对照 Java，无参指令不会注册进
+		// keepLineBlankDirectives 集合，故通常仍吃掉；全局默认同理）。
+		if !l.keepLineBlankFor(name) && l.isAtLineStart(hashPos) {
 			for l.pos < l.length && (l.input[l.pos] == ' ' || l.input[l.pos] == '\t') {
 				l.pos++
 			}
@@ -223,8 +244,10 @@ func (l *Lexer) scanDirective() Token {
 
 	// Consume trailing newline if the directive starts at the beginning of its line
 	// (only whitespace between the last \n and #). This prevents blank lines in output.
-	// keepLineBlankDirectives=true 时保留该空行（对照 Java，默认 false 仍吃掉）。
-	if !l.keepLineBlank && l.pos < l.length && l.isAtLineStart(hashPos) {
+	// 指令名命中 keepLineBlankNames（如 SqlKit 注册的 #where/#and/#para）或全局默认为
+	// true 时保留该换行（对照 Java addIdParaToken 查 keepLineBlankDirectives 集合：
+	// 命中 prepareNextScan(0) 保留，未命中 trimLineBlank() 吃掉）。
+	if !l.keepLineBlankFor(name) && l.pos < l.length && l.isAtLineStart(hashPos) {
 		if l.input[l.pos] == '\n' {
 			l.pos++
 		} else if l.pos+1 < l.length && l.input[l.pos] == '\r' && l.input[l.pos+1] == '\n' {
@@ -351,7 +374,8 @@ func (l *Lexer) scanAtCall(hashPos int) Token {
 	}
 
 	// Consume trailing newline when the directive starts its line.
-	// keepLineBlankDirectives=true 时保留该空行（对照 Java，默认 false 仍吃掉）。
+	// #@name 是模板函数调用而非指令，不查按名覆盖表（对照 Java addIdParaToken
+	// 显式排除 Symbol.CALL），仅取全局默认；默认 false 仍吃掉。
 	if !l.keepLineBlank && l.pos < l.length && l.isAtLineStart(hashPos) {
 		if l.input[l.pos] == '\n' {
 			l.pos++

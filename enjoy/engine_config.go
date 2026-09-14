@@ -88,9 +88,14 @@ type EngineConfig struct {
 	staticMethodExpressionEnabled bool
 	staticFieldExpressionEnabled  bool
 
-	// keepLineBlankDirectives 控制行首指令是否保留其后的空行（对照 Java
+	// keepLineBlankDirectives 控制行首指令是否保留其后的空行的全局默认（对照 Java
 	// EngineConfig.keepLineBlankDirectives，默认 false：吃掉独占行的指令尾随换行）。
 	keepLineBlankDirectives bool
+	// keepLineBlankNames 是按指令名的覆盖表（对照 Java keepLineBlankDirectives:
+	// Set<String>，经 addDirective(name, class, keepLineBlank) / setKeepLineBlank
+	// 填充）。典型用法：SqlKit 把产出 SQL 片段的指令（#where/#and/#or/#orderBy/
+	// #para/#p）注册为 true，行首独占行的指令保留换行，多行 SQL 模板渲染后不至粘连。
+	keepLineBlankNames map[string]bool
 
 	// roundingMode #number 指令的舍入模式（默认 HALF_EVEN，对照 Java DecimalFormat 默认）。
 	roundingMode string
@@ -169,6 +174,16 @@ func (c *EngineConfig) KeepLineBlankDirectives() bool { return c.keepLineBlankDi
 // SetKeepLineBlankDirectives toggles keeping blank lines after line-start directives.
 func (c *EngineConfig) SetKeepLineBlankDirectives(b bool) { c.keepLineBlankDirectives = b }
 
+// SetKeepLineBlank 按指令名配置是否保留行首空行（对照 Java EngineConfig.setKeepLineBlank
+// (directiveName, keepLineBlank)）。directiveName 为 AddDirective 注册的指令名；
+// 未注册名的指令沿用 SetKeepLineBlankDirectives 的全局默认。
+func (c *EngineConfig) SetKeepLineBlank(directiveName string, keepLineBlank bool) {
+	if c.keepLineBlankNames == nil {
+		c.keepLineBlankNames = make(map[string]bool)
+	}
+	c.keepLineBlankNames[directiveName] = keepLineBlank
+}
+
 // GetRoundingMode returns the rounding mode used by #number (默认 HALF_EVEN)。
 func (c *EngineConfig) GetRoundingMode() string {
 	if c.roundingMode == "" {
@@ -222,6 +237,8 @@ func (c *EngineConfig) AddSharedFunction(fileName string) error {
 	content := c.sourceFactory(fileName).GetContent()
 	env := NewEnv(c)
 	lexer := NewLexer(content)
+	lexer.SetKeepLineBlank(c.KeepLineBlankDirectives())
+	lexer.SetKeepLineBlankNames(c.keepLineBlankNames)
 	if _, err := parseTemplateRecovered(lexer, env); err != nil {
 		return err
 	}
