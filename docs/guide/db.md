@@ -436,19 +436,23 @@ db.RawSql(`SELECT u.*, d.name AS dept_name FROM user u JOIN dept d ON ...`).
 #sql("searchUsers")
   SELECT * FROM users
   #where(status, "=", status)
-    #and(name, "like", name)
-    #and(age, "between", ageRange)
-    #and(dept_id, "in", deptIds)
-  #end
+  #and(name, "like", name)
+  #and(age, "between", ageRange)
+  #and(dept_id, "in", deptIds)
   #orderBy($sort, created_at, name)
 #end
 ```
+
+注意 `#where` / `#and` 是**平级**的条件指令（无 `#end` 块体），不要在 `#where(...)` 与 `#and(...)` 之间插 `#end`——那会提前闭合 `#sql` 块。上述指令行内、行首（含缩进）两种写法都支持：行首独占一行时保留行尾换行（SqlKit 按 Java 同款注册这些指令为 `keepLineBlank=true`），渲染结果逐条件换行，不会粘连。
 
 传入 `{status:"active", name:"alice", ageRange:[18,60], deptIds:[1,2,3], sort:{field:"created_at",order:"desc"}}` 渲染得到：
 
 ```sql
 SELECT * FROM users
-WHERE status = ? AND name LIKE ? AND age BETWEEN ? AND ? AND dept_id IN (?, ?, ?)
+WHERE status = ?
+AND name LIKE ?
+AND age BETWEEN ? AND ?
+AND dept_id IN (?, ?, ?)
 ORDER BY created_at DESC
 -- Paras: ["active", "%alice%", 18, 60, 1, 2, 3]
 ```
