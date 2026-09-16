@@ -37,18 +37,19 @@ generator/                # 代码生成器独立模块（import db + enjoy）
     ├── field_to_attr.go     # FieldToAttr — 字段名 → 属性名
     ├── go_keyword.go        # GoKeyword — Go 保留字检查
     ├── types.go             # TableInfo / FieldInfo 数据结构
+    ├── names.go             # buildNames — 标识符参数化（默认裸名 / Qualified 表限定名）
     ├── template_util.go     # TemplateUtil — Enjoy 模板辅助方法
-    ├── base_generator.go    # BaseGenerator — 生成 base.go (覆盖写入)
+    ├── base_generator.go    # BaseGenerator — 生成 base.go (覆盖写入，含 FromRow/FromRows 桥)
     ├── model_generator.go   # ModelGenerator — 生成 model 文件 (存在则跳过)
-    ├── dao_generator.go     # DaoGenerator — 生成 dao.go (存在则跳过)
-    ├── service_generator.go # ServiceGenerator — 生成 service.go (存在则跳过)
-    ├── tables_generator.go  # TablesGenerator — 生成 tables.go (覆盖写入)
+    ├── dao_generator.go     # DaoGenerator — 生成 dao.go (存在则跳过；typed 批量 IN + XxxPage 分页)
+    ├── service_generator.go # ServiceGenerator — 生成 service.go (存在则跳过；Template 可自定义)
+    ├── init_generator.go    # InitGenerator — 生成 init.go (覆盖写入，按包去重空白导入)
     └── templates/           # Enjoy 模板文件 (.af)
         ├── _base.af             # 生成 BaseXxx + Table + getter/setter
         ├── _model.af            # 生成 Xxx struct
         ├── _dao.af              # 生成 Dao + 查询函数
         ├── _service.af          # 生成 Service + HTTP 路由
-        └── _tables.af           # 生成 Tables 集合
+        └── _init.af             # 生成 init.go（各包空白导入，触发 init() 自注册）
 ```
 
 **依赖方向（无循环）：**
@@ -378,34 +379,44 @@ func TxBegin(configID ...string) (*sql.Tx, error)
 - **Schema 同步**：数据库字段变更后重新生成 base.go 即可，model/dao/service 因已存在而不会被覆盖
 - **Short Setter**：`user.New().Name_("james").Age_(28)` 链式调用风格
 
-### 7.2 生成策略：每表一个包
+### 7.2 生成策略：默认每表一包，`Qualified` 多表一包（包 = 领域）
 
-Java 按层级分 `base/`、`model/`、`dao/` 三个包。Go 采用**每表一个包**策略：
+Java 按层级分 `base/`、`model/`、`dao/` 三个包。Go 默认采用**每表一个包**策略：
 
 ```
 myapp/db/
-├── tables.go              # 每次覆盖 — 所有表的 Table 元数据集合
+├── init.go                # 每次覆盖 — 各包空白导入，触发 init() 自注册（多包去重）
 │
-├── user/                  # package user
-│   ├── base.go            # 每次覆盖 — BaseUser + Table + getter/setter + 实例 CRUD
-│   ├── user.go            # 存在则跳过 — User struct（用户扩展）
-│   ├── dao.go             # 存在则跳过 — Dao + FindById 等查询方法
+├── user/                  # package user（默认裸名：Table / New / Dao / FindById）
+│   ├── base.go            # 每次覆盖 — BaseUser + Table + getter/setter + 实例 CRUD + FromRow/FromRows 桥
+│   ├── model.go           # 存在则跳过 — User struct（用户扩展）
+│   ├── dao.go             # 存在则跳过 — Dao + FindById/FindByIds/FindIn/分页等查询方法
 │   └── service.go         # 存在则跳过 — Service + HTTP 方法路由
 │
 ├── order/                 # package order
 │   ├── base.go
-│   ├── order.go
+│   ├── model.go
 │   ├── dao.go
 │   └── service.go
 ```
 
-**同一包内互引无需 import，彻底消除循环依赖的风险。**
+开启 `Generator.Qualified = true`（配合 `PkgNameFunc` 把多张表映射进同一包）后，同一包可以放多张表（**包 = 领域**）：包级标识符全部带表名（`TableUser` / `NewUserDao` / `UserFindById`），文件按表命名（`base_user.go` 等），互不冲突：
 
-| Java 层级方案 | Go 每表一包 |
-|---|---|
-| `base.FindUserById(id)` | `user.FindById(id)` |
-| `model.User` | `user.User` |
-| `dao.NewUserDao()` | `user.NewDao()` |
+```
+myapp/db/flow/               # 两表一包：sys_flow_task + sys_flow_log
+├── base_flow_task.go        # TableFlowTask / NewFlowTask / FlowTaskFindById ...
+├── base_flow_log.go         # TableFlowLog / NewFlowLog / FlowLogFindById ...
+├── dao_flow_task.go
+└── ...
+```
+
+**同一包内互引无需 import，彻底消除循环依赖的风险。**跨包调用走「向下单向」：service → 他包 dao/model 是数据依赖天然无环（demo 的 flow service 组合 user 包模型即此模式）；service ↔ 他包 service 才需要窄接口 / dami 事件 / 合并包三阀门（详见 [generator 指南](../guide/generator.md) §7.2）。
+
+| Java 层级方案 | Go 默认（每表一包） | Go Qualified（多表一包） |
+|---|---|---|
+| `base.FindUserById(id)` | `user.FindById(id)` | `user.UserFindById(id)` |
+| `model.User` | `user.User` | `user.User`（结构体名本就含表名） |
+| `dao.NewUserDao()` | `user.NewDao()` | `user.NewUserDao()` |
 
 ### 7.3 架构
 
@@ -436,14 +447,15 @@ type FieldInfo struct {
 }
 
 type TableInfo struct {
-    Name       string       // 表名
-    PrimaryKey []string     // 主键列名
-    Remarks    string       // 表注释
-    IsView     bool         // 是否为视图
-    Fields     []*FieldInfo // 字段列表
-    PkgName    string       // 包名
-    StructName string       // 结构体名
-    BaseName   string       // 基础结构体名
+    Name       string            // 表名
+    PrimaryKey []string          // 主键列名
+    Remarks    string            // 表注释
+    IsView     bool              // 是否为视图
+    Fields     []*FieldInfo      // 字段列表
+    PkgName    string            // 包名
+    StructName string            // 结构体名
+    BaseName   string            // 基础结构体名
+    Names      map[string]string // 标识符参数化（names.go：tableVar/newFn/findByIdFn/文件名等，见 §7.2）
 }
 ```
 
@@ -458,43 +470,60 @@ type Generator struct {
     outputDir  string
     importRoot string
 
-    metaReader        *MetaReader
-    baseGenerator     *BaseGenerator
-    modelGenerator    *ModelGenerator
-    daoGenerator      *DaoGenerator
-    serviceGenerator  *ServiceGenerator
-    tablesGenerator   *TablesGenerator
+    // 可定制字段
+    TablePrefix    string              // 表名前缀，命名前剥离（如 "sys_"）
+    Qualified      bool                // 多表一包：包级标识符带表名、文件按表命名
+    Force          bool                // 强制覆盖 model/dao/service（默认已存在则跳过）
+    PkgNameFunc    func(string) string // 表名 → 包名（多表映射同一包即「包=领域」）
+    StructNameFunc func(string) string // 表名 → 结构体名
+    BaseNameFunc   func(string) string // 结构体名 → base 结构体名
+
+    metaReader       *MetaReader
+    baseGenerator    *BaseGenerator
+    modelGenerator   *ModelGenerator
+    daoGenerator     *DaoGenerator
+    initGenerator    *InitGenerator
+    serviceGenerator *ServiceGenerator
 }
 
 func New(pool *sql.DB, dialect MetaDialect, outputDir, importRoot string) *Generator
 
 func (g *Generator) ConfigMetaReader(fn func(*MetaReader)) *Generator
 func (g *Generator) ConfigBaseGenerator(fn func(*BaseGenerator)) *Generator
+func (g *Generator) ConfigModelGenerator(fn func(*ModelGenerator)) *Generator
+func (g *Generator) ConfigDaoGenerator(fn func(*DaoGenerator)) *Generator
 func (g *Generator) ConfigServiceGenerator(fn func(*ServiceGenerator)) *Generator
 
 func (g *Generator) Generate() error
 ```
+
+`Generate()` 内部校验：多张表被映射进同一包而未开 `Qualified` 时直接报错并列出冲突表名（宁可失败，不产出撞名代码）。
 
 ### 7.6 使用示例
 
 ```go
 import (
     "github.com/crazy-airhead/aifei-go/db"
-    "github.com/crazy-airhead/aifei-go/generator"
+    "github.com/crazy-airhead/aifei-go/tools/generator"
 )
 
 func main() {
-    db.Init("sqlite3", "app.db")
+    db.Init("sqlite", "app.db")
     pool, _ := db.GetConfig().Pool()
 
     dialect := generator.NewMetaDialect(db.GetConfig().GetDialect())
     gen := generator.New(pool, dialect, "./myapp/db", "myapp/db")
 
+    // 可选：按领域多表一包（如 flow_task/flow_log → flow 包）
+    // gen.TablePrefix = "sys_"
+    // gen.Qualified = true
+    // gen.PkgNameFunc = func(tableName string) string { ... }
+
     gen.ConfigMetaReader(func(mr *generator.MetaReader) {
         mr.AddBlacklist("migrations", "schema_version")
     })
 
-    gen.Generate() // 每个表一个包：user/、order/、product/
+    gen.Generate() // 默认每个表一个包：user/、order/、product/
 }
 ```
 
@@ -502,25 +531,27 @@ func main() {
 
 | 方面 | Java 版 | Go 版 |
 |------|---------|-------|
-| 包结构 | `base/` `model/` `dao/` 三层 | 每表一包 + 汇总 `tables.go` |
-| 模型注册 | `ModelSet` — `LinkedHashSet<Class>` 用于 DI 扫描 | `Tables` — `[]*db.Table` 用于跨表遍历 |
+| 包结构 | `base/` `model/` `dao/` 三层 | 默认每表一包；`Qualified` 多表一包（包=领域）+ 汇总 `init.go` 空白导入 |
+| 模型注册 | `ModelSet` — `LinkedHashSet<Class>` 用于 DI 扫描 | 每包 `init()` 调 `db.RegisterTable(Table)`；`init.go` 空白导入触发，`db.Tables()` 遍历 |
 | 继承方式 | `BaseUser<M> extends AifeiRow<M>` + CRTP | `BaseUser` 内嵌 `*db.Row` |
 | 模型类 | `User extends BaseUser<User>` | 同包内 `User` 嵌入 `*BaseUser` |
-| 查询方法 | `User.findById(123)` | `user.FindById(123)` — 包名即命名空间 |
-| Dao 实例 | `new UserDao()` | `user.NewDao()` — 无冗余命名 |
-| Service | Controller 层 | `service.go` — 同包内 HTTP 方法路由 |
-| 模板引擎 | Enjoy 模板 (.af) | Enjoy 模板 (.af) — 相同引擎 |
-| Short Setter | `user.name("james")` | `user.New().Name_("james")` |
+| 查询方法 | `User.findById(123)` | `user.FindById(123)`（Qualified：`user.UserFindById(123)`）— 包名即命名空间 |
+| Dao 实例 | `new UserDao()` | `user.NewDao()`（Qualified：`user.NewUserDao()`）— 无冗余命名 |
+| Service | Controller 层 | `service.go` — 同包内 HTTP 方法路由（模板可经 `Template` 字段整体替换） |
+| 模板引擎 | Enjoy 模板 (.af) | Enjoy 模板 (.af) — 相同引擎，渲染结果统一过 gofmt |
+| Short Setter | `user.name("james")` | `user.New().Name_("james")`（Qualified：`user.NewUser()...`） |
 
 ### 7.8 Enjoy 代码生成模板
 
 使用 Enjoy 模板引擎生成代码（与 Java 版一致），通过 `//go:embed` 嵌入：
 
-- **`_base.af`** — 生成 `base.go`：`BaseXxx` 结构体、`Table` 常量、类型安全 getter/setter/short setter、CRUD 实例方法。每次覆盖写入。
-- **`_model.af`** — 生成 model 文件：`Xxx` 结构体嵌入 `*BaseXxx`。存在则跳过。
-- **`_dao.af`** — 生成 `dao.go`：`Dao` 结构体、包级查询函数（`FindById`、`FindBy`、`DeleteById`、`Count` 等）、Dao 实例方法。存在则跳过。
-- **`_service.af`** — 生成 `service.go`：`Service` 结构体、`init()` 自注册、HTTP 方法路由（`List`、`Create`、`GetById`、`UpdateById`、`DeleteById`）、`MethodInterceptors()`。存在则跳过。
-- **`_tables.af`** — 生成 `tables.go`：汇总所有表的 `*db.Table` 引用。每次覆盖写入。
+- **`_base.af`** — 生成 `base.go`：`BaseXxx` 结构体、`Table` 变量、类型安全 getter/setter/short setter、CRUD 实例方法、导出的 `FromRow`/`FromRows` 桥（裸 `*db.Row` → 类型化模型）。每次覆盖写入。
+- **`_model.af`** — 生成 model 文件：`Xxx` 结构体嵌入 `*BaseXxx`。存在则跳过（`Force` 覆盖）。
+- **`_dao.af`** — 生成 `dao.go`：typed `Dao` 结构体（两段式 setup → terminal，返回 `[]*Xxx`）、包级查询函数（`FindById`、`FindByIds`/`DeleteByIds` 批量 IN、`FindIn`、`FindBy`、`DeleteById`、`Count` 等）、typed 分页 `XxxPage`（`Rows []*Xxx`）。存在则跳过（`Force` 覆盖）。
+- **`_service.af`** — 生成 `service.go`：`Service` 结构体、`init()` 自注册、HTTP 方法路由（`List`、`Paginate`、`Create`、`GetById`、`UpdateById`、`DeleteById`）。存在则跳过（`Force` 覆盖）；`ServiceGenerator.Template` 可注入应用自有模板（同一数据 map）。
+- **`_init.af`** — 生成 `init.go`：各包空白导入（多表一包时按包去重），触发各包 `init()` 自注册。每次覆盖写入。
+
+模板中的包级标识符全部参数化（`names.go` 注入 `Table` / `NewDao` / `FindById` 或 Qualified 作用域的 `TableUser` / `NewUserDao` / `UserFindById`），一套模板服务两种包结构。
 
 ---
 

@@ -124,7 +124,7 @@ func TestGenerator_Generate(t *testing.T) {
 
 	// Verify generated files exist (user table - no prefix to strip)
 	expectedFiles := []string{
-		"tables.go",
+		"init.go",
 		"user/base.go",
 		"user/model.go",
 		"user/dao.go",
@@ -141,14 +141,14 @@ func TestGenerator_Generate(t *testing.T) {
 		}
 	}
 
-	// Verify tables.go uses blank imports for self-registration
-	tablesContent, _ := os.ReadFile(filepath.Join(tmpDir, "tables.go"))
-	t.Logf("tables.go:\n%s", string(tablesContent))
-	if !strings.Contains(string(tablesContent), `_ "example/db/user"`) {
-		t.Error("tables.go should contain blank import for user package")
+	// Verify init.go uses blank imports for self-registration
+	initContent, _ := os.ReadFile(filepath.Join(tmpDir, "init.go"))
+	t.Logf("init.go:\n%s", string(initContent))
+	if !strings.Contains(string(initContent), `_ "example/db/user"`) {
+		t.Error("init.go should contain blank import for user package")
 	}
-	if !strings.Contains(string(tablesContent), `_ "example/db/loginlog"`) {
-		t.Error("tables.go should contain blank import for loginlog package")
+	if !strings.Contains(string(initContent), `_ "example/db/loginlog"`) {
+		t.Error("init.go should contain blank import for loginlog package")
 	}
 
 	// Verify base.go content for user
@@ -170,22 +170,19 @@ func TestGenerator_Generate(t *testing.T) {
 		t.Error("base.go should contain InitRow satisfying db.RowEntity (generic Dao terminals)")
 	}
 
-	// Verify the slim typed-dao shape (Go 1.27 generic methods): no wrapper
-	// type re-declaring chainables, package-level shortcuts delegate to the
-	// *db.Dao As-family instead.
+	// Verify the typed-dao shape (identifier-parameterized wrapper from
+	// names.go; default scope keeps the bare historical names): NewDao
+	// returns the typed wrapper, rows are bridged via FromRow/FromRows.
 	daoContent, _ := os.ReadFile(filepath.Join(tmpDir, "user/dao.go"))
 	t.Logf("user/dao.go:\n%s", string(daoContent))
-	if !strings.Contains(string(daoContent), "func NewDao() *db.Dao") {
-		t.Error("dao.go NewDao should return *db.Dao (typed wrapper removed)")
+	if !strings.Contains(string(daoContent), "func NewDao() *Dao") {
+		t.Error("dao.go NewDao should return the typed wrapper *Dao")
 	}
-	if strings.Contains(string(daoContent), "func (d *Dao) Sql(") {
-		t.Error("dao.go should not re-declare chainable Sql (return-type narrowing dropped)")
+	if !strings.Contains(string(daoContent), "func (d *Dao) Find() ([]*User, error)") {
+		t.Error("dao.go Find should return typed rows via the FromRows bridge")
 	}
-	if strings.Contains(string(daoContent), "toRow") {
-		t.Error("dao.go should not contain hand-rolled toRow/toRows wrappers")
-	}
-	if !strings.Contains(string(daoContent), "FindByIDAs") {
-		t.Error("dao.go should delegate typed loads to db FindByIDAs")
+	if !strings.Contains(string(daoContent), "FromRow(") {
+		t.Error("dao.go should bridge rows via FromRow/FromRows")
 	}
 
 	// Verify loginlog package (prefix stripped: sys_login_log → login_log)
@@ -218,8 +215,8 @@ func TestGenerator_Generate(t *testing.T) {
 // TestGeneratedCodeCompiles generates code into a temp module wired to the
 // local workspace (aifei/db/enjoy/log/aifei/http/server have zero external
 // deps) and compiles it — the generated tree must build as-is, exercising the
-// Go 1.27 generic-method calls (FindAs/PaginateAs/FindByIDAs) in base.go,
-// dao.go and service.go.
+// typed wrapper + FromRow/FromRows bridge (and the InitRow-satisfying
+// db.RowEntity) in init.go, base.go, dao.go and service.go.
 func TestGeneratedCodeCompiles(t *testing.T) {
 	pool := setupTestDB(t)
 	defer pool.Close()
@@ -230,7 +227,7 @@ func TestGeneratedCodeCompiles(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Generate into <tmp>/db: tables.go takes its package name from the base
+	// Generate into <tmp>/db: init.go takes its package name from the base
 	// of the output dir, and the temp root itself is not a valid identifier.
 	modDir := filepath.Join(tmpDir, "db")
 	if err := os.Mkdir(modDir, 0755); err != nil {

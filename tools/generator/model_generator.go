@@ -10,16 +10,22 @@ import (
 //go:embed templates/_model.af
 var modelTemplateContent string
 
-// ModelGenerator generates the model struct file (skipped if exists).
-type ModelGenerator struct{}
+// ModelGenerator generates the model struct file (skipped if exists unless
+// Force).
+type ModelGenerator struct {
+	// Force overwrites model.go even when it exists.
+	Force bool
+}
 
 // NewModelGenerator creates a ModelGenerator.
 func NewModelGenerator() *ModelGenerator {
 	return &ModelGenerator{}
 }
 
-// Generate generates the model struct file. Skips if the file already exists.
+// Generate generates the model struct file. Skips if the file already exists
+// unless Force is set.
 func (g *ModelGenerator) Generate(engine *Engine, info *TableInfo, outputDir string) error {
+	ensureNames(info)
 	data := g.buildData(info)
 	content, err := engine.RenderTemplate(modelTemplateContent, data)
 	if err != nil {
@@ -31,13 +37,14 @@ func (g *ModelGenerator) Generate(engine *Engine, info *TableInfo, outputDir str
 		return fmt.Errorf("create dir %s: %w", pkgDir, err)
 	}
 
-	fileName := "model.go"
-	target := filepath.Join(pkgDir, fileName)
+	target := filepath.Join(pkgDir, info.Names["modelFile"])
 
 	// Skip if file exists — user may have added custom logic
-	if _, err := os.Stat(target); err == nil {
-		fmt.Printf("[aifei-gen] Skip %s (already exists)\n", target)
-		return nil
+	if !g.Force {
+		if _, err := os.Stat(target); err == nil {
+			fmt.Printf("[aifei-gen] Skip %s (already exists)\n", target)
+			return nil
+		}
 	}
 
 	if err := os.WriteFile(target, []byte(content), 0644); err != nil {
@@ -60,7 +67,7 @@ func (g *ModelGenerator) buildData(info *TableInfo) map[string]interface{} {
 			jsonFields = append(jsonFields, f)
 		}
 	}
-	return map[string]interface{}{
+	data := map[string]interface{}{
 		"pkgName":      info.PkgName,
 		"tableName":    info.Name,
 		"tableComment": info.Remarks,
@@ -68,4 +75,6 @@ func (g *ModelGenerator) buildData(info *TableInfo) map[string]interface{} {
 		"baseName":     info.BaseName,
 		"jsonFields":   jsonFields,
 	}
+	mergeNames(data, info)
+	return data
 }

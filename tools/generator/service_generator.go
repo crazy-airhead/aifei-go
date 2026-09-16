@@ -11,10 +11,22 @@ import (
 //go:embed templates/_service.af
 var serviceTemplateContent string
 
-// ServiceGenerator generates service.go (not overwritten on re-generation).
+// ServiceGenerator generates service.go (not overwritten on re-generation
+// unless Force is set).
 type ServiceGenerator struct {
 	// APIPrefix is the URL prefix for service routes, e.g. "/api/v1".
 	APIPrefix string
+
+	// Template overrides the embedded _service.af template. When non-empty it
+	// is rendered instead of the built-in one, with the same data map: the
+	// per-table keys below plus the identifier names from names.go (tableVar,
+	// newFn, newDaoFn, findByIdFn, serviceType, prefixConst, listSqlVar, ...).
+	// Use it to generate against an application-specific server layer (custom
+	// wire format, route conventions) without forking the generator.
+	Template string
+
+	// Force overwrites service.go even when it exists.
+	Force bool
 }
 
 // NewServiceGenerator creates a ServiceGenerator.
@@ -24,16 +36,24 @@ func NewServiceGenerator() *ServiceGenerator {
 
 // Generate generates service.go for a single table.
 func (g *ServiceGenerator) Generate(engine *Engine, info *TableInfo, outputDir string) error {
-	pkgDir := filepath.Join(outputDir, info.PkgName)
-	target := filepath.Join(pkgDir, "service.go")
+	ensureNames(info)
 
-	if _, err := os.Stat(target); err == nil {
-		fmt.Printf("[aifei-gen] Skipped %s (already exists)\n", target)
-		return nil
+	pkgDir := filepath.Join(outputDir, info.PkgName)
+	target := filepath.Join(pkgDir, info.Names["serviceFile"])
+
+	if !g.Force {
+		if _, err := os.Stat(target); err == nil {
+			fmt.Printf("[aifei-gen] Skipped %s (already exists)\n", target)
+			return nil
+		}
 	}
 
 	data := g.buildData(info)
-	content, err := engine.RenderTemplate(serviceTemplateContent, data)
+	tpl := serviceTemplateContent
+	if g.Template != "" {
+		tpl = g.Template
+	}
+	content, err := engine.RenderTemplate(tpl, data)
 	if err != nil {
 		return fmt.Errorf("render service template: %w", err)
 	}
@@ -66,7 +86,7 @@ func (g *ServiceGenerator) buildData(info *TableInfo) map[string]interface{} {
 
 	servicePath := ToCamelCase(info.StructName)
 
-	return map[string]interface{}{
+	data := map[string]interface{}{
 		"apiPrefix":       g.APIPrefix,
 		"pkgName":         info.PkgName,
 		"structName":      info.StructName,
@@ -78,6 +98,8 @@ func (g *ServiceGenerator) buildData(info *TableInfo) map[string]interface{} {
 		"needStrconv":     pkGoType == "int" || pkGoType == "int64" || pkGoType == "int32" || pkGoType == "int16" || pkGoType == "int8",
 		"queryConditions": buildQueryConditions(info, info.PrimaryKey),
 	}
+	mergeNames(data, info)
+	return data
 }
 
 func buildQueryConditions(info *TableInfo, primaryKeys []string) string {

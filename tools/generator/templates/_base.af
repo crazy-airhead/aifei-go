@@ -13,7 +13,7 @@ import (
 #if (tableComment != "")
 // #(tableComment)
 #end
-var Table = &db.Table{
+var #(tableVar) = &db.Table{
 	Name:            "#(tableName)",
 	Fields:          "#(fieldNamesStr)",
 	PrimaryKeys:     []string{#(pkQuoted)},
@@ -29,12 +29,15 @@ type #(baseName) struct {
 	*db.Row
 }
 
-func NewBase() *#(baseName) {
-	return &#(baseName){Row: db.NewRow(Table.Name)}
+func #(newBaseFn)() *#(baseName) {
+	return &#(baseName){Row: db.NewRow(#(tableVar).Name)}
 }
 
-func NewWithRow(row *db.Row) *#(baseName) {
-	return &#(baseName){Row: row}
+// #(newWithRowFn) wraps a queried *db.Row as a #(baseName). Unlike a bare
+// struct literal it runs #(initRowFn), so the result carries table name,
+// primary keys and decoded JSON columns — Update()/Delete() work on it.
+func #(newWithRowFn)(row *db.Row) *#(baseName) {
+	return &#(baseName){Row: #(initRowFn)(row)}
 }
 
 ### --- Typed Getters ---
@@ -80,17 +83,39 @@ func (r *#(baseName)) Delete() (bool, error) {
 }
 
 ### initRow sets table and primary key metadata on a Row returned from queries.
-func initRow(row *db.Row) *db.Row {
-	return db.DecodeJSONFields(row.SetTable(Table.Name).SetPrimaryKeys(Table.PrimaryKeys...))
+func #(initRowFn)(row *db.Row) *db.Row {
+	return db.DecodeJSONFields(row.SetTable(#(tableVar).Name).SetPrimaryKeys(#(tableVar).PrimaryKeys...))
+}
+
+### --- Exported typed-row bridge: wrap raw-SQL rows as typed models ---
+
+// #(fromRowFn) wraps a raw-SQL *db.Row as a typed *#(structName) (nil-safe).
+// It lives in base.go — which re-generation always overwrites — so existing
+// projects pick it up by re-running the generator; referencing the model type
+// from here is fine within one package.
+func #(fromRowFn)(row *db.Row) *#(structName) {
+	if row == nil {
+		return nil
+	}
+	return &#(structName){#(baseName): #(newWithRowFn)(row)}
+}
+
+// #(fromRowsFn) wraps a slice of raw-SQL rows as typed *#(structName) values.
+func #(fromRowsFn)(rows []*db.Row) []*#(structName) {
+	out := make([]*#(structName), len(rows))
+	for i, row := range rows {
+		out[i] = #(fromRowFn)(row)
+	}
+	return out
 }
 
 ### InitRow adopts a queried Row (table + pk metadata, JSON columns decoded),
 ### satisfying db.RowEntity for the generic Dao terminals: FindAs/FindFirstAs/
 ### FindOneAs/PaginateAs/FindByAs/FindFirstByAs/FindByIDAs.
 func (b *#(baseName)) InitRow(row *db.Row) {
-	b.Row = initRow(row)
+	b.Row = #(initRowFn)(row)
 }
 
 func init() {
-	db.RegisterTable(Table)
+	db.RegisterTable(#(tableVar))
 }

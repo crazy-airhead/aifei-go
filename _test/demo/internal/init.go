@@ -3,6 +3,7 @@
 package internal
 
 import (
+	_ "github.com/crazy-airhead/aifei-go/_test/demo/internal/flow"
 	_ "github.com/crazy-airhead/aifei-go/_test/demo/internal/loginlog"
 	_ "github.com/crazy-airhead/aifei-go/_test/demo/internal/user"
 )

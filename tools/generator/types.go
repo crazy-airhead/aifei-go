@@ -26,7 +26,8 @@ type TableInfo struct {
 	Fields     []*FieldInfo // column list
 
 	// Assigned during generation
-	PkgName    string // package name, e.g. "user"
-	StructName string // struct name, e.g. "User"
-	BaseName   string // base struct name, e.g. "BaseUser"
+	PkgName    string            // package name, e.g. "user"
+	StructName string            // struct name, e.g. "User"
+	BaseName   string            // base struct name, e.g. "BaseUser"
+	Names      map[string]string // identifier names for the templates (see names.go); bare in the default one-table-per-package scope, struct-name-prefixed when Qualified
 }

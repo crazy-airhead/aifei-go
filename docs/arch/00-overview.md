@@ -136,18 +136,19 @@ flowchart TD
             G5["field_to_attr.go — FieldToAttr — 字段名 → 属性名"]
             G6["go_keyword.go — GoKeyword — Go 保留字检查"]
             G7["types.go — TableInfo / FieldInfo 数据结构"]
+            G14["names.go — buildNames — 标识符参数化（默认裸名 / Qualified 表限定名）"]
             G8["template_util.go — TemplateUtil — Enjoy 模板辅助方法"]
-            G9["base_generator.go — BaseGenerator — 生成 base.go (覆盖写入)"]
-            G10["model_generator.go — ModelGenerator — 生成 model 文件 (存在则跳过)"]
-            G11["dao_generator.go — DaoGenerator — 生成 dao.go (存在则跳过)"]
-            G12["service_generator.go — ServiceGenerator — 生成 service.go (存在则跳过)"]
-            G13["tables_generator.go — TablesGenerator — 生成 tables.go (覆盖写入)"]
+            G9["base_generator.go — BaseGenerator — 生成 base.go (覆盖写入，含 FromRow/FromRows 桥)"]
+            G10["model_generator.go — ModelGenerator — 生成 model 文件 (存在则跳过，Force 覆盖)"]
+            G11["dao_generator.go — DaoGenerator — 生成 dao.go (存在则跳过，Force 覆盖；typed 批量 IN + XxxPage 分页)"]
+            G12["service_generator.go — ServiceGenerator — 生成 service.go (存在则跳过，Force 覆盖；Template 可自定义)"]
+            G13["init_generator.go — InitGenerator — 生成 init.go (覆盖写入，按包去重空白导入)"]
             subgraph GENTPL["templates/ — Enjoy 模板文件 (.af)"]
                 T1["_base.af — 生成 BaseXxx + Table + getter/setter"]
                 T2["_model.af — 生成 Xxx struct"]
                 T3["_dao.af — 生成 Dao + 查询函数"]
                 T4["_service.af — 生成 Service + HTTP 路由"]
-                T5["_tables.af — 生成 Tables 集合"]
+                T5["_init.af — 生成 init.go（各包空白导入，触发 init() 自注册）"]
             end
         end
     end
@@ -157,7 +158,7 @@ flowchart TD
             subgraph DEMOP["demo/ — 完整示例应用"]
                 M1["main.go"]
                 M2["generated_test.go — 生成代码集成测试"]
-                M3["internal/user/ — 生成的 user 表代码 (base.go, user.go, dao.go, service.go)"]
+                M3["internal/ — 生成代码：user / loginlog 单表包 + flow 领域包（两表一包，Qualified 命名 base_<table>.go，service 跨包组合他包模型）"]
             end
             subgraph DBTESTP["db_test/ — SQLite 集成测试 (971行)"]
                 M4["db_test.go"]
@@ -210,7 +211,7 @@ flowchart TD
 | 配置 | AifeiConfig 接口 + 多个 config() 方法 | Functional Options 模式 | Go 惯用的配置模式 |
 | 包扫描 | ClassLoader + 文件系统/JAR 扫描 | 不需要 (Go 静态编译) | Go 编译时确定所有代码 |
 | HTTP 服务器 | Undertow 嵌入式 | net/http (http 适配 + server 启动) | Go 标准库，零依赖 |
-| 代码生成 | Java Generator (同仓库) | Go Generator 独立模块 | 每表一包策略，编译期类型安全 |
+| 代码生成 | Java Generator (同仓库) | Go Generator 独立模块 | 默认每表一包，`Qualified` 多表一包（包=领域），编译期类型安全 |
 
 ---
 

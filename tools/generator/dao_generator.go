@@ -10,16 +10,20 @@ import (
 //go:embed templates/_dao.af
 var daoTemplateContent string
 
-// DaoGenerator generates dao.go (skipped if exists).
-type DaoGenerator struct{}
+// DaoGenerator generates dao.go (skipped if exists unless Force).
+type DaoGenerator struct {
+	// Force overwrites dao.go even when it exists.
+	Force bool
+}
 
 // NewDaoGenerator creates a DaoGenerator.
 func NewDaoGenerator() *DaoGenerator {
 	return &DaoGenerator{}
 }
 
-// Generate generates dao.go. Skips if the file already exists.
+// Generate generates dao.go. Skips if the file already exists unless Force.
 func (g *DaoGenerator) Generate(engine *Engine, info *TableInfo, outputDir string) error {
+	ensureNames(info)
 	data := g.buildData(info)
 	content, err := engine.RenderTemplate(daoTemplateContent, data)
 	if err != nil {
@@ -31,12 +35,14 @@ func (g *DaoGenerator) Generate(engine *Engine, info *TableInfo, outputDir strin
 		return fmt.Errorf("create dir %s: %w", pkgDir, err)
 	}
 
-	target := filepath.Join(pkgDir, "dao.go")
+	target := filepath.Join(pkgDir, info.Names["daoFile"])
 
-	// Skip if file exists — user may have added custom logic
-	if _, err := os.Stat(target); err == nil {
-		fmt.Printf("[aifei-gen] Skip %s (already exists)\n", target)
-		return nil
+	// Skip if file exists — user may have added custom queries
+	if !g.Force {
+		if _, err := os.Stat(target); err == nil {
+			fmt.Printf("[aifei-gen] Skip %s (already exists)\n", target)
+			return nil
+		}
 	}
 
 	if err := os.WriteFile(target, []byte(content), 0644); err != nil {
@@ -49,22 +55,26 @@ func (g *DaoGenerator) Generate(engine *Engine, info *TableInfo, outputDir strin
 // buildData builds the template data map for dao.go.
 func (g *DaoGenerator) buildData(info *TableInfo) map[string]interface{} {
 	hasSinglePK := len(info.PrimaryKey) == 1
-	pkGoType := "interface{}"
+	pkGoType, pkName := "interface{}", ""
 	if hasSinglePK {
+		pkName = info.PrimaryKey[0]
 		for _, f := range info.Fields {
-			if f.Name == info.PrimaryKey[0] {
+			if f.Name == pkName {
 				pkGoType = f.GoType
 				break
 			}
 		}
 	}
 
-	return map[string]interface{}{
+	data := map[string]interface{}{
 		"pkgName":     info.PkgName,
 		"tableName":   info.Name,
 		"structName":  info.StructName,
 		"baseName":    info.BaseName,
 		"hasSinglePK": hasSinglePK,
 		"pkGoType":    pkGoType,
+		"pkName":      pkName,
 	}
+	mergeNames(data, info)
+	return data
 }

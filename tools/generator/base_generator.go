@@ -25,6 +25,7 @@ func NewBaseGenerator() *BaseGenerator {
 
 // Generate generates base.go for a single table.
 func (g *BaseGenerator) Generate(engine *Engine, info *TableInfo, outputDir string) error {
+	ensureNames(info)
 	data := g.buildData(info)
 	content, err := engine.RenderTemplate(baseTemplateContent, data)
 	if err != nil {
@@ -36,7 +37,7 @@ func (g *BaseGenerator) Generate(engine *Engine, info *TableInfo, outputDir stri
 		return fmt.Errorf("create dir %s: %w", pkgDir, err)
 	}
 
-	target := filepath.Join(pkgDir, "base.go")
+	target := filepath.Join(pkgDir, info.Names["baseFile"])
 	if err := os.WriteFile(target, []byte(content), 0644); err != nil {
 		return fmt.Errorf("write %s: %w", target, err)
 	}
@@ -108,8 +109,9 @@ func (g *BaseGenerator) buildData(info *TableInfo) map[string]interface{} {
 		shortSetterFields = fields
 	}
 
-	return map[string]interface{}{
+	data := map[string]interface{}{
 		"pkgName":                info.PkgName,
+		"structName":             info.StructName,
 		"imports":                imports,
 		"tableName":              info.Name,
 		"tableComment":           info.Remarks,
@@ -121,4 +123,6 @@ func (g *BaseGenerator) buildData(info *TableInfo) map[string]interface{} {
 		"fields":                 fields,
 		"shortSetterFields":      shortSetterFields,
 	}
+	mergeNames(data, info)
+	return data
 }

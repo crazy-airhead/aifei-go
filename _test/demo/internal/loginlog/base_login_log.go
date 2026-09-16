@@ -3,16 +3,16 @@
 package loginlog
 
 import (
+	"github.com/crazy-airhead/aifei-go/db"
 	"reflect"
 	"time"
-
-	"github.com/crazy-airhead/aifei-go/db"
 )
 
-var Table = &db.Table{
-	Name:        "sys_login_log",
-	Fields:      "id,user_id,login_time,ip",
-	PrimaryKeys: []string{"id"},
+var TableLoginLog = &db.Table{
+	Name:             "sys_login_log",
+	Fields:           "id,user_id,login_time,ip",
+	PrimaryKeys:      []string{"id"},
+	GeneratedColumns: []string{},
 	FieldTypes: map[string]reflect.Type{
 		"id":         reflect.TypeOf(int(0)),
 		"user_id":    reflect.TypeOf(int(0)),
@@ -25,12 +25,15 @@ type BaseLoginLog struct {
 	*db.Row
 }
 
-func NewBase() *BaseLoginLog {
-	return &BaseLoginLog{Row: db.NewRow(Table.Name)}
+func NewBaseLoginLog() *BaseLoginLog {
+	return &BaseLoginLog{Row: db.NewRow(TableLoginLog.Name)}
 }
 
-func NewWithRow(row *db.Row) *BaseLoginLog {
-	return &BaseLoginLog{Row: row}
+// NewLoginLogWithRow wraps a queried *db.Row as a BaseLoginLog. Unlike a bare
+// struct literal it runs initLoginLogRow, so the result carries table name,
+// primary keys and decoded JSON columns — Update()/Delete() work on it.
+func NewLoginLogWithRow(row *db.Row) *BaseLoginLog {
+	return &BaseLoginLog{Row: initLoginLogRow(row)}
 }
 
 func (r *BaseLoginLog) Id() int {
@@ -98,10 +101,30 @@ func (r *BaseLoginLog) Delete() (bool, error) {
 	return r.Row.Delete()
 }
 
-func initRow(row *db.Row) *db.Row {
-	return row.SetTable(Table.Name).SetPrimaryKeys(Table.PrimaryKeys...)
+func initLoginLogRow(row *db.Row) *db.Row {
+	return db.DecodeJSONFields(row.SetTable(TableLoginLog.Name).SetPrimaryKeys(TableLoginLog.PrimaryKeys...))
+}
+
+// LoginLogFromRow wraps a raw-SQL *db.Row as a typed *LoginLog (nil-safe).
+// It lives in base.go — which re-generation always overwrites — so existing
+// projects pick it up by re-running the generator; referencing the model type
+// from here is fine within one package.
+func LoginLogFromRow(row *db.Row) *LoginLog {
+	if row == nil {
+		return nil
+	}
+	return &LoginLog{BaseLoginLog: NewLoginLogWithRow(row)}
+}
+
+// LoginLogFromRows wraps a slice of raw-SQL rows as typed *LoginLog values.
+func LoginLogFromRows(rows []*db.Row) []*LoginLog {
+	out := make([]*LoginLog, len(rows))
+	for i, row := range rows {
+		out[i] = LoginLogFromRow(row)
+	}
+	return out
 }
 
 func init() {
-	db.RegisterTable(Table)
+	db.RegisterTable(TableLoginLog)
 }

@@ -24,12 +24,26 @@ func setupTest(t *testing.T) {
 		email TEXT,
 		created_at TEXT DEFAULT CURRENT_TIMESTAMP
 	)`).Update()
+	db.RawSql(`CREATE TABLE IF NOT EXISTS sys_flow_task (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		title TEXT NOT NULL,
+		user_id INTEGER NOT NULL,
+		state TEXT DEFAULT 'pending',
+		created_at TEXT DEFAULT CURRENT_TIMESTAMP
+	)`).Update()
+	db.RawSql(`CREATE TABLE IF NOT EXISTS sys_flow_log (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		task_id INTEGER NOT NULL,
+		user_id INTEGER NOT NULL,
+		action TEXT,
+		created_at TEXT DEFAULT CURRENT_TIMESTAMP
+	)`).Update()
 }
 
 func TestGeneratedInsert(t *testing.T) {
 	setupTest(t)
 
-	u := user.New().Name_("james").Age_(28).Email_("james@test.com")
+	u := user.NewUser().Name_("james").Age_(28).Email_("james@test.com")
 	result, err := u.Insert()
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
@@ -44,11 +58,11 @@ func TestGeneratedFindById(t *testing.T) {
 	setupTest(t)
 
 	// Insert a test row
-	u := user.New().Name_("alice").Age_(25)
+	u := user.NewUser().Name_("alice").Age_(25)
 	u.Insert()
 
 	// Find by ID
-	found, err := user.FindById(1)
+	found, err := user.UserFindById(1)
 	if err != nil {
 		t.Fatalf("FindById failed: %v", err)
 	}
@@ -66,9 +80,9 @@ func TestGeneratedFindById(t *testing.T) {
 func TestGeneratedUpdate(t *testing.T) {
 	setupTest(t)
 
-	user.New().Name_("bob").Age_(30).Insert()
+	user.NewUser().Name_("bob").Age_(30).Insert()
 
-	u, err := user.FindById(1)
+	u, err := user.UserFindById(1)
 	if err != nil || u == nil {
 		t.Fatal("Expected to find user")
 	}
@@ -80,7 +94,7 @@ func TestGeneratedUpdate(t *testing.T) {
 	}
 
 	// Verify
-	u2, _ := user.FindById(1)
+	u2, _ := user.UserFindById(1)
 	if u2.Name() != "bob updated" {
 		t.Errorf("Expected 'bob updated', got '%s'", u2.Name())
 	}
@@ -92,14 +106,14 @@ func TestGeneratedUpdate(t *testing.T) {
 func TestGeneratedDelete(t *testing.T) {
 	setupTest(t)
 
-	user.New().Name_("charlie").Insert()
+	user.NewUser().Name_("charlie").Insert()
 
-	deleted, err := user.DeleteById(1)
+	deleted, err := user.UserDeleteById(1)
 	if err != nil || !deleted {
 		t.Fatal("DeleteById failed")
 	}
 
-	u, err := user.FindById(1)
+	u, err := user.UserFindById(1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,12 +125,12 @@ func TestGeneratedDelete(t *testing.T) {
 func TestGeneratedFindBy(t *testing.T) {
 	setupTest(t)
 
-	user.New().Name_("dave").Age_(20).Insert()
-	user.New().Name_("eve").Age_(25).Insert()
-	user.New().Name_("frank").Age_(30).Insert()
+	user.NewUser().Name_("dave").Age_(20).Insert()
+	user.NewUser().Name_("eve").Age_(25).Insert()
+	user.NewUser().Name_("frank").Age_(30).Insert()
 
 	// FindBy
-	users, err := user.FindBy("age > ?", 22)
+	users, err := user.UserFindBy("age > ?", 22)
 	if err != nil {
 		t.Fatalf("FindBy failed: %v", err)
 	}
@@ -125,7 +139,7 @@ func TestGeneratedFindBy(t *testing.T) {
 	}
 
 	// Count
-	count, err := user.CountBy("age > ?", 22)
+	count, err := user.UserCountBy("age > ?", 22)
 	if err != nil {
 		t.Fatalf("CountBy failed: %v", err)
 	}
@@ -138,10 +152,10 @@ func TestGeneratedShortSetters(t *testing.T) {
 	setupTest(t)
 
 	// Chain short setters
-	u := user.New().Name_("grace").Age_(35).Email_("grace@test.com")
+	u := user.NewUser().Name_("grace").Age_(35).Email_("grace@test.com")
 	u.Insert()
 
-	found, _ := user.FindById(1)
+	found, _ := user.UserFindById(1)
 	if found.Name() != "grace" {
 		t.Errorf("Expected 'grace', got '%s'", found.Name())
 	}
@@ -157,16 +171,16 @@ func TestGeneratedShortSetters(t *testing.T) {
 func TestGeneratedTypedDao(t *testing.T) {
 	setupTest(t)
 
-	user.New().Name_("tyler").Age_(40).Insert()
-	user.New().Name_("tyler").Age_(22).Insert()
-	user.New().Name_("uma").Age_(33).Insert()
+	user.NewUser().Name_("tyler").Age_(40).Insert()
+	user.NewUser().Name_("tyler").Age_(22).Insert()
+	user.NewUser().Name_("uma").Age_(33).Insert()
 
 	byName := `SELECT * FROM user
 #where(name, '=', name)
 ORDER BY id DESC`
 
 	// typed Sql().Find() -> []*User
-	users, err := user.NewDao().Sql(byName, map[string]interface{}{"name": "tyler"}).Find()
+	users, err := user.NewUserDao().Sql(byName, map[string]interface{}{"name": "tyler"}).Find()
 	if err != nil {
 		t.Fatalf("typed Find failed: %v", err)
 	}
@@ -178,7 +192,7 @@ ORDER BY id DESC`
 	}
 
 	// typed FindFirst -> *User
-	first, err := user.NewDao().Sql(`SELECT * FROM user ORDER BY id ASC`, map[string]interface{}{}).FindFirst()
+	first, err := user.NewUserDao().Sql(`SELECT * FROM user ORDER BY id ASC`, map[string]interface{}{}).FindFirst()
 	if err != nil || first == nil {
 		t.Fatalf("typed FindFirst failed: %v", err)
 	}
@@ -187,13 +201,13 @@ ORDER BY id DESC`
 	}
 
 	// typed FindByID (method, not the package func) -> *User
-	got, err := user.NewDao().FindByID(1)
+	got, err := user.NewUserDao().FindByID(1)
 	if err != nil || got == nil {
 		t.Fatalf("typed FindByID failed: %v", got)
 	}
 
 	// typed Paginate -> *db.Page
-	page, err := user.NewDao().Sql(`SELECT * FROM user`, map[string]interface{}{}).Paginate(1, 2)
+	page, err := user.NewUserDao().Sql(`SELECT * FROM user`, map[string]interface{}{}).Paginate(1, 2)
 	if err != nil {
 		t.Fatalf("typed Paginate failed: %v", err)
 	}
@@ -205,7 +219,7 @@ ORDER BY id DESC`
 	}
 
 	// typed Count (method, no table arg)
-	c, err := user.NewDao().Count()
+	c, err := user.NewUserDao().Count()
 	if err != nil {
 		t.Fatalf("typed Count failed: %v", err)
 	}
@@ -214,11 +228,135 @@ ORDER BY id DESC`
 	}
 
 	// typed FindBy -> []*User
-	matched, err := user.NewDao().FindBy("age > ?", 30)
+	matched, err := user.NewUserDao().FindBy("age > ?", 30)
 	if err != nil {
 		t.Fatalf("typed FindBy failed: %v", err)
 	}
 	if len(matched) != 2 { // tyler(40) + uma(33)
 		t.Errorf("expected 2 matched, got %d", len(matched))
+	}
+}
+
+// TestGeneratedTypedBatchIN covers the typed IN queries: FindByIds /
+// DeleteByIds (WHERE pk IN ...) and FindIn (IN over an arbitrary column).
+func TestGeneratedTypedBatchIN(t *testing.T) {
+	setupTest(t)
+
+	user.NewUser().Name_("hank").Age_(20).Insert()
+	user.NewUser().Name_("iris").Age_(25).Insert()
+	user.NewUser().Name_("jack").Age_(30).Insert()
+	user.NewUser().Name_("kate").Age_(35).Insert()
+
+	// package-level FindByIds
+	byIds, err := user.UserFindByIds(1, 3)
+	if err != nil {
+		t.Fatalf("FindByIds failed: %v", err)
+	}
+	if len(byIds) != 2 {
+		t.Fatalf("expected 2 users, got %d", len(byIds))
+	}
+	names := map[string]bool{byIds[0].Name(): true, byIds[1].Name(): true}
+	if !names["hank"] || !names["jack"] {
+		t.Errorf("expected hank+jack, got %v", names)
+	}
+
+	// dao-level FindByIds
+	byIds2, err := user.NewUserDao().FindByIds(2, 4)
+	if err != nil || len(byIds2) != 2 {
+		t.Fatalf("dao FindByIds failed: %v (%d rows)", err, len(byIds2))
+	}
+
+	// FindIn over a non-PK column
+	aged, err := user.NewUserDao().FindIn("age", 25, 35)
+	if err != nil {
+		t.Fatalf("FindIn failed: %v", err)
+	}
+	if len(aged) != 2 { // iris(25) + kate(35)
+		t.Errorf("expected 2 users, got %d", len(aged))
+	}
+
+	// DeleteByIds
+	n, err := user.UserDeleteByIds(1, 2)
+	if err != nil {
+		t.Fatalf("DeleteByIds failed: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("expected 2 deleted, got %d", n)
+	}
+	left, _ := user.UserCount()
+	if left != 2 {
+		t.Errorf("expected 2 remaining, got %d", left)
+	}
+}
+
+// TestGeneratedTypedPaginate verifies Paginate returns a typed page: the
+// metadata mirrors db.Page and Rows carries *User.
+func TestGeneratedTypedPaginate(t *testing.T) {
+	setupTest(t)
+
+	user.NewUser().Name_("lena").Age_(20).Insert()
+	user.NewUser().Name_("mark").Age_(25).Insert()
+	user.NewUser().Name_("nina").Age_(30).Insert()
+
+	page, err := user.NewUserDao().Sql(`SELECT * FROM user`, map[string]interface{}{}).Paginate(1, 2)
+	if err != nil {
+		t.Fatalf("typed Paginate failed: %v", err)
+	}
+	if page.TotalRows != 3 || page.TotalPages != 2 || page.PageNum != 1 || page.PageSize != 2 {
+		t.Fatalf("unexpected page metadata: %+v", page)
+	}
+	if len(page.Rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(page.Rows))
+	}
+	if page.Rows[0].Name() != "lena" { // typed element access
+		t.Errorf("expected first row 'lena', got '%s'", page.Rows[0].Name())
+	}
+}
+
+// TestGeneratedFromRowBridge covers the exported typed-row bridge: raw SQL
+// through db.Sql returns []*db.Row, and FromRow/FromRows wrap them into
+// typed *User usable outside the generated package.
+func TestGeneratedFromRowBridge(t *testing.T) {
+	setupTest(t)
+
+	user.NewUser().Name_("oscar").Age_(40).Insert()
+	user.NewUser().Name_("pete").Age_(45).Insert()
+
+	rows, err := db.SqlWithArgs(`SELECT * FROM user WHERE age > #para(0) ORDER BY id`, 42).Find()
+	if err != nil {
+		t.Fatalf("raw db.Sql failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 raw row, got %d", len(rows))
+	}
+
+	// single wrap
+	u := user.UserFromRow(rows[0])
+	if u == nil {
+		t.Fatal("FromRow returned nil")
+	}
+	if u.Name() != "pete" {
+		t.Errorf("expected 'pete', got '%s'", u.Name())
+	}
+
+	// slice wrap
+	typed := user.UserFromRows(rows)
+	if len(typed) != 1 || typed[0].Age() != 45 {
+		t.Errorf("FromRows yielded wrong result: %v", typed)
+	}
+
+	// the wrapped row is fully initialized: Update() via the bridge works
+	u.SetAge(46)
+	if ok, err := u.Update(); err != nil || !ok {
+		t.Fatalf("Update via FromRow-wrapped model failed: %v", err)
+	}
+	again, _ := user.UserFindById(u.Id())
+	if again.Age() != 46 {
+		t.Errorf("expected updated age 46, got %d", again.Age())
+	}
+
+	// nil-safety
+	if user.UserFromRow(nil) != nil {
+		t.Error("FromRow(nil) should be nil")
 	}
 }
