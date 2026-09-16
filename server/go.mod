@@ -3,11 +3,11 @@ module github.com/crazy-airhead/aifei-go/server
 go 1.27
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v1.0.0
-	github.com/crazy-airhead/aifei-go/db v1.0.0
-	github.com/crazy-airhead/aifei-go/enjoy v1.0.0
-	github.com/crazy-airhead/aifei-go/http v1.0.0
-	github.com/crazy-airhead/aifei-go/log v1.0.0
+	github.com/crazy-airhead/aifei-go/aifei v1.0.1
+	github.com/crazy-airhead/aifei-go/db v1.0.1
+	github.com/crazy-airhead/aifei-go/enjoy v1.0.1
+	github.com/crazy-airhead/aifei-go/http v1.0.1
+	github.com/crazy-airhead/aifei-go/log v1.0.1
 )
 
 replace (
