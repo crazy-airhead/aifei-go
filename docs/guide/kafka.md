@@ -497,7 +497,7 @@ func (s *OrderService) Create(in aifei.Input) aifei.Output {
     if err := kafka.ProduceSync(in.Context(),
         kafka.NewMessageWithKey("orders", []byte(order.ID), payload),
     ); err != nil {
-        return server.Fail().SetMsg("publish order event: " + err.Error())
+        return server.Failf("publish order event: %v", err)
     }
     return server.Ok().SetData(order)
 }

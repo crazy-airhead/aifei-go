@@ -37,7 +37,7 @@ func TxInterceptor() aifei.Interceptor {
 			if _, ok := err.(*rollbackError); ok {
 				return out
 			}
-			return Fail("transaction error: %s", err)
+			return Failf("transaction error: %s", err)
 		}
 		return out
 	})

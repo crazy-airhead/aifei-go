@@ -122,7 +122,8 @@ var _ aifei.Output = (*Out)(nil)
 | 构造器 | 用途 |
 |--------|------|
 | `Ok(msg ...string)` | 成功，默认 msg "ok" |
-| `Fail(msg string, args ...interface{})` | 失败（code=500）；args 非空时按 `Sprintf` 格式化 |
+| `Fail(msg string)` | 失败（code=500）字面消息（非变参，避免 go vet 把它当 printf wrapper 误报 `Fail(err.Error())`） |
+| `Failf(format string, args ...interface{})` | 失败（code=500），按 `Sprintf` 格式化 |
 | `FailWithCode(code int, msg string)` | 指定错误码 |
 | `Of(data interface{})` | 成功 + data |
 | `OfField(field, value)` | 成功 + 单键值对（data 变 map） |
@@ -136,7 +137,7 @@ var _ aifei.Output = (*Out)(nil)
 
 ```go
 out := server.Ok().SetMsg("done").SetData(result)
-out.SetOk() / SetFail() / SetMsg(fmt, args...) / SetData(d) / Set(field, value) / Get(field)
+out.SetOk() / SetFail() / SetMsg(msg) / SetMsgf(fmt, args...) / SetData(d) / Set(field, value) / Get(field)
 out.SetView("order/detail.html")             // enjoy 模板
 out.SetForward(path) / SetRedirect(url, ...) / SetFile(fn) / SetRaw(...) / SetRawReader(...)
 out.SetRawSize(int64)                         // Reader 已知长度时设 Content-Length
@@ -428,7 +429,7 @@ func TxInterceptor() aifei.Interceptor
 2. 通过 `ctxSetter` 接口（`*http.HttpContext`/`*In` 都满足）把 `txCtx` 注入回 `in`——`SetContext(txCtx)`
 3. `invoke()` 调用业务方法；方法内用 `db.Ctx(in.Context())`（或 `db.InsertCtx` 等 ctx 感知入口）自动加入事务
 4. 根据返回的 `Output` 决定提交/回滚
-5. 事务报错（非 rollback）→ `Fail("transaction error: %s", err)`
+5. 事务报错（非 rollback）→ `Failf("transaction error: %s", err)`
 
 ### 回滚决策（`shouldRollbackOutput`）
 

@@ -15,7 +15,7 @@ func TestOutOkFailOf(t *testing.T) {
 	if ok := server.Ok("hi"); ok.Msg() != "hi" {
 		t.Fatalf("Ok msg: %q", ok.Msg())
 	}
-	fail := server.Fail("bad: %d", 7)
+	fail := server.Failf("bad: %d", 7)
 	if fail.Code() != server.CodeFail || fail.Msg() != "bad: 7" {
 		t.Fatalf("Fail: code=%d msg=%q", fail.Code(), fail.Msg())
 	}

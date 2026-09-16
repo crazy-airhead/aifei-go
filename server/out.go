@@ -56,13 +56,17 @@ func Ok(msg ...string) *Out {
 	return &Out{code: CodeOK, msg: "ok"}
 }
 
-// Fail creates an Out with failure status. msg is used directly when no args
-// are given; otherwise it is treated as a fmt.Sprintf format string.
-func Fail(msg string, args ...interface{}) *Out {
-	if len(args) == 0 {
-		return &Out{code: CodeFail, msg: msg}
-	}
-	return &Out{code: CodeFail, msg: fmt.Sprintf(msg, args...)}
+// Fail creates an Out with failure status and a literal message. (Keeping Fail
+// non-variadic avoids go vet treating it as a printf wrapper, which would flag
+// every Fail(err.Error()) / Fail("…"+x) call site.) For formatted messages use
+// Failf.
+func Fail(msg string) *Out {
+	return &Out{code: CodeFail, msg: msg}
+}
+
+// Failf creates an Out with failure status, formatting msg with fmt.Sprintf.
+func Failf(format string, args ...interface{}) *Out {
+	return &Out{code: CodeFail, msg: fmt.Sprintf(format, args...)}
 }
 
 // FailWithCode creates an Out with a specific error code and message.
@@ -151,14 +155,17 @@ func (o *Out) SetFail() *Out {
 	return o
 }
 
-// SetMsg sets the message. If no args are given, msg is used directly.
-// Otherwise msg is treated as a format string.
-func (o *Out) SetMsg(msg string, args ...interface{}) *Out {
-	if len(args) == 0 {
-		o.msg = msg
-	} else {
-		o.msg = fmt.Sprintf(msg, args...)
-	}
+// SetMsg sets the message. (Like Fail, kept non-variadic so go vet does not
+// treat it as a printf wrapper, which would flag every SetMsg(err.Error()) /
+// SetMsg("…"+x) call site.) For formatted messages use SetMsgf.
+func (o *Out) SetMsg(msg string) *Out {
+	o.msg = msg
+	return o
+}
+
+// SetMsgf sets the message, formatting it with fmt.Sprintf.
+func (o *Out) SetMsgf(format string, args ...interface{}) *Out {
+	o.msg = fmt.Sprintf(format, args...)
 	return o
 }
 

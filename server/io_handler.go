@@ -110,12 +110,12 @@ func (h *IoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		target := o.ForwardPath()
 		if target == path {
-			h.Handle(w, in, Fail("forward target equals current path: %s", target))
+			h.Handle(w, in, Failf("forward target equals current path: %s", target))
 			return
 		}
 		next, ok := h.invoke(in, target)
 		if !ok {
-			h.Handle(w, in, Fail("forward target not found: %s", target))
+			h.Handle(w, in, Failf("forward target not found: %s", target))
 			return
 		}
 		path = target
@@ -208,7 +208,7 @@ func (h *IoHandler) Handle(w http.ResponseWriter, in aifei.Input, out aifei.Outp
 		fn(s)
 		if err := s.send(wt, h.downloadBase); err != nil {
 			if !wt.wroteHeader {
-				writeJSON(w, Fail("io: file: %s", err))
+				writeJSON(w, Failf("io: file: %s", err))
 			} else {
 				log.Default().Warn("io: file send: %v", err)
 			}

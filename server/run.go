@@ -1,8 +1,6 @@
 package server
 
 import (
-	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -10,6 +8,7 @@ import (
 
 	"github.com/crazy-airhead/aifei-go/aifei"
 	aifeihttp "github.com/crazy-airhead/aifei-go/http"
+	"github.com/crazy-airhead/aifei-go/log"
 )
 
 // Option configures the Run function.
@@ -94,7 +93,8 @@ func Run(app *aifei.Aifei, addr string, opts ...Option) {
 
 	for _, p := range app.Plugins() {
 		if err := p.Start(); err != nil {
-			log.Fatalf("[AIFEI] Plugin start error: %v", err)
+			log.Error("plugin start error: %v", err)
+			os.Exit(1)
 		}
 	}
 
@@ -103,9 +103,10 @@ func Run(app *aifei.Aifei, addr string, opts ...Option) {
 	}
 
 	go func() {
-		fmt.Printf("[AIFEI] Server starting on %s (version %s)\n", addr, aifei.Version)
+		log.Info("server starting on %s (version %s)", addr, aifei.Version)
 		if err := srv.Start(h); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("[AIFEI] Server error: %v", err)
+			log.Error("server error: %v", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -114,7 +115,7 @@ func Run(app *aifei.Aifei, addr string, opts ...Option) {
 	<-quit
 
 	if err := srv.Stop(); err != nil {
-		log.Printf("[AIFEI] Shutdown error: %v", err)
+		log.Error("shutdown error: %v", err)
 	}
 
 	if f := app.OnStopFunc(); f != nil {
@@ -128,5 +129,5 @@ func Run(app *aifei.Aifei, addr string, opts ...Option) {
 		_ = plugins[i].Stop()
 	}
 
-	fmt.Println("[AIFEI] Server stopped")
+	log.Info("server stopped")
 }

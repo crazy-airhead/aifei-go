@@ -4,18 +4,19 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"runtime"
 	"time"
 
 	"github.com/crazy-airhead/aifei-go/aifei"
 	aifeihttp "github.com/crazy-airhead/aifei-go/http"
+	"github.com/crazy-airhead/aifei-go/log"
 )
 
 // ---- Handler-level middleware (Input → Output) ----
 
 // Logger returns a middleware that logs request method, path, code, and duration.
+// Error responses (code != CodeOK) are logged at Error level with the error message.
 func Logger() aifei.Handler {
 	return func(next aifei.HandlerFunc) aifei.HandlerFunc {
 		return func(in aifei.Input) aifei.Output {
@@ -26,7 +27,12 @@ func Logger() aifei.Handler {
 			if h, ok := in.(aifeihttp.HTTPMeta); ok {
 				method = h.Method()
 			}
-			fmt.Printf("[AIFEI] %s %s %d %s\n", method, in.Path(), out.Code(), time.Since(start).Round(time.Microsecond))
+			dur := time.Since(start).Round(time.Microsecond)
+			if out.Code() == CodeOK {
+				log.Default().Info("%s %s %d %s", method, in.Path(), out.Code(), dur)
+			} else {
+				log.Default().Error("%s %s %d %s | %s", method, in.Path(), out.Code(), dur, out.Msg())
+			}
 			return out
 		}
 	}
@@ -40,7 +46,7 @@ func Recover() aifei.Handler {
 				if err := recover(); err != nil {
 					buf := make([]byte, 4096)
 					n := runtime.Stack(buf, false)
-					fmt.Printf("[AIFEI] panic recovered: %v\n%s\n", err, buf[:n])
+					log.Default().Error("panic recovered: %v\n%s", err, buf[:n])
 					out = Fail("Internal Server Error")
 				}
 			}()

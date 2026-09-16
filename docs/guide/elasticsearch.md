@@ -387,7 +387,7 @@ aifei-go 的 Service 无需感知插件存在：
 func (s *OrderService) Search(in aifei.Input) aifei.Output {
     sr, err := elasticsearch.Search(in.Context(), "orders", in.GetMap())
     if err != nil {
-        return server.Fail().SetMsg(err.Error())
+        return server.Fail(err.Error())
     }
     return server.Ok().SetData(sr.Hits.Hits)
 }
