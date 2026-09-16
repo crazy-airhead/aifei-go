@@ -59,29 +59,17 @@ func (d *UserDao) Select(fields string) *UserDao {
 
 // Find executes the query and returns all matching rows as typed models.
 func (d *UserDao) Find() ([]*User, error) {
-	rows, err := d.Dao.Find()
-	if err != nil {
-		return nil, err
-	}
-	return UserFromRows(rows), nil
+	return d.Dao.FindAs[User]()
 }
 
 // FindFirst executes the query and returns the first matching row as a typed model.
 func (d *UserDao) FindFirst() (*User, error) {
-	row, err := d.Dao.FindFirst()
-	if err != nil {
-		return nil, err
-	}
-	return UserFromRow(row), nil
+	return d.Dao.FindFirstAs[User]()
 }
 
 // FindOne executes the query and returns the single matching row as a typed model.
 func (d *UserDao) FindOne() (*User, error) {
-	row, err := d.Dao.FindOne()
-	if err != nil {
-		return nil, err
-	}
-	return UserFromRow(row), nil
+	return d.Dao.FindOneAs[User]()
 }
 
 // FindExists reports whether the query matches any row.
@@ -89,47 +77,23 @@ func (d *UserDao) FindExists() (bool, error) {
 	return d.Dao.FindExists()
 }
 
-// UserPage is db.Page with typed rows: the wire format (json tags) is
-// identical, but Rows carries *User instead of *db.Row.
-type UserPage struct {
-	PageNum    int     `json:"pageNum"`
-	PageSize   int     `json:"pageSize"`
-	TotalRows  int64   `json:"totalRows"`
-	TotalPages int     `json:"totalPages"`
-	Rows       []*User `json:"rows"`
-}
+// UserPage is db.PageAs with typed rows: the wire format (json tags) is
+// identical to db.Page, but Rows carries *User instead of *db.Row.
+type UserPage = db.PageAs[*User]
 
 // Paginate executes the query and returns a page of typed rows.
 func (d *UserDao) Paginate(pageNum, pageSize int) (*UserPage, error) {
-	page, err := d.Dao.Paginate(pageNum, pageSize)
-	if err != nil {
-		return nil, err
-	}
-	return &UserPage{
-		PageNum:    page.PageNum,
-		PageSize:   page.PageSize,
-		TotalRows:  page.TotalRows,
-		TotalPages: page.TotalPages,
-		Rows:       UserFromRows(page.Rows),
-	}, nil
+	return d.Dao.PaginateAs[User](pageNum, pageSize)
 }
 
 // FindBy queries by a where clause or a single field with arguments.
 func (d *UserDao) FindBy(whereOrField string, args ...interface{}) ([]*User, error) {
-	rows, err := d.Dao.FindBy(TableUser.Name, whereOrField, args...)
-	if err != nil {
-		return nil, err
-	}
-	return UserFromRows(rows), nil
+	return d.Dao.FindByAs[User](TableUser.Name, whereOrField, args...)
 }
 
 // FindFirstBy queries the first row by a where clause or a single field with arguments.
 func (d *UserDao) FindFirstBy(whereOrField string, args ...interface{}) (*User, error) {
-	row, err := d.Dao.FindFirstBy(TableUser.Name, whereOrField, args...)
-	if err != nil {
-		return nil, err
-	}
-	return UserFromRow(row), nil
+	return d.Dao.FindFirstByAs[User](TableUser.Name, whereOrField, args...)
 }
 
 // FindIn loads rows where field matches any of values (a typed IN query),
@@ -144,11 +108,7 @@ func (d *UserDao) FindIn(field string, values ...interface{}) ([]*User, error) {
 
 // FindByID loads a single row by its primary key.
 func (d *UserDao) FindByID(id int) (*User, error) {
-	row, err := d.Dao.FindByID(TableUser.Name, id)
-	if err != nil {
-		return nil, err
-	}
-	return UserFromRow(row), nil
+	return d.Dao.FindByIDAs[User](TableUser.Name, id)
 }
 
 // DeleteByID deletes a single row by its primary key.

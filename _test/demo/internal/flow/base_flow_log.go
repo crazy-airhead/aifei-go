@@ -139,6 +139,10 @@ func FlowLogFromRows(rows []*db.Row) []*FlowLog {
 	return out
 }
 
+func (b *BaseFlowLog) InitRow(row *db.Row) {
+	b.Row = initFlowLogRow(row)
+}
+
 func init() {
 	db.RegisterTable(TableFlowLog)
 }

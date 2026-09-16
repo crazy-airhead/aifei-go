@@ -59,33 +59,22 @@ func (d *#(daoType)) Select(fields string) *#(daoType) {
 	return d
 }
 
-### --- typed query terminals ---
+### --- typed query terminals (delegate to db's Go 1.27 As-family; the model
+### satisfies db.RowEntity via its InitRow) ---
 
 // Find executes the query and returns all matching rows as typed models.
 func (d *#(daoType)) Find() ([]*#(structName), error) {
-	rows, err := d.Dao.Find()
-	if err != nil {
-		return nil, err
-	}
-	return #(fromRowsFn)(rows), nil
+	return d.Dao.FindAs[#(structName)]()
 }
 
 // FindFirst executes the query and returns the first matching row as a typed model.
 func (d *#(daoType)) FindFirst() (*#(structName), error) {
-	row, err := d.Dao.FindFirst()
-	if err != nil {
-		return nil, err
-	}
-	return #(fromRowFn)(row), nil
+	return d.Dao.FindFirstAs[#(structName)]()
 }
 
 // FindOne executes the query and returns the single matching row as a typed model.
 func (d *#(daoType)) FindOne() (*#(structName), error) {
-	row, err := d.Dao.FindOne()
-	if err != nil {
-		return nil, err
-	}
-	return #(fromRowFn)(row), nil
+	return d.Dao.FindOneAs[#(structName)]()
 }
 
 // FindExists reports whether the query matches any row.
@@ -93,47 +82,23 @@ func (d *#(daoType)) FindExists() (bool, error) {
 	return d.Dao.FindExists()
 }
 
-// #(pageType) is db.Page with typed rows: the wire format (json tags) is
-// identical, but Rows carries *#(structName) instead of *db.Row.
-type #(pageType) struct {
-	PageNum    int              `json:"pageNum"`
-	PageSize   int              `json:"pageSize"`
-	TotalRows  int64            `json:"totalRows"`
-	TotalPages int              `json:"totalPages"`
-	Rows       []*#(structName) `json:"rows"`
-}
+// #(pageType) is db.PageAs with typed rows: the wire format (json tags) is
+// identical to db.Page, but Rows carries *#(structName) instead of *db.Row.
+type #(pageType) = db.PageAs[*#(structName)]
 
 // Paginate executes the query and returns a page of typed rows.
 func (d *#(daoType)) Paginate(pageNum, pageSize int) (*#(pageType), error) {
-	page, err := d.Dao.Paginate(pageNum, pageSize)
-	if err != nil {
-		return nil, err
-	}
-	return &#(pageType){
-		PageNum:    page.PageNum,
-		PageSize:   page.PageSize,
-		TotalRows:  page.TotalRows,
-		TotalPages: page.TotalPages,
-		Rows:       #(fromRowsFn)(page.Rows),
-	}, nil
+	return d.Dao.PaginateAs[#(structName)](pageNum, pageSize)
 }
 
 // FindBy queries by a where clause or a single field with arguments.
 func (d *#(daoType)) FindBy(whereOrField string, args ...interface{}) ([]*#(structName), error) {
-	rows, err := d.Dao.FindBy(#(tableVar).Name, whereOrField, args...)
-	if err != nil {
-		return nil, err
-	}
-	return #(fromRowsFn)(rows), nil
+	return d.Dao.FindByAs[#(structName)](#(tableVar).Name, whereOrField, args...)
 }
 
 // FindFirstBy queries the first row by a where clause or a single field with arguments.
 func (d *#(daoType)) FindFirstBy(whereOrField string, args ...interface{}) (*#(structName), error) {
-	row, err := d.Dao.FindFirstBy(#(tableVar).Name, whereOrField, args...)
-	if err != nil {
-		return nil, err
-	}
-	return #(fromRowFn)(row), nil
+	return d.Dao.FindFirstByAs[#(structName)](#(tableVar).Name, whereOrField, args...)
 }
 
 // FindIn loads rows where field matches any of values (a typed IN query),
@@ -149,11 +114,7 @@ func (d *#(daoType)) FindIn(field string, values ...interface{}) ([]*#(structNam
 #if (hasSinglePK)
 // FindByID loads a single row by its primary key.
 func (d *#(daoType)) FindByID(id #(pkGoType)) (*#(structName), error) {
-	row, err := d.Dao.FindByID(#(tableVar).Name, id)
-	if err != nil {
-		return nil, err
-	}
-	return #(fromRowFn)(row), nil
+	return d.Dao.FindByIDAs[#(structName)](#(tableVar).Name, id)
 }
 
 // DeleteByID deletes a single row by its primary key.

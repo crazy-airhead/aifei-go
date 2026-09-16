@@ -172,17 +172,29 @@ func TestGenerator_Generate(t *testing.T) {
 
 	// Verify the typed-dao shape (identifier-parameterized wrapper from
 	// names.go; default scope keeps the bare historical names): NewDao
-	// returns the typed wrapper, rows are bridged via FromRow/FromRows.
+	// returns the typed wrapper, whose terminals delegate to db's Go 1.27
+	// As-family (the model satisfies db.RowEntity via its InitRow).
 	daoContent, _ := os.ReadFile(filepath.Join(tmpDir, "user/dao.go"))
 	t.Logf("user/dao.go:\n%s", string(daoContent))
 	if !strings.Contains(string(daoContent), "func NewDao() *Dao") {
 		t.Error("dao.go NewDao should return the typed wrapper *Dao")
 	}
 	if !strings.Contains(string(daoContent), "func (d *Dao) Find() ([]*User, error)") {
-		t.Error("dao.go Find should return typed rows via the FromRows bridge")
+		t.Error("dao.go Find should return typed rows")
 	}
-	if !strings.Contains(string(daoContent), "FromRow(") {
-		t.Error("dao.go should bridge rows via FromRow/FromRows")
+	if !strings.Contains(string(daoContent), "FindAs[User]") {
+		t.Error("dao.go terminals should delegate to the db As-family")
+	}
+	if !strings.Contains(string(daoContent), "type UserPage = db.PageAs[*User]") {
+		t.Error("dao.go typed page should alias db.PageAs")
+	}
+
+	// model.go: the model's own InitRow (shadowing the promoted base method)
+	// makes zero-value models usable by the generic As-family terminals.
+	modelContent, _ := os.ReadFile(filepath.Join(tmpDir, "user/model.go"))
+	t.Logf("user/model.go:\n%s", string(modelContent))
+	if !strings.Contains(string(modelContent), "func (m *User) InitRow(row *db.Row)") {
+		t.Error("model.go should contain the model-level InitRow (db.RowEntity for As-family)")
 	}
 
 	// Verify loginlog package (prefix stripped: sys_login_log → login_log)

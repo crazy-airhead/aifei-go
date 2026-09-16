@@ -598,17 +598,25 @@ total, err := Count()                              // 全表计数
 | `FindByID` / `DeleteByID` / `FindByIds` / `DeleteByIds`（实例与包级两种） | **仅单主键**生成；复合主键不生成，避免签名歧义 |
 | 其他包级函数 | 总是生成 |
 
-### 10.3 typed row 转换：FromRow / FromRows 桥
+### 10.3 typed row 转换：As 家族委托 + FromRow / FromRows 桥
 
-`db.Dao.Find()` 返回的是 `[]*db.Row`，typed Dao 通过 base.go **导出的** `FromRow` / `FromRows` 包成 `[]*User`：
+typed Dao 的终端方法（`Find` / `FindFirst` / `FindOne` / `Paginate` / `FindBy` / `FindFirstBy` / `FindByID`）**一行委托 db 的 Go 1.27 泛型终端**（`FindAs[T]` / `PaginateAs[T]` / `FindByIDAs[T]` …），由模型上的 `InitRow`（满足 `db.RowEntity`）完成行→模型的包装：
 
 ```go
-func FromRow(row *db.Row) *User {
-    if row == nil { return nil }
-    return &User{BaseUser: NewWithRow(row)}        // NewWithRow 内部跑 initRow
+func (d *Dao) Find() ([]*User, error) {
+    return d.Dao.FindAs[User]()        // 泛型终端，零手工转换
 }
-func FromRows(rows []*db.Row) []*User { ... }       // 循环调 FromRow
 ```
+
+模型自带遮蔽版 `InitRow`——零值 `User` 的内嵌 base 是 nil，提升的 base 方法会解引用它，所以 model.go 生成自己的实现（分配 base 并跑 `initRow`）：
+
+```go
+func (m *User) InitRow(row *db.Row) {
+    m.BaseUser = NewWithRow(row)        // NewWithRow 内部跑 initRow
+}
+```
+
+base.go 另有**导出的** `FromRow` / `FromRows` 桥（`FromRow` 判 nil；`FromRows` 循环调 `FromRow`），供手写代码直接使用：
 
 `initRow`（在 `base.go` 里）干三件事：
 
@@ -636,16 +644,10 @@ aged, err := user.NewDao().FindIn("age", 25, 35)        // 任意列的 IN
 n, err := user.NewDao().DeleteByIds(7, 8)               // DELETE ... WHERE id IN (7,8)
 ```
 
-**typed 分页**为每张表生成 `UserPage`——元数据字段与 `db.Page` 同名同 json tag，唯一区别是 `Rows` 装的是 `[]*User` 而非 `[]*db.Row`，前端拿到的 JSON 结构不变：
+**typed 分页**为每张表生成 `UserPage`——它是 `db.PageAs[*User]` 的类型别名：元数据字段与 `db.Page` 同名同 json tag，唯一区别是 `Rows` 装的是 `[]*User` 而非 `[]*db.Row`，前端拿到的 JSON 结构不变（还附带 `IsFirstPage` / `HasNextPage` 等导航方法）；`Paginate` 委托 `Dao.PaginateAs[User]`：
 
 ```go
-type UserPage struct {
-    PageNum    int      `json:"pageNum"`
-    PageSize   int      `json:"pageSize"`
-    TotalRows  int64    `json:"totalRows"`
-    TotalPages int      `json:"totalPages"`
-    Rows       []*User  `json:"rows"`
-}
+type UserPage = db.PageAs[*User]
 
 page, err := user.NewDao().Sql(listSql, filter).Paginate(1, 20)
 for _, u := range page.Rows { fmt.Println(u.Name()) }   // 元素直接是 *User

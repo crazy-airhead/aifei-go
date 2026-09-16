@@ -59,29 +59,17 @@ func (d *FlowLogDao) Select(fields string) *FlowLogDao {
 
 // Find executes the query and returns all matching rows as typed models.
 func (d *FlowLogDao) Find() ([]*FlowLog, error) {
-	rows, err := d.Dao.Find()
-	if err != nil {
-		return nil, err
-	}
-	return FlowLogFromRows(rows), nil
+	return d.Dao.FindAs[FlowLog]()
 }
 
 // FindFirst executes the query and returns the first matching row as a typed model.
 func (d *FlowLogDao) FindFirst() (*FlowLog, error) {
-	row, err := d.Dao.FindFirst()
-	if err != nil {
-		return nil, err
-	}
-	return FlowLogFromRow(row), nil
+	return d.Dao.FindFirstAs[FlowLog]()
 }
 
 // FindOne executes the query and returns the single matching row as a typed model.
 func (d *FlowLogDao) FindOne() (*FlowLog, error) {
-	row, err := d.Dao.FindOne()
-	if err != nil {
-		return nil, err
-	}
-	return FlowLogFromRow(row), nil
+	return d.Dao.FindOneAs[FlowLog]()
 }
 
 // FindExists reports whether the query matches any row.
@@ -89,47 +77,23 @@ func (d *FlowLogDao) FindExists() (bool, error) {
 	return d.Dao.FindExists()
 }
 
-// FlowLogPage is db.Page with typed rows: the wire format (json tags) is
-// identical, but Rows carries *FlowLog instead of *db.Row.
-type FlowLogPage struct {
-	PageNum    int        `json:"pageNum"`
-	PageSize   int        `json:"pageSize"`
-	TotalRows  int64      `json:"totalRows"`
-	TotalPages int        `json:"totalPages"`
-	Rows       []*FlowLog `json:"rows"`
-}
+// FlowLogPage is db.PageAs with typed rows: the wire format (json tags) is
+// identical to db.Page, but Rows carries *FlowLog instead of *db.Row.
+type FlowLogPage = db.PageAs[*FlowLog]
 
 // Paginate executes the query and returns a page of typed rows.
 func (d *FlowLogDao) Paginate(pageNum, pageSize int) (*FlowLogPage, error) {
-	page, err := d.Dao.Paginate(pageNum, pageSize)
-	if err != nil {
-		return nil, err
-	}
-	return &FlowLogPage{
-		PageNum:    page.PageNum,
-		PageSize:   page.PageSize,
-		TotalRows:  page.TotalRows,
-		TotalPages: page.TotalPages,
-		Rows:       FlowLogFromRows(page.Rows),
-	}, nil
+	return d.Dao.PaginateAs[FlowLog](pageNum, pageSize)
 }
 
 // FindBy queries by a where clause or a single field with arguments.
 func (d *FlowLogDao) FindBy(whereOrField string, args ...interface{}) ([]*FlowLog, error) {
-	rows, err := d.Dao.FindBy(TableFlowLog.Name, whereOrField, args...)
-	if err != nil {
-		return nil, err
-	}
-	return FlowLogFromRows(rows), nil
+	return d.Dao.FindByAs[FlowLog](TableFlowLog.Name, whereOrField, args...)
 }
 
 // FindFirstBy queries the first row by a where clause or a single field with arguments.
 func (d *FlowLogDao) FindFirstBy(whereOrField string, args ...interface{}) (*FlowLog, error) {
-	row, err := d.Dao.FindFirstBy(TableFlowLog.Name, whereOrField, args...)
-	if err != nil {
-		return nil, err
-	}
-	return FlowLogFromRow(row), nil
+	return d.Dao.FindFirstByAs[FlowLog](TableFlowLog.Name, whereOrField, args...)
 }
 
 // FindIn loads rows where field matches any of values (a typed IN query),
@@ -144,11 +108,7 @@ func (d *FlowLogDao) FindIn(field string, values ...interface{}) ([]*FlowLog, er
 
 // FindByID loads a single row by its primary key.
 func (d *FlowLogDao) FindByID(id int) (*FlowLog, error) {
-	row, err := d.Dao.FindByID(TableFlowLog.Name, id)
-	if err != nil {
-		return nil, err
-	}
-	return FlowLogFromRow(row), nil
+	return d.Dao.FindByIDAs[FlowLog](TableFlowLog.Name, id)
 }
 
 // DeleteByID deletes a single row by its primary key.

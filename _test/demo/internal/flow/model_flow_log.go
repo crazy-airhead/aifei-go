@@ -3,6 +3,10 @@
 
 package flow
 
+import (
+	"github.com/crazy-airhead/aifei-go/db"
+)
+
 // FlowLog is the data model for the sys_flow_log table.
 type FlowLog struct {
 	*BaseFlowLog
@@ -11,4 +15,13 @@ type FlowLog struct {
 // NewFlowLog creates a new FlowLog ready for use with GetBean and Insert.
 func NewFlowLog() *FlowLog {
 	return &FlowLog{BaseFlowLog: NewBaseFlowLog()}
+}
+
+// InitRow adopts a queried *db.Row, satisfying db.RowEntity so the db generic
+// terminals (FindAs/FindFirstAs/FindOneAs/PaginateAs/FindByAs/FindFirstByAs/
+// FindByIDAs) can build models from a zero value. It shadows the promoted
+// base method because a zero FlowLog carries a nil embedded base —
+// the promoted one would dereference it.
+func (m *FlowLog) InitRow(row *db.Row) {
+	m.BaseFlowLog = NewFlowLogWithRow(row)
 }

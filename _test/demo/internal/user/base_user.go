@@ -139,6 +139,10 @@ func UserFromRows(rows []*db.Row) []*User {
 	return out
 }
 
+func (b *BaseUser) InitRow(row *db.Row) {
+	b.Row = initUserRow(row)
+}
+
 func init() {
 	db.RegisterTable(TableUser)
 }

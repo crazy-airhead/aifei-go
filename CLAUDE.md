@@ -226,8 +226,8 @@ Generates type-safe per-table packages from database schema:
 - **`meta_dialect.go`** — Dialect-specific metadata queries (MySQL, PostgreSQL, SQLite).
 - **`type_mapping.go`** — SQL type → Go type mapping (30+ types).
 - **`base_generator.go`** — Generates `base.go` (always overwritten): `BaseXxx` struct, `Table` var, getters/setters, and the exported typed-row bridge `FromRow`/`FromRows` (raw-SQL `[]*db.Row` → typed models; `NewWithRow` runs `initRow` so wrapped rows support Update/Delete).
-- **`model_generator.go`** — Generates model file (skipped if exists; `Force` overwrites).
-- **`dao_generator.go`** — Generates `dao.go` (skipped if exists; `Force` overwrites): type-safe `FindById`, `FindByIds`/`DeleteByIds`/`FindIn` (batch IN), typed pagination via per-table `XxxPage` struct (mirrors `db.Page` metadata but `Rows []*Xxx`), `FindBy`, `DeleteById`, etc.
+- **`model_generator.go`** — Generates model file (skipped if exists; `Force` overwrites): model struct + a shadowing `InitRow` (satisfies `db.RowEntity` for the generic As-family; a zero-value model's embedded base is nil, so the promoted base method can't be used).
+- **`dao_generator.go`** — Generates `dao.go` (skipped if exists; `Force` overwrites): typed wrapper whose terminals (`Find`/`FindFirst`/`FindOne`/`Paginate`/`FindBy`/`FindFirstBy`/`FindByID`) delegate one line to db's Go 1.27 As-family (`FindAs[T]`, `PaginateAs[T]`, …), plus `FindById`, `FindByIds`/`DeleteByIds`/`FindIn` (batch IN) and typed pagination via `XxxPage = db.PageAs[*Xxx]` alias (same json envelope as `db.Page`).
 - **`service_generator.go`** — Generates `service.go`: HTTP service with method routing; `Template` field overrides the embedded `_service.af` with an app-specific Enjoy template (same data map, gofmt'ed output).
 - **`init_generator.go`** — Generates `init.go` (always overwritten): blank imports per package (deduplicated when several tables share one package).
 - **`templates/`** — Embedded Enjoy templates: `_base.af`, `_model.af`, `_dao.af`, `_service.af`, `_init.af`.

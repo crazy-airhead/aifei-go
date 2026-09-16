@@ -3,6 +3,10 @@
 
 package #(pkgName)
 
+import (
+	"github.com/crazy-airhead/aifei-go/db"
+)
+
 #if (tableComment != "")
 // #(tableComment)
 #end
@@ -14,6 +18,15 @@ type #(structName) struct {
 // #(newFn) creates a new #(structName) ready for use with GetBean and Insert.
 func #(newFn)() *#(structName) {
 	return &#(structName){#(baseName): #(newBaseFn)()}
+}
+
+// InitRow adopts a queried *db.Row, satisfying db.RowEntity so the db generic
+// terminals (FindAs/FindFirstAs/FindOneAs/PaginateAs/FindByAs/FindFirstByAs/
+// FindByIDAs) can build models from a zero value. It shadows the promoted
+// base method because a zero #(structName) carries a nil embedded base —
+// the promoted one would dereference it.
+func (m *#(structName)) InitRow(row *db.Row) {
+	m.#(baseName) = #(newWithRowFn)(row)
 }
 
 ### --- JSON columns: default typed as string. Edit to expose a struct. ---

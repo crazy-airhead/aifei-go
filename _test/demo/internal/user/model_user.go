@@ -3,6 +3,10 @@
 
 package user
 
+import (
+	"github.com/crazy-airhead/aifei-go/db"
+)
+
 // User is the data model for the user table.
 type User struct {
 	*BaseUser
@@ -11,4 +15,13 @@ type User struct {
 // NewUser creates a new User ready for use with GetBean and Insert.
 func NewUser() *User {
 	return &User{BaseUser: NewBaseUser()}
+}
+
+// InitRow adopts a queried *db.Row, satisfying db.RowEntity so the db generic
+// terminals (FindAs/FindFirstAs/FindOneAs/PaginateAs/FindByAs/FindFirstByAs/
+// FindByIDAs) can build models from a zero value. It shadows the promoted
+// base method because a zero User carries a nil embedded base —
+// the promoted one would dereference it.
+func (m *User) InitRow(row *db.Row) {
+	m.BaseUser = NewUserWithRow(row)
 }

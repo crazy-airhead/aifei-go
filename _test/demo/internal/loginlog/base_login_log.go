@@ -125,6 +125,10 @@ func LoginLogFromRows(rows []*db.Row) []*LoginLog {
 	return out
 }
 
+func (b *BaseLoginLog) InitRow(row *db.Row) {
+	b.Row = initLoginLogRow(row)
+}
+
 func init() {
 	db.RegisterTable(TableLoginLog)
 }

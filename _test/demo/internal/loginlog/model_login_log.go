@@ -3,6 +3,10 @@
 
 package loginlog
 
+import (
+	"github.com/crazy-airhead/aifei-go/db"
+)
+
 // LoginLog is the data model for the sys_login_log table.
 type LoginLog struct {
 	*BaseLoginLog
@@ -11,4 +15,13 @@ type LoginLog struct {
 // NewLoginLog creates a new LoginLog ready for use with GetBean and Insert.
 func NewLoginLog() *LoginLog {
 	return &LoginLog{BaseLoginLog: NewBaseLoginLog()}
+}
+
+// InitRow adopts a queried *db.Row, satisfying db.RowEntity so the db generic
+// terminals (FindAs/FindFirstAs/FindOneAs/PaginateAs/FindByAs/FindFirstByAs/
+// FindByIDAs) can build models from a zero value. It shadows the promoted
+// base method because a zero LoginLog carries a nil embedded base —
+// the promoted one would dereference it.
+func (m *LoginLog) InitRow(row *db.Row) {
+	m.BaseLoginLog = NewLoginLogWithRow(row)
 }

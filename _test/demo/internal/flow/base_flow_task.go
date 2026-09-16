@@ -139,6 +139,10 @@ func FlowTaskFromRows(rows []*db.Row) []*FlowTask {
 	return out
 }
 
+func (b *BaseFlowTask) InitRow(row *db.Row) {
+	b.Row = initFlowTaskRow(row)
+}
+
 func init() {
 	db.RegisterTable(TableFlowTask)
 }

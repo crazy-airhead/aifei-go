@@ -3,6 +3,10 @@
 
 package flow
 
+import (
+	"github.com/crazy-airhead/aifei-go/db"
+)
+
 // FlowTask is the data model for the sys_flow_task table.
 type FlowTask struct {
 	*BaseFlowTask
@@ -11,4 +15,13 @@ type FlowTask struct {
 // NewFlowTask creates a new FlowTask ready for use with GetBean and Insert.
 func NewFlowTask() *FlowTask {
 	return &FlowTask{BaseFlowTask: NewBaseFlowTask()}
+}
+
+// InitRow adopts a queried *db.Row, satisfying db.RowEntity so the db generic
+// terminals (FindAs/FindFirstAs/FindOneAs/PaginateAs/FindByAs/FindFirstByAs/
+// FindByIDAs) can build models from a zero value. It shadows the promoted
+// base method because a zero FlowTask carries a nil embedded base —
+// the promoted one would dereference it.
+func (m *FlowTask) InitRow(row *db.Row) {
+	m.BaseFlowTask = NewFlowTaskWithRow(row)
 }

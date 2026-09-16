@@ -206,7 +206,7 @@ ORDER BY id DESC`
 		t.Fatalf("typed FindByID failed: %v", got)
 	}
 
-	// typed Paginate -> *db.Page
+	// typed Paginate -> *UserPage (= db.PageAs[*User])
 	page, err := user.NewUserDao().Sql(`SELECT * FROM user`, map[string]interface{}{}).Paginate(1, 2)
 	if err != nil {
 		t.Fatalf("typed Paginate failed: %v", err)
@@ -289,8 +289,9 @@ func TestGeneratedTypedBatchIN(t *testing.T) {
 	}
 }
 
-// TestGeneratedTypedPaginate verifies Paginate returns a typed page: the
-// metadata mirrors db.Page and Rows carries *User.
+// TestGeneratedTypedPaginate verifies Paginate returns a typed page
+// (UserPage = db.PageAs[*User], delegating to Dao.PaginateAs): the metadata
+// matches db.Page and Rows carries *User.
 func TestGeneratedTypedPaginate(t *testing.T) {
 	setupTest(t)
 

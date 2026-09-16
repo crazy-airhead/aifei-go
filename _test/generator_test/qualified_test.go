@@ -111,7 +111,7 @@ func TestGenerator_QualifiedMultiTablePackage(t *testing.T) {
 	for _, want := range []string{
 		"type FlowTaskDao struct",
 		"func NewFlowTaskDao() *FlowTaskDao",
-		"type FlowTaskPage struct",
+		"type FlowTaskPage = db.PageAs[*FlowTask]",
 		"func (d *FlowTaskDao) Paginate(pageNum, pageSize int) (*FlowTaskPage, error)",
 		"func (d *FlowTaskDao) FindIn(field string, values ...interface{})",
 		"func (d *FlowTaskDao) FindByIds(ids ...int)",
@@ -283,9 +283,9 @@ func TestGenerator_DefaultModeNewContent(t *testing.T) {
 		"func (d *Dao) DeleteByIds(ids ...int)",
 		"func FindByIds(ids ...int)",
 		"func DeleteByIds(ids ...int)",
-		"type UserPage struct",
+		"type UserPage = db.PageAs[*User]",
 		"func (d *Dao) Paginate(pageNum, pageSize int) (*UserPage, error)",
-		"Rows:       FromRows(page.Rows)",
+		"return d.Dao.PaginateAs[User](pageNum, pageSize)",
 	} {
 		if !strings.Contains(string(dao), want) {
 			t.Errorf("dao.go missing %q", want)
