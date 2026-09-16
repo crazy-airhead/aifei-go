@@ -123,7 +123,7 @@ func TestGenerator_Generate(t *testing.T) {
 
 	// Verify generated files exist (user table - no prefix to strip)
 	expectedFiles := []string{
-		"tables.go",
+		"init.go",
 		"user/base.go",
 		"user/model.go",
 		"user/dao.go",
@@ -140,14 +140,14 @@ func TestGenerator_Generate(t *testing.T) {
 		}
 	}
 
-	// Verify tables.go uses blank imports for self-registration
-	tablesContent, _ := os.ReadFile(filepath.Join(tmpDir, "tables.go"))
-	t.Logf("tables.go:\n%s", string(tablesContent))
-	if !strings.Contains(string(tablesContent), `_ "example/db/user"`) {
-		t.Error("tables.go should contain blank import for user package")
+	// Verify init.go uses blank imports for self-registration
+	initContent, _ := os.ReadFile(filepath.Join(tmpDir, "init.go"))
+	t.Logf("init.go:\n%s", string(initContent))
+	if !strings.Contains(string(initContent), `_ "example/db/user"`) {
+		t.Error("init.go should contain blank import for user package")
 	}
-	if !strings.Contains(string(tablesContent), `_ "example/db/loginlog"`) {
-		t.Error("tables.go should contain blank import for loginlog package")
+	if !strings.Contains(string(initContent), `_ "example/db/loginlog"`) {
+		t.Error("init.go should contain blank import for loginlog package")
 	}
 
 	// Verify base.go content for user

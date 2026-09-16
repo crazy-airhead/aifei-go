@@ -7,73 +7,54 @@ import (
 	"github.com/crazy-airhead/aifei-go/db"
 )
 
-// Dao is a typed query builder for #(structName) (table "#(tableName)").
-// Chain a Sql/Select/RawSql setup method (they return *Dao), then call a
+// #(daoType) is a typed query builder for #(structName) (table "#(tableName)").
+// Chain a Sql/Select/RawSql setup method (they return *#(daoType)), then call a
 // terminal method (Find/FindFirst/Paginate/Count/...) which returns typed
 // results. The table is already bound, so unlike db.Dao no table name is
-// passed on every call. Create a fresh one per query via NewDao().
-type Dao struct {
+// passed on every call. Create a fresh one per query via #(newDaoFn)().
+type #(daoType) struct {
 	*db.Dao
 }
 
-// NewDao returns a fresh typed Dao bound to the default db config.
-func NewDao() *Dao {
-	return &Dao{Dao: db.Use()}
+// #(newDaoFn) returns a fresh typed Dao bound to the default db config.
+func #(newDaoFn)() *#(daoType) {
+	return &#(daoType){Dao: db.Use()}
 }
 
-### --- typed row conversion ---
-
-// toRow wraps a *db.Row as a typed #(structName) (nil-safe).
-func toRow(row *db.Row) *#(structName) {
-	if row == nil {
-		return nil
-	}
-	return &#(structName){#(baseName): NewWithRow(initRow(row))}
-}
-
-// toRows wraps a slice of *db.Row as typed #(structName) values.
-func toRows(rows []*db.Row) []*#(structName) {
-	out := make([]*#(structName), len(rows))
-	for i, row := range rows {
-		out[i] = toRow(row)
-	}
-	return out
-}
-
-### --- chainable SQL setup (return *Dao) ---
+### --- chainable SQL setup (return *#(daoType)) ---
 
 // Sql sets an Enjoy SQL template and its named parameters.
-func (d *Dao) Sql(sqlStr string, data map[string]interface{}) *Dao {
+func (d *#(daoType)) Sql(sqlStr string, data map[string]interface{}) *#(daoType) {
 	d.Dao.Sql(sqlStr, data)
 	return d
 }
 
 // SqlWithArgs sets an Enjoy SQL template with positional arguments.
-func (d *Dao) SqlWithArgs(sqlStr string, args ...interface{}) *Dao {
+func (d *#(daoType)) SqlWithArgs(sqlStr string, args ...interface{}) *#(daoType) {
 	d.Dao.SqlWithArgs(sqlStr, args...)
 	return d
 }
 
 // SqlById sets a cached Enjoy SQL template (by id) and its named parameters.
-func (d *Dao) SqlById(sqlID string, data map[string]interface{}) *Dao {
+func (d *#(daoType)) SqlById(sqlID string, data map[string]interface{}) *#(daoType) {
 	d.Dao.SqlById(sqlID, data)
 	return d
 }
 
 // SqlByIdWithArgs sets a cached Enjoy SQL template (by id) with positional arguments.
-func (d *Dao) SqlByIdWithArgs(sqlID string, args ...interface{}) *Dao {
+func (d *#(daoType)) SqlByIdWithArgs(sqlID string, args ...interface{}) *#(daoType) {
 	d.Dao.SqlByIdWithArgs(sqlID, args...)
 	return d
 }
 
 // RawSql sets a raw SQL string with positional arguments.
-func (d *Dao) RawSql(query string, args ...interface{}) *Dao {
+func (d *#(daoType)) RawSql(query string, args ...interface{}) *#(daoType) {
 	d.Dao.RawSql(query, args...)
 	return d
 }
 
 // Select restricts the selected columns.
-func (d *Dao) Select(fields string) *Dao {
+func (d *#(daoType)) Select(fields string) *#(daoType) {
 	d.Dao.Select(fields)
 	return d
 }
@@ -81,129 +62,190 @@ func (d *Dao) Select(fields string) *Dao {
 ### --- typed query terminals ---
 
 // Find executes the query and returns all matching rows as typed models.
-func (d *Dao) Find() ([]*#(structName), error) {
+func (d *#(daoType)) Find() ([]*#(structName), error) {
 	rows, err := d.Dao.Find()
 	if err != nil {
 		return nil, err
 	}
-	return toRows(rows), nil
+	return #(fromRowsFn)(rows), nil
 }
 
 // FindFirst executes the query and returns the first matching row as a typed model.
-func (d *Dao) FindFirst() (*#(structName), error) {
+func (d *#(daoType)) FindFirst() (*#(structName), error) {
 	row, err := d.Dao.FindFirst()
 	if err != nil {
 		return nil, err
 	}
-	return toRow(row), nil
+	return #(fromRowFn)(row), nil
 }
 
 // FindOne executes the query and returns the single matching row as a typed model.
-func (d *Dao) FindOne() (*#(structName), error) {
+func (d *#(daoType)) FindOne() (*#(structName), error) {
 	row, err := d.Dao.FindOne()
 	if err != nil {
 		return nil, err
 	}
-	return toRow(row), nil
+	return #(fromRowFn)(row), nil
 }
 
 // FindExists reports whether the query matches any row.
-func (d *Dao) FindExists() (bool, error) {
+func (d *#(daoType)) FindExists() (bool, error) {
 	return d.Dao.FindExists()
 }
 
-// Paginate executes the query and returns a page of rows.
-// The page carries []*db.Row; use Find for fully typed results.
-func (d *Dao) Paginate(pageNum, pageSize int) (*db.Page, error) {
-	return d.Dao.Paginate(pageNum, pageSize)
+// #(pageType) is db.Page with typed rows: the wire format (json tags) is
+// identical, but Rows carries *#(structName) instead of *db.Row.
+type #(pageType) struct {
+	PageNum    int              `json:"pageNum"`
+	PageSize   int              `json:"pageSize"`
+	TotalRows  int64            `json:"totalRows"`
+	TotalPages int              `json:"totalPages"`
+	Rows       []*#(structName) `json:"rows"`
+}
+
+// Paginate executes the query and returns a page of typed rows.
+func (d *#(daoType)) Paginate(pageNum, pageSize int) (*#(pageType), error) {
+	page, err := d.Dao.Paginate(pageNum, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	return &#(pageType){
+		PageNum:    page.PageNum,
+		PageSize:   page.PageSize,
+		TotalRows:  page.TotalRows,
+		TotalPages: page.TotalPages,
+		Rows:       #(fromRowsFn)(page.Rows),
+	}, nil
 }
 
 // FindBy queries by a where clause or a single field with arguments.
-func (d *Dao) FindBy(whereOrField string, args ...interface{}) ([]*#(structName), error) {
-	rows, err := d.Dao.FindBy(Table.Name, whereOrField, args...)
+func (d *#(daoType)) FindBy(whereOrField string, args ...interface{}) ([]*#(structName), error) {
+	rows, err := d.Dao.FindBy(#(tableVar).Name, whereOrField, args...)
 	if err != nil {
 		return nil, err
 	}
-	return toRows(rows), nil
+	return #(fromRowsFn)(rows), nil
 }
 
 // FindFirstBy queries the first row by a where clause or a single field with arguments.
-func (d *Dao) FindFirstBy(whereOrField string, args ...interface{}) (*#(structName), error) {
-	row, err := d.Dao.FindFirstBy(Table.Name, whereOrField, args...)
+func (d *#(daoType)) FindFirstBy(whereOrField string, args ...interface{}) (*#(structName), error) {
+	row, err := d.Dao.FindFirstBy(#(tableVar).Name, whereOrField, args...)
 	if err != nil {
 		return nil, err
 	}
-	return toRow(row), nil
+	return #(fromRowFn)(row), nil
+}
+
+// FindIn loads rows where field matches any of values (a typed IN query),
+// e.g. FindIn("user_id", 1, 2, 3).
+func (d *#(daoType)) FindIn(field string, values ...interface{}) ([]*#(structName), error) {
+	rows, err := d.Dao.FindIn(#(tableVar).Name, field, values...)
+	if err != nil {
+		return nil, err
+	}
+	return #(fromRowsFn)(rows), nil
 }
 
 #if (hasSinglePK)
 // FindByID loads a single row by its primary key.
-func (d *Dao) FindByID(id #(pkGoType)) (*#(structName), error) {
-	row, err := d.Dao.FindByID(Table.Name, id)
+func (d *#(daoType)) FindByID(id #(pkGoType)) (*#(structName), error) {
+	row, err := d.Dao.FindByID(#(tableVar).Name, id)
 	if err != nil {
 		return nil, err
 	}
-	return toRow(row), nil
+	return #(fromRowFn)(row), nil
 }
 
 // DeleteByID deletes a single row by its primary key.
-func (d *Dao) DeleteByID(id #(pkGoType)) (bool, error) {
-	return d.Dao.DeleteByID(Table.Name, id)
+func (d *#(daoType)) DeleteByID(id #(pkGoType)) (bool, error) {
+	return d.Dao.DeleteByID(#(tableVar).Name, id)
+}
+
+// FindByIds loads rows matching any of the given primary keys (WHERE pk IN ...).
+func (d *#(daoType)) FindByIds(ids ...#(pkGoType)) ([]*#(structName), error) {
+	vals := make([]interface{}, len(ids))
+	for i, id := range ids {
+		vals[i] = id
+	}
+	rows, err := d.Dao.FindIn(#(tableVar).Name, "#(pkName)", vals...)
+	if err != nil {
+		return nil, err
+	}
+	return #(fromRowsFn)(rows), nil
+}
+
+// DeleteByIds deletes rows matching any of the given primary keys (WHERE pk IN ...).
+func (d *#(daoType)) DeleteByIds(ids ...#(pkGoType)) (int64, error) {
+	vals := make([]interface{}, len(ids))
+	for i, id := range ids {
+		vals[i] = id
+	}
+	return d.Dao.DeleteInIds(#(tableVar).Name, vals...)
 }
 #end
 
 ### --- typed count / delete (table already bound) ---
 
 // Count returns the total number of rows.
-func (d *Dao) Count() (int64, error) {
-	return d.Dao.Count(Table.Name)
+func (d *#(daoType)) Count() (int64, error) {
+	return d.Dao.Count(#(tableVar).Name)
 }
 
 // CountBy counts rows matching a where clause or a single field with arguments.
-func (d *Dao) CountBy(whereOrField string, args ...interface{}) (int64, error) {
-	return d.Dao.CountBy(Table.Name, whereOrField, args...)
+func (d *#(daoType)) CountBy(whereOrField string, args ...interface{}) (int64, error) {
+	return d.Dao.CountBy(#(tableVar).Name, whereOrField, args...)
 }
 
 // DeleteBy deletes rows matching a where clause or a single field with arguments.
-func (d *Dao) DeleteBy(whereOrField string, args ...interface{}) (int64, error) {
-	return d.Dao.DeleteBy(Table.Name, whereOrField, args...)
+func (d *#(daoType)) DeleteBy(whereOrField string, args ...interface{}) (int64, error) {
+	return d.Dao.DeleteBy(#(tableVar).Name, whereOrField, args...)
 }
 
 ### --- package-level convenience functions (delegate to typed Dao) ---
 
 #if (hasSinglePK)
-// FindById loads a single row by its primary key.
-func FindById(id #(pkGoType)) (*#(structName), error) {
-	return NewDao().FindByID(id)
+// #(findByIdFn) loads a single row by its primary key.
+func #(findByIdFn)(id #(pkGoType)) (*#(structName), error) {
+	return #(newDaoFn)().FindByID(id)
 }
 
-// DeleteById deletes a single row by its primary key.
-func DeleteById(id #(pkGoType)) (bool, error) {
-	return NewDao().DeleteByID(id)
+// #(deleteByIdFn) deletes a single row by its primary key.
+func #(deleteByIdFn)(id #(pkGoType)) (bool, error) {
+	return #(newDaoFn)().DeleteByID(id)
+}
+
+// #(findByIdsFn) loads rows matching any of the given primary keys.
+func #(findByIdsFn)(ids ...#(pkGoType)) ([]*#(structName), error) {
+	return #(newDaoFn)().FindByIds(ids...)
+}
+
+// #(deleteByIdsFn) deletes rows matching any of the given primary keys.
+func #(deleteByIdsFn)(ids ...#(pkGoType)) (int64, error) {
+	return #(newDaoFn)().DeleteByIds(ids...)
 }
 #end
 
-// FindBy queries by a where clause or a single field with arguments.
-func FindBy(whereOrField string, args ...interface{}) ([]*#(structName), error) {
-	return NewDao().FindBy(whereOrField, args...)
+// #(findByFn) queries by a where clause or a single field with arguments.
+func #(findByFn)(whereOrField string, args ...interface{}) ([]*#(structName), error) {
+	return #(newDaoFn)().FindBy(whereOrField, args...)
 }
 
-// FindFirstBy queries the first row by a where clause or a single field with arguments.
-func FindFirstBy(whereOrField string, args ...interface{}) (*#(structName), error) {
-	return NewDao().FindFirstBy(whereOrField, args...)
+// #(findFirstByFn) queries the first row by a where clause or a single field with arguments.
+func #(findFirstByFn)(whereOrField string, args ...interface{}) (*#(structName), error) {
+	return #(newDaoFn)().FindFirstBy(whereOrField, args...)
 }
 
-// DeleteBy deletes rows matching a where clause or a single field with arguments.
-func DeleteBy(whereOrField string, args ...interface{}) (int64, error) {
-	return NewDao().DeleteBy(whereOrField, args...)
+// #(deleteByFn) deletes rows matching a where clause or a single field with arguments.
+func #(deleteByFn)(whereOrField string, args ...interface{}) (int64, error) {
+	return #(newDaoFn)().DeleteBy(whereOrField, args...)
 }
 
-// Count returns the total number of rows.
-func Count() (int64, error) {
-	return NewDao().Count()
+// #(countFn) returns the total number of rows.
+func #(countFn)() (int64, error) {
+	return #(newDaoFn)().Count()
 }
 
-// CountBy counts rows matching a where clause or a single field with arguments.
-func CountBy(whereOrField string, args ...interface{}) (int64, error) {
-	return NewDao().CountBy(whereOrField, args...)
+// #(countByFn) counts rows matching a where clause or a single field with arguments.
+func #(countByFn)(whereOrField string, args ...interface{}) (int64, error) {
+	return #(newDaoFn)().CountBy(whereOrField, args...)
 }

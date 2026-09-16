@@ -11,9 +11,9 @@ type #(structName) struct {
 	*#(baseName)
 }
 
-// New creates a new #(structName) ready for use with GetBean and Insert.
-func New() *#(structName) {
-	return &#(structName){#(baseName): NewBase()}
+// #(newFn) creates a new #(structName) ready for use with GetBean and Insert.
+func #(newFn)() *#(structName) {
+	return &#(structName){#(baseName): #(newBaseFn)()}
 }
 
 ### --- JSON columns: default typed as string. Edit to expose a struct. ---

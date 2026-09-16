@@ -8,6 +8,8 @@ import (
 	"github.com/crazy-airhead/aifei-go/server"
 
 	// Per-table package: registers Table metadata and Service routes via init().
+	// flow 包 = 领域包（sys_flow_task + sys_flow_log 两表一包，Qualified 命名）。
+	_ "github.com/crazy-airhead/aifei-go/_test/demo/internal/flow"
 	_ "github.com/crazy-airhead/aifei-go/_test/demo/internal/loginlog"
 	_ "github.com/crazy-airhead/aifei-go/_test/demo/internal/user"
 
@@ -37,6 +39,22 @@ func main() {
 			user_id INTEGER NOT NULL,
 			login_time DATETIME DEFAULT CURRENT_TIMESTAMP,
 			ip TEXT
+		)`).Update()
+
+	db.RawSql(`CREATE TABLE IF NOT EXISTS sys_flow_task (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			title TEXT NOT NULL,
+			user_id INTEGER NOT NULL,
+			state TEXT DEFAULT 'pending',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`).Update()
+
+	db.RawSql(`CREATE TABLE IF NOT EXISTS sys_flow_log (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			task_id INTEGER NOT NULL,
+			user_id INTEGER NOT NULL,
+			action TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`).Update()
 
 	app := aifei.New()

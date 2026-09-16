@@ -219,16 +219,17 @@ Convenience layer for production use:
 ### Code Generator (`./tools/generator`)
 
 Generates type-safe per-table packages from database schema:
-- **`generator.go`** — Main entry point: `New(pool, dialect, outputDir, importRoot)`.
+- **`generator.go`** — Main entry point: `New(pool, dialect, outputDir, importRoot)`. `Qualified` switches to table-qualified identifiers for multi-table packages (`Generator.Force` regenerates model/dao/service even when they exist); rendered output is always gofmt'ed.
+- **`names.go`** — `buildNames`: identifier parameterization. One template renders two naming scopes — default bare names (`Table`, `NewDao`, `FindById`; one table per package) vs Qualified (`TableUser`, `NewUserDao`, `UserFindById`, files `base_<table>.go`; several tables per domain package). Mapping several tables into one package without `Qualified` fails fast with the conflicting table list.
 - **`meta_reader.go`** — Reads DB metadata (table names, columns, types) via `ColumnTypes`.
 - **`meta_dialect.go`** — Dialect-specific metadata queries (MySQL, PostgreSQL, SQLite).
 - **`type_mapping.go`** — SQL type → Go type mapping (30+ types).
-- **`base_generator.go`** — Generates `base.go` (always overwritten): `BaseXxx` struct, `Table` var, getters/setters.
-- **`model_generator.go`** — Generates model file (skipped if exists).
-- **`dao_generator.go`** — Generates `dao.go` (skipped if exists): type-safe `FindById`, `FindBy`, `DeleteById`, etc.
-- **`service_generator.go`** — Generates `service.go`: HTTP service with method routing.
-- **`tables_generator.go`** — Generates `tables.go` (always overwritten): cross-table `Tables` slice.
-- **`templates/`** — Embedded Enjoy templates: `_base.af`, `_model.af`, `_dao.af`, `_service.af`, `_tables.af`.
+- **`base_generator.go`** — Generates `base.go` (always overwritten): `BaseXxx` struct, `Table` var, getters/setters, and the exported typed-row bridge `FromRow`/`FromRows` (raw-SQL `[]*db.Row` → typed models; `NewWithRow` runs `initRow` so wrapped rows support Update/Delete).
+- **`model_generator.go`** — Generates model file (skipped if exists; `Force` overwrites).
+- **`dao_generator.go`** — Generates `dao.go` (skipped if exists; `Force` overwrites): type-safe `FindById`, `FindByIds`/`DeleteByIds`/`FindIn` (batch IN), typed pagination via per-table `XxxPage` struct (mirrors `db.Page` metadata but `Rows []*Xxx`), `FindBy`, `DeleteById`, etc.
+- **`service_generator.go`** — Generates `service.go`: HTTP service with method routing; `Template` field overrides the embedded `_service.af` with an app-specific Enjoy template (same data map, gofmt'ed output).
+- **`init_generator.go`** — Generates `init.go` (always overwritten): blank imports per package (deduplicated when several tables share one package).
+- **`templates/`** — Embedded Enjoy templates: `_base.af`, `_model.af`, `_dao.af`, `_service.af`, `_init.af`.
 
 ### Other Packages
 
@@ -245,7 +246,7 @@ Generates type-safe per-table packages from database schema:
 
 ### Examples
 
-- **`./_test/demo`** — Full web app demo using core + db + generator with SQLite driver.
+- **`./_test/demo`** — Full web app demo using core + db + generator with SQLite driver. Generated in `Qualified` mode: `flow` package holds two tables (`sys_flow_task` + `sys_flow_log`, files `base_flow_task.go` etc.), and its service composes models from the `user` package (cross-package downward call, preserved across regenerations).
 - **`./_test/db_test`** — Database integration tests (971 lines, ~80 test cases).
 
 ## Design Decisions (Java → Go)
@@ -256,6 +257,7 @@ Generates type-safe per-table packages from database schema:
 | CGLIB/Javassist AOP proxy | `Handler` wrapper chain + `Interceptor` for method-level AOP |
 | `@Path` annotation + reflection scanning | Code registration / `Register()` struct reflection |
 | Undertow HTTP server | `net/http` via `http` adapter + `server` bootstrap |
+| Service 互注（Java 包无环限制） | 包 = 领域（generator `Qualified` 多表一包）+ 跨包单向 + 窄接口/dami 事件/合并包三阀门 |
 | Functional options for config | Same pattern preserved |
 
 ## Project State

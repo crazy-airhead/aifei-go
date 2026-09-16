@@ -8,7 +8,7 @@ type User struct {
 	*BaseUser
 }
 
-// New creates a new User ready for use with GetBean and Insert.
-func New() *User {
-	return &User{BaseUser: NewBase()}
+// NewUser creates a new User ready for use with GetBean and Insert.
+func NewUser() *User {
+	return &User{BaseUser: NewBaseUser()}
 }

@@ -3,6 +3,7 @@ package generator
 import (
 	"database/sql"
 	"fmt"
+	"go/format"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -24,7 +25,10 @@ func NewEngine() *Engine {
 	return &Engine{enjoy: e}
 }
 
-// RenderTemplate compiles (or fetches cached) a template and renders it.
+// RenderTemplate compiles (or fetches cached) a template, renders it, and
+// gofmts the result. Formatting here (rather than in the templates) keeps
+// alignment correct wherever it depends on generated names — e.g. the typed
+// page struct's type column varies with the struct name.
 func (e *Engine) RenderTemplate(content string, data map[string]interface{}) (string, error) {
 	var tpl *enjoy.Template
 	if cached, ok := e.templateCache.Load(content); ok {
@@ -33,7 +37,15 @@ func (e *Engine) RenderTemplate(content string, data map[string]interface{}) (st
 		tpl = e.enjoy.GetTemplateByString(content)
 		e.templateCache.Store(content, tpl)
 	}
-	return tpl.RenderToString0(data)
+	out, err := tpl.RenderToString0(data)
+	if err != nil {
+		return "", err
+	}
+	formatted, err := format.Source([]byte(out))
+	if err != nil {
+		return "", fmt.Errorf("gofmt rendered template: %w\n--- rendered output ---\n%s", err, out)
+	}
+	return string(formatted), nil
 }
 
 // Generator is the code generator entry point.
@@ -46,7 +58,7 @@ type Generator struct {
 	baseGenerator    *BaseGenerator
 	modelGenerator   *ModelGenerator
 	daoGenerator     *DaoGenerator
-	tablesGenerator  *TablesGenerator
+	initGenerator    *InitGenerator
 	serviceGenerator *ServiceGenerator
 	engine           *Engine
 
@@ -55,6 +67,20 @@ type Generator struct {
 
 	// TablePrefix is stripped from table names before naming, e.g. "t_" strips "t_user" → "user".
 	TablePrefix string
+
+	// Qualified switches the naming scope for multi-table packages: every
+	// package-level identifier in the generated code carries the struct name
+	// (TableUser, NewUserDao, UserFindById, ...) and files are named
+	// base_<table>.go instead of base.go. Combine with a PkgNameFunc that maps
+	// several tables to one package ("包 = 领域"). Default false keeps the
+	// historical bare names (Table, NewDao, FindById, ...) and one file set
+	// per table.
+	Qualified bool
+
+	// Force overwrites model.go/dao.go/service.go even when they exist
+	// (they are skipped by default so hand-written code survives). It fans
+	// out to the per-file Force flags of the same three generators.
+	Force bool
 
 	// Naming functions (customizable)
 	PkgNameFunc    func(string) string // table name → package name
@@ -74,7 +100,7 @@ func New(pool *sql.DB, dialect MetaDialect, outputDir, importRoot string) *Gener
 		baseGenerator:    NewBaseGenerator(),
 		modelGenerator:   NewModelGenerator(),
 		daoGenerator:     NewDaoGenerator(),
-		tablesGenerator:  NewTablesGenerator(),
+		initGenerator:    NewInitGenerator(),
 		serviceGenerator: NewServiceGenerator(),
 		engine:           NewEngine(),
 		PkgNameFunc:      util.PkgName,
@@ -101,6 +127,18 @@ func (g *Generator) ConfigServiceGenerator(fn func(*ServiceGenerator)) *Generato
 	return g
 }
 
+// ConfigModelGenerator configures the ModelGenerator.
+func (g *Generator) ConfigModelGenerator(fn func(*ModelGenerator)) *Generator {
+	fn(g.modelGenerator)
+	return g
+}
+
+// ConfigDaoGenerator configures the DaoGenerator.
+func (g *Generator) ConfigDaoGenerator(fn func(*DaoGenerator)) *Generator {
+	fn(g.daoGenerator)
+	return g
+}
+
 // Generate reads database metadata and generates model code.
 func (g *Generator) Generate() error {
 	fmt.Println("[aifei-gen] Starting code generation...")
@@ -117,7 +155,7 @@ func (g *Generator) Generate() error {
 		return nil
 	}
 
-	// 2. Assign package/struct names
+	// 2. Assign package/struct names and identifier names
 	for _, info := range tableInfos {
 		tableName := info.Name
 		if g.TablePrefix != "" {
@@ -126,8 +164,31 @@ func (g *Generator) Generate() error {
 		info.PkgName = g.PkgNameFunc(tableName)
 		info.StructName = g.StructNameFunc(tableName)
 		info.BaseName = g.BaseNameFunc(info.StructName)
+		info.Names = buildNames(info, g.Qualified, tableName)
 		fmt.Printf("[aifei-gen] Processing table: %s → package=%s struct=%s\n",
 			info.Name, info.PkgName, info.StructName)
+	}
+
+	// Several tables in one package require qualified names — bare identifiers
+	// (Table, Dao, FindBy, ...) would collide. Fail fast instead of emitting
+	// broken code.
+	if !g.Qualified {
+		pkgTables := make(map[string][]string)
+		for _, info := range tableInfos {
+			pkgTables[info.PkgName] = append(pkgTables[info.PkgName], info.Name)
+		}
+		for pkg, tables := range pkgTables {
+			if len(tables) > 1 {
+				return fmt.Errorf("package %q would contain %d tables (%s): set Generator.Qualified = true so identifiers and file names are table-qualified",
+					pkg, len(tables), strings.Join(tables, ", "))
+			}
+		}
+	}
+
+	if g.Force {
+		g.modelGenerator.Force = true
+		g.daoGenerator.Force = true
+		g.serviceGenerator.Force = true
 	}
 
 	// 3. Generate per-table packages
@@ -146,9 +207,9 @@ func (g *Generator) Generate() error {
 		}
 	}
 
-	// 4. Generate tables.go
+	// 4. Generate init.go
 	outputPkgName := filepath.Base(g.outputDir)
-	if err := g.tablesGenerator.Generate(g.engine, tableInfos, g.outputDir, g.importRoot, outputPkgName); err != nil {
+	if err := g.initGenerator.Generate(g.engine, tableInfos, g.outputDir, g.importRoot, outputPkgName); err != nil {
 		return err
 	}
 

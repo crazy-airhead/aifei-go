@@ -3,8 +3,8 @@
 package #(outputPkgName)
 
 import (
-#for (info : tableInfoList)
-	_ "#(importRoot)/#(info.PkgName)"
+#for (pkg : pkgs)
+	_ "#(importRoot)/#(pkg)"
 #end
 )
 
