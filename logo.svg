@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="28" fill="#1e88e5"/>
+  <text font-family="system-ui,-apple-system,sans-serif" font-weight="700">
+    <tspan x="27" y="81" font-size="44" fill="#ffffff">A</tspan>
+    <tspan x="74" y="56" font-size="19" fill="#e57373">Fei</tspan>
+    <tspan x="74" y="88" font-size="19" fill="#ffe082">Go</tspan>
+  </text>
+  <!-- 小写 i：粉金竖笔（同 Go）+ 珊瑚红圆点（同 Fei，调皮点缀） -->
+  <rect x="62.5" y="58" width="5" height="23" rx="2.5" fill="#ffe082"/>
+  <circle cx="65" cy="51" r="3.5" fill="#e57373"/>
+</svg>
