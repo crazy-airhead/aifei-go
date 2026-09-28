@@ -148,12 +148,22 @@ walk:
 		if i < len(path) {
 			path = path[i:]
 
-			// Check literal children first.
-			for _, child := range n.children {
-				if !child.param && !child.catchAll && len(child.path) > 0 && child.path[0] == path[0] {
-					n = child
-					continue walk
+			// Check literal children first: descend into the child sharing the
+			// LONGEST common prefix (not merely the same first byte — first-byte
+			// matching misroutes when two siblings share an initial character,
+			// e.g. "auth" vs "auditLog" under "/api/a", silently shadowing both).
+			best := -1
+			bestCP := 0
+			for ci, child := range n.children {
+				if !child.param && !child.catchAll && len(child.path) > 0 {
+					if cp := commonPrefix(child.path, path); cp > bestCP {
+						best, bestCP = ci, cp
+					}
 				}
+			}
+			if best >= 0 {
+				n = n.children[best]
+				continue walk
 			}
 
 			// For wild paths, follow existing wild child.
