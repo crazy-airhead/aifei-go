@@ -15,6 +15,9 @@ func NewPage(pageNum, pageSize int, totalRows int64, rows []*Row) *Page {
 	if int(totalRows)%pageSize != 0 {
 		totalPages++
 	}
+	if rows == nil {
+		rows = []*Row{} // 空页序列化为 [] 而非 null，前端表格无需特判
+	}
 	return &Page{
 		PageNum:    pageNum,
 		PageSize:   pageSize,
