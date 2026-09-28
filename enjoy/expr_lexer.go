@@ -55,7 +55,11 @@ type ExprLexer struct {
 
 // NewExprLexer creates a new ExprLexer.
 func NewExprLexer(input string) *ExprLexer {
-	return &ExprLexer{input: strings.TrimSpace(input), length: len(input)}
+	// input 去前后空白后 length 必须同步取修剪后的长度：旧实现 length 用未修剪
+	// 长度，`#(name ?? )` 这类尾部带空白的表达式会在 pos==len(trimmed) 处越界
+	// （index out of range），被 stat 层 recover 成模板解析错误。
+	input = strings.TrimSpace(input)
+	return &ExprLexer{input: input, length: len(input)}
 }
 
 // Scan returns the next expression token.
