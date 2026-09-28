@@ -627,6 +627,16 @@ func (c *HttpContext) GetMap(keys ...string) map[string]interface{} {
 				}
 			}
 		}
+		// GET 请求可能被前端请求层统一带上 application/json 头（无 body）——
+		// 此时 query 是唯一参数来源；JSON body 场景 query 也可承载分页/过滤补充参数。
+		// body 已有键优先，query 仅补充缺失键。
+		for k, v := range c.Request.URL.Query() {
+			if len(v) > 0 {
+				if _, exists := m[k]; !exists {
+					m[k] = v[0]
+				}
+			}
+		}
 	case bodyNone:
 		for k, v := range c.Request.URL.Query() {
 			if len(v) > 0 {
