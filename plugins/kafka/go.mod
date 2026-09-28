@@ -3,9 +3,9 @@ module github.com/crazy-airhead/aifei-go/plugins/kafka
 go 1.27
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v1.0.1
-	github.com/crazy-airhead/aifei-go/config v1.0.1
-	github.com/crazy-airhead/aifei-go/log v1.0.1
+	github.com/crazy-airhead/aifei-go/aifei v1.0.2
+	github.com/crazy-airhead/aifei-go/config v1.0.2
+	github.com/crazy-airhead/aifei-go/log v1.0.2
 	github.com/twmb/franz-go v1.21.4
 )
 

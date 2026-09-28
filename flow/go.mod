@@ -3,8 +3,8 @@ module github.com/crazy-airhead/aifei-go/flow
 go 1.27
 
 require (
-	github.com/crazy-airhead/aifei-go/dami v1.0.1
-	github.com/crazy-airhead/aifei-go/enjoy v1.0.1
+	github.com/crazy-airhead/aifei-go/dami v1.0.2
+	github.com/crazy-airhead/aifei-go/enjoy v1.0.2
 	gopkg.in/yaml.v3 v3.0.1
 )
 
