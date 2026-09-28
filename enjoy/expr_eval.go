@@ -127,7 +127,8 @@ func (e *TernaryExpr) Eval(scope *Scope, ctrl *Ctrl) interface{} {
 	return e.Else.Eval(scope, ctrl)
 }
 
-// NullCoalesceExpr is a ?? b.
+// NullCoalesceExpr is a ?? b；b 可省略（#(a ??)，对照 Java NullSafe 允许 right 为 null），
+// 此时 a 为 null 则整体为 null（输出空），非 null 原样返回。
 type NullCoalesceExpr struct {
 	Left  Expr
 	Right Expr
@@ -136,6 +137,9 @@ type NullCoalesceExpr struct {
 func (e *NullCoalesceExpr) Eval(scope *Scope, ctrl *Ctrl) interface{} {
 	v := e.Left.Eval(scope, ctrl)
 	if v == nil {
+		if e.Right == nil {
+			return nil
+		}
 		return e.Right.Eval(scope, ctrl)
 	}
 	return v

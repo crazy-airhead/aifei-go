@@ -206,6 +206,7 @@ func ParseTemplate(lexer *Lexer, env *Env) (Stat, error) {
 ```enjoy
 Hello, #(name)!                    表达式输出（nil 不输出）
 #(user.name ?? "匿名")              ?? 空合并
+#(user.name ??)                    ?? 右值省略（null 输出空）
 #(list[0]?.title)                  ?. 空安全取字段
 #[[ 这段 #(不会被解析) ]]#          原始块（整体当文本）
 #-- 这是注释 --#                   注释块
@@ -296,7 +297,7 @@ Hello, #(name)!                    表达式输出（nil 不输出）
  6  比较        < <= > >=
  7  加减        + -                                + 任一侧为 string 即拼接
  8  乘除模      * / %                              整数运算保留整型
- 9  空合并      ??                                 左结合，a ?? b ?? c
+ 9  空合并      ??                                 左结合，a ?? b ?? c；右值可省略
 10  一元        ! - ++ --                          前缀 ++/-- 与后缀 ++/--
 11  后缀        .  ?.  []  ()                      方法调用、字段访问、索引
 12  原子        id  常量  (expr)  [array]  [a..b]  {map}
@@ -318,6 +319,7 @@ Hello, #(name)!                    表达式输出（nil 不输出）
 
 #(user?.name)              若 user 为 nil，整条短路返回 nil（不抛 panic）
 #(user.name ?? "匿名")     ?? 仅判 nil；与 ?. 配合构成兜底链
+#(user.name ??)            右操作数可省略：null 时输出空，非 null 原样输出
 ```
 
 `NullSafeExpr` 通过 `ctrl.NullSafe = true` 通知内层表达式「短路」；内层的字段/方法/索引访问见 nil 即返回 nil，不再向 reflect 喂 nil。

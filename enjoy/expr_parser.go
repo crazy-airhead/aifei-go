@@ -25,7 +25,17 @@ func parseExprWithConfig(input string, cfg *EngineConfig) (Expr, error) {
 	lexer := NewExprLexer(input)
 	p := &exprParser{lexer: lexer}
 	p.next()
-	return p.parseAssign()
+	expr, err := p.parseAssign()
+	if err != nil {
+		return nil, err
+	}
+	// 顶层表达式不允许为空（对照 Java Output 构造器：The expression of output
+	// directive like #(expression) can not be blank），同时保护 #if()/#set() 等
+	// 所有 parseExprWithConfig 调用方拿到 nil 后渲染期 panic。
+	if expr == nil {
+		return nil, fmt.Errorf("the expression can not be blank")
+	}
+	return expr, nil
 }
 
 // exprContainsStatic 用 ExprLexer 扫描表达式，报告是否含 `::`(ETokStatic) token。
@@ -73,6 +83,9 @@ func (p *exprParser) parseAssign() (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
+		if right == nil {
+			return nil, fmt.Errorf("the right side of assignment can not be blank")
+		}
 		switch t := left.(type) {
 		case *IDExpr:
 			// 普通赋值：ID = expr
@@ -93,10 +106,18 @@ func (p *exprParser) parseTernary() (Expr, error) {
 		return nil, err
 	}
 	if p.tok == ETokQuestion {
+		// 对照 Java Ternary 构造器：cond/then/else 任一为空即报错
+		// （The parameter of ternary expression can not be blank）。
+		if cond == nil {
+			return nil, fmt.Errorf("the parameter of ternary expression can not be blank")
+		}
 		p.next()
 		then, err := p.parseAssign()
 		if err != nil {
 			return nil, err
+		}
+		if then == nil {
+			return nil, fmt.Errorf("the parameter of ternary expression can not be blank")
 		}
 		if err := p.expect(ETokColon); err != nil {
 			return nil, err
@@ -104,6 +125,9 @@ func (p *exprParser) parseTernary() (Expr, error) {
 		else_, err := p.parseAssign()
 		if err != nil {
 			return nil, err
+		}
+		if else_ == nil {
+			return nil, fmt.Errorf("the parameter of ternary expression can not be blank")
 		}
 		return &TernaryExpr{Cond: cond, Then: then, Else: else_}, nil
 	}
@@ -116,10 +140,16 @@ func (p *exprParser) parseOr() (Expr, error) {
 		return nil, err
 	}
 	for p.tok == ETokOr {
+		if left == nil {
+			return nil, opTargetBlank("||", "left")
+		}
 		p.next()
 		right, err := p.parseAnd()
 		if err != nil {
 			return nil, err
+		}
+		if right == nil {
+			return nil, opTargetBlank("||", "right")
 		}
 		left = &LogicExpr{Op: "||", Left: left, Right: right}
 	}
@@ -132,10 +162,16 @@ func (p *exprParser) parseAnd() (Expr, error) {
 		return nil, err
 	}
 	for p.tok == ETokAnd {
+		if left == nil {
+			return nil, opTargetBlank("&&", "left")
+		}
 		p.next()
 		right, err := p.parseEquality()
 		if err != nil {
 			return nil, err
+		}
+		if right == nil {
+			return nil, opTargetBlank("&&", "right")
 		}
 		left = &LogicExpr{Op: "&&", Left: left, Right: right}
 	}
@@ -148,11 +184,17 @@ func (p *exprParser) parseEquality() (Expr, error) {
 		return nil, err
 	}
 	for p.tok == ETokEq || p.tok == ETokNe {
+		if left == nil {
+			return nil, opTargetBlank(p.val, "left")
+		}
 		op := p.val
 		p.next()
 		right, err := p.parseCompare()
 		if err != nil {
 			return nil, err
+		}
+		if right == nil {
+			return nil, opTargetBlank(op, "right")
 		}
 		left = &CompareExpr{Op: op, Left: left, Right: right}
 	}
@@ -165,11 +207,17 @@ func (p *exprParser) parseCompare() (Expr, error) {
 		return nil, err
 	}
 	for p.tok == ETokLt || p.tok == ETokLe || p.tok == ETokGt || p.tok == ETokGe {
+		if left == nil {
+			return nil, opTargetBlank(p.val, "left")
+		}
 		op := p.val
 		p.next()
 		right, err := p.parseAdd()
 		if err != nil {
 			return nil, err
+		}
+		if right == nil {
+			return nil, opTargetBlank(op, "right")
 		}
 		left = &CompareExpr{Op: op, Left: left, Right: right}
 	}
@@ -182,11 +230,17 @@ func (p *exprParser) parseAdd() (Expr, error) {
 		return nil, err
 	}
 	for p.tok == ETokAdd || p.tok == ETokSub {
+		if left == nil {
+			return nil, opTargetBlank(p.val, "left")
+		}
 		op := p.val
 		p.next()
 		right, err := p.parseMul()
 		if err != nil {
 			return nil, err
+		}
+		if right == nil {
+			return nil, opTargetBlank(op, "right")
 		}
 		left = &ArithExpr{Op: op, Left: left, Right: right}
 	}
@@ -199,11 +253,17 @@ func (p *exprParser) parseMul() (Expr, error) {
 		return nil, err
 	}
 	for p.tok == ETokMul || p.tok == ETokDiv || p.tok == ETokMod {
+		if left == nil {
+			return nil, opTargetBlank(p.val, "left")
+		}
 		op := p.val
 		p.next()
 		right, err := p.parseNullSafe()
 		if err != nil {
 			return nil, err
+		}
+		if right == nil {
+			return nil, opTargetBlank(op, "right")
 		}
 		left = &ArithExpr{Op: op, Left: left, Right: right}
 	}
@@ -213,12 +273,17 @@ func (p *exprParser) parseMul() (Expr, error) {
 // parseNullSafe 解析 null 合并 `??`（对照 Java ExprParser.nullSafe）。
 // 优先级位于 mulDivMod(* / %) 与 unary 之间，for 循环左结合，支持链式 a ?? b ?? c → (a??b)??c。
 // 旧实现把 ?? 放在 parsePostfix（与 . / [] / () 同层、优先级过高）属语义错误，已对齐 Java。
+// 右操作数可省略（Java NullSafe 允许 right 为 null）：#(name??) / #(name ?? )，
+// left 为 null 时为 null、取值非 null 时原样输出；仅 left 不允许为空。
 func (p *exprParser) parseNullSafe() (Expr, error) {
 	left, err := p.parseUnary()
 	if err != nil {
 		return nil, err
 	}
 	for p.tok == ETokNullCoalesce {
+		if left == nil {
+			return nil, fmt.Errorf(`the expression on the left side of "??" can not be blank`)
+		}
 		p.next()
 		right, err := p.parseUnary()
 		if err != nil {
@@ -237,12 +302,18 @@ func (p *exprParser) parseUnary() (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
+		if expr == nil {
+			return nil, opTargetBlank("!", "right")
+		}
 		return &LogicExpr{Op: "!", Left: expr}, nil
 	case ETokSub:
 		p.next()
 		expr, err := p.parseUnary()
 		if err != nil {
 			return nil, err
+		}
+		if expr == nil {
+			return nil, opTargetBlank("-", "right")
 		}
 		return &ArithExpr{Op: "neg", Left: expr}, nil
 	case ETokInc:
@@ -251,12 +322,18 @@ func (p *exprParser) parseUnary() (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
+		if expr == nil {
+			return nil, opTargetBlank("++", "right")
+		}
 		return &IncDecExpr{Name: exprName(expr), Op: "++"}, nil
 	case ETokDec:
 		p.next()
 		expr, err := p.parsePostfix()
 		if err != nil {
 			return nil, err
+		}
+		if expr == nil {
+			return nil, opTargetBlank("--", "right")
 		}
 		return &IncDecExpr{Name: exprName(expr), Op: "--"}, nil
 	}
@@ -395,9 +472,26 @@ func (p *exprParser) parseAtom() (Expr, error) {
 		return p.parseArrayOrRange()
 	case ETokLBrace:
 		return p.parseMap()
+	case ETokRParen, ETokRBrack, ETokRBrace, // support "(a.b ??)"、"[start .. end ??]"、"{key : value ??}"
+		ETokRange,   // support "[start ?? .. end]"
+		ETokColon,   // support "c ? a ?? : b"
+		ETokQuestion, // support "c ?? ? a : b"
+		ETokAnd, ETokOr, ETokEq, ETokNe, // support "a.b ?? && expr"
+		ETokComma, ETokEOF:
+		// 对照 Java ExprParser.atom()：这些 token 不可能作为表达式开头时返回 null
+		// 而非抛错，令 `??` 右操作数可省略（#(name??) / #(name ?? )），nil 由
+		// 外层（NullCoalesce 构造点、各二元/三目操作数校验、parseExprWithConfig
+		// 顶层）按位置给出明确错误或按 null 合并语义放行。
+		return nil, nil
 	default:
 		return nil, fmt.Errorf("unexpected token: %d (%s)", p.tok, p.val)
 	}
+}
+
+// opTargetBlank 对应 Java Arith/Logic 构造器对 null 操作数的 ParseException
+// （The target of "op" operator (on the left/right side) can not be blank）。
+func opTargetBlank(op, side string) error {
+	return fmt.Errorf("the target of %q operator on the %s side can not be blank", op, side)
 }
 
 func (p *exprParser) parseArrayOrRange() (Expr, error) {
@@ -410,11 +504,17 @@ func (p *exprParser) parseArrayOrRange() (Expr, error) {
 	if err != nil {
 		return nil, err
 	}
+	if first == nil {
+		return nil, fmt.Errorf("array element can not be blank")
+	}
 	if p.tok == ETokRange {
 		p.next()
 		end, err := p.parseAssign()
 		if err != nil {
 			return nil, err
+		}
+		if end == nil {
+			return nil, fmt.Errorf("range end can not be blank")
 		}
 		if err := p.expect(ETokRBrack); err != nil {
 			return nil, err
@@ -427,6 +527,9 @@ func (p *exprParser) parseArrayOrRange() (Expr, error) {
 		e, err := p.parseAssign()
 		if err != nil {
 			return nil, err
+		}
+		if e == nil {
+			return nil, fmt.Errorf("array element can not be blank")
 		}
 		elements = append(elements, e)
 	}
@@ -457,6 +560,9 @@ func (p *exprParser) parseMap() (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
+		if val == nil {
+			return nil, fmt.Errorf("map value can not be blank")
+		}
 		pairs = append(pairs, MapPair{Key: key, Value: val})
 		if p.tok == ETokComma {
 			p.next()
@@ -477,6 +583,9 @@ func (p *exprParser) parseCallArgs() ([]Expr, error) {
 		arg, err := p.parseAssign()
 		if err != nil {
 			return nil, err
+		}
+		if arg == nil {
+			return nil, fmt.Errorf("argument can not be blank")
 		}
 		args = append(args, arg)
 		if p.tok == ETokComma {
