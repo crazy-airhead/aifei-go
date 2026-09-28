@@ -2,6 +2,6 @@ module github.com/crazy-airhead/aifei-go/_test/json_test
 
 go 1.26
 
-require github.com/crazy-airhead/aifei-go/json v0.1.2
+require github.com/crazy-airhead/aifei-go/json v0.1.3
 
 replace github.com/crazy-airhead/aifei-go/json => ../../json

@@ -2,9 +2,9 @@ module github.com/crazy-airhead/aifei-go/_test/damigen_test
 
 go 1.26
 
-require github.com/crazy-airhead/aifei-go/tools/damigen v0.1.2
+require github.com/crazy-airhead/aifei-go/tools/damigen v0.1.3
 
-require github.com/crazy-airhead/aifei-go/enjoy v0.1.2 // indirect
+require github.com/crazy-airhead/aifei-go/enjoy v0.1.3 // indirect
 
 replace github.com/crazy-airhead/aifei-go/tools/damigen => ../../tools/damigen
 
