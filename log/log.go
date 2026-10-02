@@ -2,6 +2,7 @@ package log
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 )
@@ -87,6 +88,15 @@ func Default() Logger { return defaultLog }
 
 // SetDefault sets the default logger.
 func SetDefault(l Logger) { defaultLog = l }
+
+// SetOutput switches the output destination of the built-in default logger
+// (keeping level and flags), mirroring the standard library convention.
+// It is a no-op when the default logger has been replaced via SetDefault.
+func SetOutput(w io.Writer) {
+	if dl, ok := defaultLog.(*defaultLogger); ok {
+		dl.logger.SetOutput(w)
+	}
+}
 
 // SetLevel sets the log level.
 func SetLevel(level Level) {
