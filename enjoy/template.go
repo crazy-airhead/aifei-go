@@ -149,6 +149,12 @@ func (e *Engine) GetTemplate(fileName string) *Template {
 
 // GetTemplateByString compiles a template from a string.
 func (e *Engine) GetTemplateByString(content string) *Template {
+	// 字符串模板按内容缓存命中（对照 Java Enjoy getTemplateByString 的缓存读取）：
+	// 内容相同即模板相同，重复渲染（如 SqlKit 每次取 SQL）不再重复词法+语法解析。
+	// 解析失败的模板同样缓存（错误确定可复现，重复解析无意义）。
+	if cached, ok := e.templateCache.Load(content); ok {
+		return cached.(*Template)
+	}
 	src := source.NewStringSource(content)
 	return e.compileSource(content, src, false)
 }
