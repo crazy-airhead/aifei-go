@@ -27,6 +27,7 @@ Aifei-Go 的设计文档索引：从 Java 版 Aifei 的移植总览、六阶段�
 
 ## 子系统设计
 
+- **AI**：[00 · 总览](ai/00-overview.md) / [01 · Go 对照](ai/01-go-comparison.md) / [02 · 聊天核心](ai/02-chat-core.md) / [03 · 智能体](ai/03-agent-design.md) / [04 · MCP](ai/04-mcp-design.md) / [05 · RAG](ai/05-rag-design.md) / [06 · 能力包与扩展](ai/06-talents-and-extended.md) / [07 · 迁移路线](ai/07-migration-plan.md)
 - **Dami**：[01 · Go 生态对照](dami/01-go-comparison.md) / [02 · 迁移设计](dami/02-migration-design.md)
 - **Flow**：[00 · 总览](flow/00-overview.md) / [01 · Go 对照](flow/01-go-comparison.md) / [02 · 核心设计](flow/02-core-design.md) / [03 · 配置与求值](flow/03-config-and-eval.md) / [04 · 工作流设计](flow/04-workflow-design.md) / [05 · TDD 计划](flow/05-tdd-plan.md) / [06 · MySQL 仓储](flow/06-mysql-repository.md)
 - **Nami**：[01 · Java 对照](nami/01-java-comparison.md) / [02 · 契约设计](nami/02-design.md)

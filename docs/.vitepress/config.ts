@@ -135,6 +135,20 @@ export default withMermaid(defineConfig({
           ],
         },
         {
+          text: 'AI 设计',
+          collapsed: true,
+          items: [
+            { text: '00 · 总览', link: '/arch/ai/00-overview' },
+            { text: '01 · Go 对照', link: '/arch/ai/01-go-comparison' },
+            { text: '02 · 聊天核心', link: '/arch/ai/02-chat-core' },
+            { text: '03 · 智能体', link: '/arch/ai/03-agent-design' },
+            { text: '04 · MCP', link: '/arch/ai/04-mcp-design' },
+            { text: '05 · RAG', link: '/arch/ai/05-rag-design' },
+            { text: '06 · 能力包与扩展', link: '/arch/ai/06-talents-and-extended' },
+            { text: '07 · 迁移路线', link: '/arch/ai/07-migration-plan' },
+          ],
+        },
+        {
           text: 'Dami 设计',
           collapsed: true,
           items: [
