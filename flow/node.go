@@ -3,6 +3,7 @@ package flow
 import (
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Node is an immutable flow node: a point in the graph with a type, optional
@@ -25,8 +26,11 @@ type Node struct {
 	prevNodes []*Node
 	nextNodes []*Node
 
-	// Attachment is an optional slot for extension parsing / custom use.
-	Attachment any
+	// per-node attachment cache (D8 方案 A): runtime-only values keyed by
+	// name — e.g. a chat model parsed from meta, cached to avoid rebuilding
+	// on every execution. Never serialized. Mirrors Java's node.attachment.
+	attachMu    sync.RWMutex
+	attachments map[string]any
 }
 
 // newNode builds a Node from a spec and its (already built) outgoing links. The
@@ -71,7 +75,6 @@ func (n *Node) Meta(key string) any {
 	}
 	return n.metas[key]
 }
-
 
 // HasMeta reports whether the key exists.
 func (n *Node) HasMeta(key string) bool {
@@ -127,6 +130,29 @@ func (n *Node) MetaOrDefault(key string, def any) any {
 		return v
 	}
 	return def
+}
+
+// Attachment returns a runtime attachment value by key (nil when absent).
+// Attachments are in-memory only: they never take part in graph serialization.
+func (n *Node) Attachment(key string) any {
+	n.attachMu.RLock()
+	defer n.attachMu.RUnlock()
+	if n.attachments == nil {
+		return nil
+	}
+	return n.attachments[key]
+}
+
+// SetAttachment stores a runtime attachment value under key. Use it to cache
+// derived artifacts (parsed configs, built clients) on the node so repeated
+// executions skip the rebuild.
+func (n *Node) SetAttachment(key string, v any) {
+	n.attachMu.Lock()
+	defer n.attachMu.Unlock()
+	if n.attachments == nil {
+		n.attachments = map[string]any{}
+	}
+	n.attachments[key] = v
 }
 
 // PrevLinks returns the incoming links (for non-start nodes), in reverse link order.
