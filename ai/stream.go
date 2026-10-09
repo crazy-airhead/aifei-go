@@ -342,6 +342,12 @@ func (st *streamState) buildStreamToolCallMessage(ctx *StreamContext, req *CallR
 		return streamOutcomeComplete, nil
 	}
 	am, _ := msg.Content.(*AssistantMessage)
+	if am != nil {
+		// 方言从 builder 只组装 ArgumentsStr（Java 在 ToolCall 构造时即填
+		// arguments）：终态调用在此统一补解析——END 事件载荷、记忆消息与
+		// 工具执行参数（buildToolMessage 取 call.Arguments）共享同一份
+		am.ToolCalls = parseToolCallArgs(am.ToolCalls)
+	}
 	r.options.Session.AddMessage(msg)
 	if am == nil || len(am.ToolCalls) == 0 {
 		return streamOutcomeComplete, nil

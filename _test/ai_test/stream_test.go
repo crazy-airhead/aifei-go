@@ -562,6 +562,69 @@ func TestStreamToolCallsWithoutAuto(t *testing.T) {
 	}
 }
 
+// ---- 单帧整块 tool_calls：id+name+完整参数同帧到达（网关聚合形态），
+// END 事件载荷与工具执行参数都应有解析后的 Arguments ----
+
+func TestStreamToolCallSingleFrameArguments(t *testing.T) {
+	s := newSSEScripted(t, 0, [][]string{
+		{
+			`{"id":"w1","model":"gpt-4o","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_w","type":"function","function":{"name":"weather","arguments":"{\"city\":\"北京\"}"}}]}}]}`,
+			`{"id":"w1","model":"gpt-4o","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}`,
+			`[DONE]`,
+		},
+		{
+			`{"id":"w2","model":"gpt-4o","choices":[{"index":0,"delta":{"role":"assistant","content":"北京今天晴。"}}]}`,
+			`{"id":"w2","model":"gpt-4o","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`,
+			`[DONE]`,
+		},
+	})
+	m := sseModel(t, s)
+
+	var gotArgs map[string]any
+	tool := ai.NewTool("weather").Desc("查天气").
+		StringParam("city", "城市名", true).
+		Handler(func(ctx context.Context, args map[string]any) (any, error) {
+			gotArgs = args
+			return fmt.Sprintf("%s：晴", args["city"]), nil
+		}).Build()
+
+	rec := &sinkRecorder{}
+	err := m.Prompt("北京天气").
+		Options(func(o *ai.ChatOptions) {
+			o.AutoToolCall = autoToolOn()
+			o.Tools = []ai.FunctionTool{tool}
+		}).
+		Stream(context.Background(), rec)
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+
+	// 工具执行拿到解析后的参数（此前 Arguments 为 nil，args["city"] 取不到）
+	if gotArgs == nil || gotArgs["city"] != "北京" {
+		t.Fatalf("工具参数 = %v", gotArgs)
+	}
+	// END 事件载荷同样带解析参数（UI 适配层 available part 依赖它）
+	ends := rec.ofType(ai.EventToolCallEnd)
+	if len(ends) != 1 {
+		t.Fatalf("TOOL_CALL_END 事件数 = %d", len(ends))
+	}
+	tc := ends[0].ToolCall
+	if tc == nil || tc.Arguments == nil || tc.Arguments["city"] != "北京" {
+		t.Fatalf("END 载体 Arguments = %+v", tc)
+	}
+	if tr := rec.ofType(ai.EventToolResult); len(tr) != 1 || tr[0].Text != "北京：晴" {
+		t.Fatalf("TOOL_RESULT = %v", tr)
+	}
+	// 递归第二轮合成终答
+	if s.count() != 2 {
+		t.Fatalf("请求数 = %d（应两轮）", s.count())
+	}
+	end := rec.ofType(ai.EventResponseEnd)[0]
+	if end.Response().Text() != "北京今天晴。" {
+		t.Fatalf("终答 = %q", end.Response().Text())
+	}
+}
+
 // ---- 响应体守卫 ----
 
 func TestStreamGuards(t *testing.T) {

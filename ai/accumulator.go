@@ -408,6 +408,32 @@ func (a *Accumulator) MergeTerminalMessage(m *AssistantMessage) {
 	a.mergeTerminalMessage(m, false)
 }
 
+// parseToolCallArgs 终态 toolCalls 的 Arguments 兜底解析（Java 由方言在构造
+// ToolCall 时填充；Go 部分方言只给 ArgumentsStr，快照统一补齐，调用方/工具
+// 执行拿到的终态调用都有解析后参数）。拷贝后解析，不动入参切片。
+func parseToolCallArgs(calls []ToolCall) []ToolCall {
+	needParse := false
+	for i := range calls {
+		if calls[i].Arguments == nil && calls[i].ArgumentsStr != "" {
+			needParse = true
+			break
+		}
+	}
+	if !needParse {
+		return calls
+	}
+	out := append([]ToolCall(nil), calls...)
+	for i := range out {
+		if out[i].Arguments == nil && out[i].ArgumentsStr != "" {
+			var m map[string]any
+			if json.Unmarshal([]byte(out[i].ArgumentsStr), &m) == nil {
+				out[i].Arguments = m
+			}
+		}
+	}
+	return out
+}
+
 func (a *Accumulator) mergeTerminalMessage(m *AssistantMessage, replace bool) {
 	if m == nil {
 		return
@@ -420,7 +446,7 @@ func (a *Accumulator) mergeTerminalMessage(m *AssistantMessage, replace bool) {
 		a.terminalThinking = m.Thinking
 	}
 	if replace || len(m.ToolCalls) > 0 {
-		a.terminalToolCalls = m.ToolCalls
+		a.terminalToolCalls = parseToolCallArgs(m.ToolCalls)
 	}
 	if replace || len(m.Blocks) > 0 {
 		a.terminalBlocks = m.Blocks
