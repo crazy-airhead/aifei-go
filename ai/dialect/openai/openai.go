@@ -28,6 +28,7 @@ var (
 	// 跨方言共享辅助（dialectkit，P1-b 抽取）的本包别名，保持既有调用点不变
 	getStr              = dialectkit.GetStr
 	getInt              = dialectkit.GetInt
+	getArray            = dialectkit.GetArray
 	getMapStr           = dialectkit.GetMapStr
 	firstMetaStr        = dialectkit.FirstMetaStr
 	decodeDataURL       = dialectkit.DecodeDataURL

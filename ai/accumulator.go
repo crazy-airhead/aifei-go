@@ -48,6 +48,10 @@ type Accumulator struct {
 	inThinking         bool // <think> 标签 / 纯 reasoning 帧通道开启中
 	hasReasoningField  bool
 	reasoningFieldName string // "reasoning_content" | "reasoning"
+
+	// aggregationMeta 方言解析工作台（对标 Java aggregationMetadata）：
+	// 请求内累积、终帧提升为协议状态；与 Metadata 分离，不进入最终消息。
+	aggregationMeta map[string]any
 }
 
 type accEntry struct {
@@ -474,6 +478,35 @@ func (a *Accumulator) PutTerminalProtocolState(id string, data any) {
 		a.terminalProtocolStates = map[string]any{}
 	}
 	a.terminalProtocolStates[id] = data
+}
+
+// TerminalProtocolState 终态协议状态读取（方言聚合出口复用回放状态用）。
+func (a *Accumulator) TerminalProtocolState(id string) any {
+	return a.terminalProtocolStates[id]
+}
+
+// AggregationMeta 方言解析工作台（对标 Java aggregationMetadata）：键值随请求
+// 累积、终帧提升为协议状态后清键；不进入最终消息（与 Metadata 分离）。
+func (a *Accumulator) AggregationMeta() map[string]any {
+	if a.aggregationMeta == nil {
+		a.aggregationMeta = map[string]any{}
+	}
+	return a.aggregationMeta
+}
+
+// MediaBlocks 已聚合的媒体块（方言音频转录等元数据回填用；条目内部引用，
+// 修改 Metas() 返回的 map 对聚合内同值块可见）。
+func (a *Accumulator) MediaBlocks() []ContentBlock {
+	var out []ContentBlock
+	for _, e := range a.entries {
+		if !e.isText {
+			out = append(out, e.block)
+		}
+	}
+	if len(out) == 0 {
+		return a.terminalBlocks
+	}
+	return out
 }
 
 // mergeTerminalToolCall END 事件携带的完整 ToolCall → 终态载体（同键字段级合并：
