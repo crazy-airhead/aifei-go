@@ -22,6 +22,10 @@ type Doer interface {
 type Client struct {
 	doer    Doer
 	headers map[string]string
+
+	// 传输级配置（Doer 注入时忽略；选项顺序无关）
+	timeout time.Duration
+	proxy   string
 }
 
 // Option Client 构建选项。
@@ -31,26 +35,10 @@ type Option func(*Client)
 func WithDoer(d Doer) Option { return func(c *Client) { c.doer = d } }
 
 // WithTimeout 总超时（仅适合非流式调用；流式请用 ctx 控制时长）。
-func WithTimeout(d time.Duration) Option {
-	return func(c *Client) { c.client().Timeout = d }
-}
+func WithTimeout(d time.Duration) Option { return func(c *Client) { c.timeout = d } }
 
 // WithProxy HTTP(S) 代理地址。
-func WithProxy(raw string) Option {
-	return func(c *Client) {
-		u, err := url.Parse(raw)
-		if err != nil {
-			return
-		}
-		cl := c.client()
-		tr, ok := cl.Transport.(*http.Transport)
-		if !ok || tr == nil {
-			tr = &http.Transport{}
-			cl.Transport = tr
-		}
-		tr.Proxy = http.ProxyURL(u)
-	}
-}
+func WithProxy(raw string) Option { return func(c *Client) { c.proxy = raw } }
 
 // WithHeader 追加默认请求头。
 func WithHeader(k, v string) Option {
@@ -66,20 +54,26 @@ func New(opts ...Option) *Client {
 		opt(c)
 	}
 	if c.doer == nil {
-		c.doer = &http.Client{}
+		c.doer = c.buildHTTPClient()
 	}
 	return c
 }
 
-// client 兜底构建底层 *http.Client（Doer 未注入时）。
-func (c *Client) client() *http.Client {
-	if cl, ok := c.doer.(*http.Client); ok {
-		return cl
-	}
+func (c *Client) buildHTTPClient() *http.Client {
 	cl := &http.Client{}
-	c.doer = cl
+	if c.timeout > 0 {
+		cl.Timeout = c.timeout
+	}
+	if c.proxy != "" {
+		if u, err := url.Parse(c.proxy); err == nil {
+			cl.Transport = &http.Transport{Proxy: http.ProxyURL(u)}
+		}
+	}
 	return cl
 }
+
+// Doer 底层传输缝（请求级包装基座，如 Options.HTTPCustomize 的 per-request 定制）。
+func (c *Client) Doer() Doer { return c.doer }
 
 // HTTPError 非 2xx 响应；Body 全量读出供上层解析厂商 error JSON。
 type HTTPError struct {

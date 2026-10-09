@@ -7,6 +7,19 @@ import (
 	"reflect"
 )
 
+type toolContextCtxKey struct{}
+
+// ContextWithToolContext 工具上下文注入 ctx（模型层组装；Handle 内取用）。
+func ContextWithToolContext(ctx context.Context, tc map[string]any) context.Context {
+	return context.WithValue(ctx, toolContextCtxKey{}, tc)
+}
+
+// ToolContextOf 从 ctx 取工具上下文（session id 等运行期标注；无则 nil）。
+func ToolContextOf(ctx context.Context) map[string]any {
+	tc, _ := ctx.Value(toolContextCtxKey{}).(map[string]any)
+	return tc
+}
+
 // FunctionTool 函数工具（对标 Java FunctionTool）：名称/描述/schema/处理器。
 type FunctionTool interface {
 	Name() string
@@ -122,6 +135,15 @@ func (t *ToolDesc) Build() FunctionTool {
 }
 
 type toolImpl struct{ *ToolDesc }
+
+// MetaSet meta 单项写入（talent 染色等外部注入缝；遮蔽 Builder 的同名链式方法，
+// 签名须为 MetaSet(string, any) 方可命中鸭子接口）。
+func (i *toolImpl) MetaSet(k string, v any) {
+	if i.meta == nil {
+		i.meta = map[string]any{}
+	}
+	i.meta[k] = v
+}
 
 func (i *toolImpl) Name() string             { return i.name }
 func (i *toolImpl) Title() string            { return i.title }

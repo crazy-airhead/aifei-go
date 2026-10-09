@@ -26,9 +26,29 @@ type BaseOptions struct {
 	HTTPCustomize func(*http.Request)
 }
 
-// ChatOptions 聊天请求选项（P0-e 补 Role/Instruction/SystemPrompt/Session 等请求描述层字段）。
+// ChatOptions 聊天请求选项：BaseOptions 之上叠加请求描述层字段
+// （对标 Java ChatOptions 的 role/instruction/systemPrompt/outputSchema/session）。
 type ChatOptions struct {
 	BaseOptions
+
+	Role         string // 「## 你的角色」段（SystemPrompt 缺省时结构化组装用）
+	Instruction  string // 「## 执行指令」段
+	SystemPrompt string // 完整系统提示词（优先于 Role/Instruction 结构化组装）
+	OutputSchema string // 结构化输出 schema（经 OutputSchemaOf[T] 反推或直接给）
+
+	Session      Session       // 仅 RequestDesc 层注入（用户不经 Options 设置）
+	Talents      []Talent      // 能力包（prepare 阶段统一激活）
+	Interceptors []Interceptor // 准备期/调用期/工具期拦截器（按序）
+}
+
+// Tool 按名查找已注册工具（autoToolCall 执行用；未注册返回 nil）。
+func (o *ChatOptions) Tool(name string) FunctionTool {
+	for _, t := range o.Tools {
+		if t != nil && t.Name() == name {
+			return t
+		}
+	}
+	return nil
 }
 
 // OptionGet 读 Raw 选项。
