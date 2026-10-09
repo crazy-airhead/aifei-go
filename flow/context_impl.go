@@ -100,7 +100,12 @@ func isSerializable(v any) bool {
 // ---- internal setters used by the engine/exchanger ----
 
 func (c *flowContext) setExchanger(ex *Exchanger) { c.exchanger = ex }
-func (c *flowContext) setStopped(b bool) {
+
+// SetStopped sets/clears the cross-engine stopped flag. Mirrors Java
+// FlowContextInternal.stopped(boolean): pending(false) un-stops a suspended
+// session's snapshot context while the exchanger flag (whole-run stop) stays.
+// Not part of the Context interface; consumers type-assert to use it.
+func (c *flowContext) SetStopped(b bool) {
 	c.mu.Lock()
 	c.stopped = b
 	c.mu.Unlock()

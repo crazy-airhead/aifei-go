@@ -133,7 +133,7 @@ func (ex *Exchanger) IsStopped() bool { return ex.stopped || ex.ctx.IsStopped() 
 // Stop stops the whole flow.
 func (ex *Exchanger) Stop() {
 	ex.stopped = true
-	ex.ctx.setStopped(true)
+	ex.ctx.SetStopped(true)
 }
 
 // IsInterrupted reports whether the current branch is interrupted.

@@ -17,6 +17,13 @@ func PromptOf(content string) *Prompt {
 
 func (p *Prompt) Messages() []*Message { return p.messages }
 
+// AddMessage 追加消息（可变场景：agent 工作记忆按轮归档，对标 Java
+// PromptImpl.addMessage）。
+func (p *Prompt) AddMessage(msgs ...*Message) *Prompt {
+	p.messages = append(p.messages, msgs...)
+	return p
+}
+
 // Attrs 懒初始化的标注袋（显式路由 id、talent 写入位等）。
 func (p *Prompt) Attrs() map[string]any {
 	if p.attrs == nil {

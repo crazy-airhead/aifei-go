@@ -1,6 +1,7 @@
 go 1.27
 
 use (
+	./_test/ai_agent_test
 	./_test/ai_test
 	./_test/cache_test
 	./_test/config_test
@@ -22,6 +23,7 @@ use (
 	./_test/storage_test
 	./_test/swagger_test
 	./ai
+	./ai/agent
 	./aifei
 	./config
 	./dami

@@ -147,7 +147,7 @@ func (e *Engine) eval(graph *Graph, ex *Exchanger, opts *Options) error {
 	opts.interceptorAddAll(e.interceptors)
 
 	ex.ctx.setExchanger(ex)
-	ex.ctx.setStopped(false) // reset before each eval
+	ex.ctx.SetStopped(false) // reset before each eval
 	err := newInvocation(ex, opts, lastNode, e.evalDo).Invoke()
 	ex.ctx.setExchanger(bak)
 	return err

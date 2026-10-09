@@ -15,7 +15,7 @@ go test ./ai ./aifei ./config ./dami ./db ./enjoy ./flow ./http ./json ./log ./n
          ./_test/json_test ./_test/log_test ./_test/config_test ./_test/dami_test \
          ./_test/server_test ./_test/nami_test ./_test/storage_test ./_test/swagger_test \
          ./_test/nacos_test ./_test/damigen_test ./_test/generator_test \
-         ./_test/dataisolate_test ./_test/db_test ./_test/cache_test ./_test/kafka_test ./_test/enjoy_test ./_test/flow_test ./_test/flow_plugin_test ./_test/ai_test
+         ./_test/dataisolate_test ./_test/db_test ./_test/cache_test ./_test/kafka_test ./_test/enjoy_test ./_test/flow_test ./_test/flow_plugin_test ./_test/ai_test ./_test/ai_agent_test
 
 # Run tests for a single area (tests live under _test/<area>_test)
 go test ./_test/db_test
@@ -91,6 +91,7 @@ Each test area is its own Go module:
 | `_test/nacos_test` | `plugins/nacos` `NamiUpstream` (black-box) | — |
 | `_test/damigen_test` | `tools/damigen` dami-provider codegen (black-box) | — |
 | `_test/generator_test` | `tools/generator` schema→code (`MetaReader`, type mapping) (black-box) | `modernc.org/sqlite` |
+| `_test/ai_agent_test` | `ai/agent` Agent base (`AgentBase` flow-node run, session/pending, team seam) + `ai/agent/simple` (call pipeline, retry-on-transport-error-only, session window, `OutputKey`, `OutputSchema`, stream forwarding) (black-box) | —（httptest 假 OpenAI 服务回放 JSON/SSE） |
 | `_test/demo` | full demo app (run with `go run`, not a test suite) | `modernc.org/sqlite` |
 
 Rules for adding tests:
@@ -115,6 +116,7 @@ This project uses a Go workspace (`go.work`) of independent modules, layered by 
 | Core library | `…/aifei-go/log` | `./log` | — |
 | Core library | `…/aifei-go/config` | `./config` | `yaml.v3` |
 | Core library | `…/aifei-go/ai` | `./ai` | —（solon-ai 迁移的聊天模型核心：消息/事件/工具/方言/会话） |
+| Core library | `…/aifei-go/ai/agent` | `./ai/agent` | ai, flow（solon-ai agent 层：AgentBase/Session/Trace/Metrics/RetryTask + `simple/` 简单智能体） |
 | Runtime | `…/aifei-go/http` | `./http` | aifei |
 | Runtime | `…/aifei-go/server` | `./server` | aifei, http, db, enjoy, log |
 | Standalone framework | `…/aifei-go/nami` | `./nami` | — |
@@ -146,6 +148,7 @@ This project uses a Go workspace (`go.work`) of independent modules, layered by 
 | Example | `_test/damigen_test` | `./_test/damigen_test` | tools/damigen |
 | Example | `_test/generator_test` | `./_test/generator_test` | tools/generator + `modernc.org/sqlite` |
 | Example | `_test/ai_test` | `./_test/ai_test` | ai（消息/事件/工具/方言/流式，黑盒；httptest 假服务回放） |
+| Example | `_test/ai_agent_test` | `./_test/ai_agent_test` | ai/agent（Agent 基座 + Simple：flow 图节点、会话/挂起、仅传输错误重试、流式转发，黑盒；httptest 假服务回放） |
 
 `…` = `github.com/crazy-airhead`. In the Dependencies column, bare names are internal modules; backticked names are external libraries; `—` means no dependencies.
 
@@ -239,6 +242,7 @@ Generates type-safe per-table packages from database schema:
 - **`./json`** — Lightweight JSON marshal/unmarshal wrappers.
 - **`./log`** — Logging interface (`Logger` with 5 levels) + default implementation.
 - **`./nami`** — Lightweight HTTP RPC **client** framework (ported from Java Solon Nami). Channel transport (`channel/http`), Encoder/Decoder (`coder/json`), `Filter` chain, `Upstream`/`Discovery`, fluent `Builder`/`ClientFactory`, and a `util` package (`GetJSON[T]` etc.). Server-side counterpart to aifei; zero external deps.
+- **`./ai/agent`** — Agent layer of the solon-ai migration (P2-a; depends on `ai` + `flow`). `Agent` interface = `flow.NamedTaskComponent`, so an agent drops into a flow graph via `s.AddActivityNamed(agent)` and runs through `AgentBase.Run` (default run): `_SESSION_` computeIfAbsent (`agent.NewMemorySession`), team seam via `_current_team_trace_key_` (interceptor veto → `[Skipped] Cancelled by …` record; `NodeStart`/`NodeEnd` agent events; `TeamProtocol.ResolveAgentOutput` post-processing — fallback text only when the *resolved* result is empty), then `self.Call(prompt, session)`. `Session` = `ai.Session` + `flow.Context` snapshot + `Pending(bool, reason)` suspend/resume (suspend = `ctx.Stop()` + cross-engine stopped flag via `flowContext.SetStopped`; resume clears the flag only — Java `stopped(false)` semantics; the exchanger-level stop is whole-run and never cleared here). `Trace`/`Metrics` accumulate usage per run and aggregate only the per-run delta into the parent team trace (duration excluded). `RetryTask` is full-jitter exponential backoff, ctx-aware, generic-method `Run[T]`. Subpackage `simple` ports `SimpleAgent`: instruction-augmented system prompt (`#{var}` rendered from the flow context), session history window (user-aligned rounds via `LatestMessages`), trace keyed `"__"+name` in the context (empty prompt resumes `OriginalPrompt`; empty-empty returns an empty assistant with zero HTTP), retry on transport errors only (LLM-no-return sentinel ∪ HTTP 5xx/429 ∪ net.Error ∪ EOF; business errors surface immediately), `OutputKey` writes the answer into `session.Context()`, `OutputSchema` → `response_format` + schema instruction, ThinkingOnly downgrade, tool-call answers not archived, `Handler` fallback when no `ChatModel`. Streaming: `Request.Stream`/`StreamChan` forward `SimpleStart`/`SimpleDelta` (TEXT/THINKING/MEDIA events) and aggregate a terminal `SimpleEnd`; consumer cancellation (sink sentinel or `context.Canceled` once the bound goCtx fired) maps to Java interrupt→null — empty assistant, no `SimpleEnd`, no retry.
 - **`./plugins/nacos`** — Nacos integration plugin built on nacos-sdk-go/v2. Implements `aifei.Plugin` for service registration (ephemeral instances with SDK heartbeats), config center (watch DataID, push changes via callback), and discovery (`NewNamiUpstream` converts Nacos discovery into `nami.Upstream`). Auto-registers a `config.CloudLoader` via `init()` so `config.Init()` automatically fetches config from Nacos at L5 when `nacos.server_addr` + `nacos.data_id` are set. `BindProps(props)` method chains `ConfigChangeCallback` to auto-update the Props on runtime config changes from Nacos.
 - **`./config`** — Layered configuration loading with generic `Store` (key-value map). Supports L1-L5 loading order: `app.yml` + `app-{env}.yml` → extension configs → env vars + CLI args → programmatic `LoadInto()` → cloud loaders (e.g., Nacos). Provides `Get`/`GetStr`/`GetBool`/`GetInt` accessors, `Sub(prefix)` for scoped sub-props, `Bind(v)` for YAML round-trip to user-defined structs, and functional options (`WithEnvPrefix`, `WithEnv`, `WithConfigDir`, `WithBaseFiles`). Thread-safe (`sync.RWMutex`) — safe for concurrent reads and dynamic updates from cloud config watchers. Does NOT define application-level config structs — each app defines its own.
 - **`./plugins/storage`** — Unified file-storage abstraction (ported from ficus `ficus-starter-storage`) with local filesystem and S3-compatible backends (AWS S3/Minio/OSS/COS) via minio-go. `Client` interface (`Exists`/`TempURL`/`Get`/`Put`/`Delete`/`DeleteBatch`, bucket-scoped) + `Media` model (`io.Reader` + content type/size, stdlib `mime` inference). `Manager` routes by bucket name with a default; `Plugin` (`aifei.Plugin`) reads `storage.*` from `config.Props` (`storage.default` + `storage.buckets.<name>.{driver,endpoint,regionId,accessKey,secretKey,autoCreateBucket}`) and installs the package-level default so top-level `storage.Put/Get/...` and `storage.Use(bucket)` work. Driver inferred from `driver` (`local`/`s3`) or endpoint scheme.
