@@ -9,13 +9,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # expand from the repo root — list module paths explicitly, as below).
 # All _test.go files live under _test/; the library paths below (aifei, config,
 # …) carry no tests and are listed only to compile-check them.
-go test ./aifei ./config ./dami ./db ./enjoy ./flow ./http ./json ./log ./nami ./server \
+go test ./ai ./aifei ./config ./dami ./db ./enjoy ./flow ./http ./json ./log ./nami ./server \
          ./tools/generator ./tools/damigen \
          ./plugins/cache ./plugins/dami ./plugins/dataisolate ./plugins/flow ./plugins/kafka ./plugins/nacos ./plugins/storage ./plugins/swagger ./plugins/elasticsearch ./plugins/xxljob \
          ./_test/json_test ./_test/log_test ./_test/config_test ./_test/dami_test \
          ./_test/server_test ./_test/nami_test ./_test/storage_test ./_test/swagger_test \
          ./_test/nacos_test ./_test/damigen_test ./_test/generator_test \
-         ./_test/dataisolate_test ./_test/db_test ./_test/cache_test ./_test/kafka_test ./_test/enjoy_test ./_test/flow_test ./_test/flow_plugin_test
+         ./_test/dataisolate_test ./_test/db_test ./_test/cache_test ./_test/kafka_test ./_test/enjoy_test ./_test/flow_test ./_test/flow_plugin_test ./_test/ai_test
 
 # Run tests for a single area (tests live under _test/<area>_test)
 go test ./_test/db_test
@@ -114,6 +114,7 @@ This project uses a Go workspace (`go.work`) of independent modules, layered by 
 | Core library | `…/aifei-go/json` | `./json` | — |
 | Core library | `…/aifei-go/log` | `./log` | — |
 | Core library | `…/aifei-go/config` | `./config` | `yaml.v3` |
+| Core library | `…/aifei-go/ai` | `./ai` | —（solon-ai 迁移的聊天模型核心：消息/事件/工具/方言/会话） |
 | Runtime | `…/aifei-go/http` | `./http` | aifei |
 | Runtime | `…/aifei-go/server` | `./server` | aifei, http, db, enjoy, log |
 | Standalone framework | `…/aifei-go/nami` | `./nami` | — |
@@ -144,6 +145,7 @@ This project uses a Go workspace (`go.work`) of independent modules, layered by 
 | Example | `_test/nacos_test` | `./_test/nacos_test` | plugins/nacos |
 | Example | `_test/damigen_test` | `./_test/damigen_test` | tools/damigen |
 | Example | `_test/generator_test` | `./_test/generator_test` | tools/generator + `modernc.org/sqlite` |
+| Example | `_test/ai_test` | `./_test/ai_test` | ai（消息/事件/工具/方言/流式，黑盒；httptest 假服务回放） |
 
 `…` = `github.com/crazy-airhead`. In the Dependencies column, bare names are internal modules; backticked names are external libraries; `—` means no dependencies.
 
