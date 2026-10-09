@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // AssistantMessage 助手消息聚合体：文本 + 思考 + 工具调用 + 多模态块 + 协议状态袋（D12）。
@@ -27,6 +28,33 @@ func Snapshot(text string, thinking string, calls []ToolCall) *AssistantMessage 
 func (m *AssistantMessage) HasThinking() bool {
 	return m.Thinking != ""
 }
+
+// AddMetadata 追加元数据（懒初始化）。
+func (m *AssistantMessage) AddMetadata(k string, v any) *AssistantMessage {
+	if m.Metadata == nil {
+		m.Metadata = map[string]any{}
+	}
+	m.Metadata[k] = v
+	return m
+}
+
+// StripThinkTags 剥离前导 <think> 段（仅当位于文本开头；只有开标签时整段视为思考）。
+func StripThinkTags(str string) string {
+	tagStart := strings.Index(str, thinkOpen)
+	if tagStart < 0 || strings.TrimSpace(str[:tagStart]) != "" {
+		return str
+	}
+	thinkEnd := strings.Index(str[tagStart:], thinkClose)
+	if thinkEnd > -1 {
+		return str[tagStart+thinkEnd+len(thinkClose):]
+	}
+	return ""
+}
+
+const (
+	thinkOpen  = "<think>"
+	thinkClose = "</think>"
+)
 
 // ThinkingOnly 是否为纯思考消息（目标端无法回放思考时整条跳过，方言侧使用）。
 func (m *AssistantMessage) ThinkingOnly() bool {
@@ -92,6 +120,8 @@ func Bind[T any](m *AssistantMessage) (T, error) {
 
 // SearchResult 网络搜索/深度研究结果（P1 随方言补齐字段）。
 type SearchResult struct {
+	Index   int            `json:"index,omitempty"`
+	ID      string         `json:"id,omitempty"`
 	URL     string         `json:"url,omitempty"`
 	Title   string         `json:"title,omitempty"`
 	Snippet string         `json:"snippet,omitempty"`

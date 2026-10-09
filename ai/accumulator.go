@@ -27,6 +27,27 @@ type Accumulator struct {
 	usage        *Usage
 	err          error
 	finishReason string
+	stream       bool
+
+	// 终态载体（对标 terminalXxx：事件聚合优先、载体兜底；toolCalls 以载体为先——
+	// Java buildTerminalMessage 同一解析序）。非流式整条消息 replace，流式非空字段覆盖。
+	terminalPresent        bool
+	terminalText           string
+	terminalThinking       string
+	terminalToolCalls      []ToolCall
+	terminalBlocks         []ContentBlock
+	terminalSearchResults  []SearchResult
+	terminalCitations      []Citation
+	terminalProtocolStates map[string]any
+	terminalMetadata       map[string]any
+
+	// 方言可变工作台（对标 ChatAccumulator 的公共字段）
+	model              string
+	finished           bool
+	lastToolCallID     string
+	inThinking         bool // <think> 标签 / 纯 reasoning 帧通道开启中
+	hasReasoningField  bool
+	reasoningFieldName string // "reasoning_content" | "reasoning"
 }
 
 type accEntry struct {
@@ -43,6 +64,9 @@ type ToolCallBuilder struct {
 	Name  string
 	args  strings.Builder
 }
+
+// Args 已累计的参数 JSON 片段。
+func (b *ToolCallBuilder) Args() string { return b.args.String() }
 
 func NewAccumulator() *Accumulator {
 	return &Accumulator{toolCalls: map[string]*ToolCallBuilder{}}
@@ -95,6 +119,10 @@ func (a *Accumulator) Merge(ev *ChatEvent) {
 		a.thinkingSignature = ev.Text
 	case EventToolCallStart, EventToolCallArgsDelta, EventToolCallEnd:
 		a.mergeToolCall(ev)
+		// END 携带完整体时作为终态协议载体保存（直接事件形态方言的兜底路径）
+		if ev.Type == EventToolCallEnd && ev.ToolCall != nil && ev.ToolCall.Name != "" {
+			a.mergeTerminalToolCall(*ev.ToolCall)
+		}
 	case EventSearchResult:
 		if ev.SearchResult != nil {
 			a.searchResults = append(a.searchResults, *ev.SearchResult)
@@ -215,24 +243,74 @@ func (a *Accumulator) buildToolCalls() []ToolCall {
 }
 
 // Message 当前聚合快照（每次调用新建，可安全持有）。
+// 解析序对标 Java buildTerminalMessage：文本/思考/媒体事件聚合优先、终态载体
+// 兜底；工具调用以终态载体为先（END 完整体或方言恢复），否则回退事件聚合。
 func (a *Accumulator) Message() *AssistantMessage {
-	m := &AssistantMessage{
-		Thinking:      a.thinking.String(),
-		ToolCalls:     a.buildToolCalls(),
-		SearchResults: append([]SearchResult(nil), a.searchResults...),
-		Citations:     append([]Citation(nil), a.citations...),
-	}
 	var sb strings.Builder
 	for _, e := range a.entries {
 		if e.isText {
 			sb.WriteString(e.text.String())
-		} else {
+		}
+	}
+	text := sb.String()
+	thinking := a.thinking.String()
+	if text == "" && a.terminalText != "" {
+		text = a.terminalText
+	}
+	if thinking == "" && a.terminalThinking != "" {
+		thinking = a.terminalThinking
+	}
+
+	toolCalls := a.terminalToolCalls
+	if len(toolCalls) == 0 {
+		toolCalls = a.buildToolCalls()
+	} else {
+		// END 载体按调用逐一送达：补上尚未 END 的进行中调用（流中快照完整性）
+		inTerminal := map[string]struct{}{}
+		for i := range toolCalls {
+			if k := toolKey(&toolCalls[i]); k != "" {
+				inTerminal[k] = struct{}{}
+			}
+		}
+		for _, c := range a.buildToolCalls() {
+			if k := toolKey(&c); k != "" {
+				if _, ok := inTerminal[k]; !ok {
+					toolCalls = append(append([]ToolCall(nil), toolCalls...), c)
+				}
+			}
+		}
+	}
+
+	m := &AssistantMessage{
+		Text:          text,
+		Thinking:      thinking,
+		ToolCalls:     toolCalls,
+		SearchResults: append([]SearchResult(nil), a.searchResults...),
+		Citations:     append([]Citation(nil), a.citations...),
+		Metadata:      a.terminalMetadata,
+	}
+	for _, e := range a.entries {
+		if !e.isText {
 			m.Blocks = append(m.Blocks, e.block)
 		}
 	}
-	m.Text = sb.String()
+	if len(m.Blocks) == 0 {
+		m.Blocks = a.terminalBlocks
+	}
+	if len(m.SearchResults) == 0 {
+		m.SearchResults = a.terminalSearchResults
+	}
+	if len(m.Citations) == 0 {
+		m.Citations = a.terminalCitations
+	}
+	if len(a.terminalProtocolStates) > 0 {
+		m.ProtocolStates = copyMap(a.terminalProtocolStates)
+	}
 	if a.thinkingSignature != "" {
-		m.ProtocolStates = map[string]any{"thinking_signature": a.thinkingSignature}
+		if m.ProtocolStates == nil {
+			m.ProtocolStates = map[string]any{}
+		}
+		m.ProtocolStates["thinking_signature"] = a.thinkingSignature
 	}
 	return m
 }
@@ -240,6 +318,9 @@ func (a *Accumulator) Message() *AssistantMessage {
 // BuildResponse 构建终态快照。finishReason 归一（tool/stop/透传）；
 // 空缺时仅在无错误路径补 "stop"（错误路径保持空，终态由 Err 表达）。
 func (a *Accumulator) BuildResponse(model string, events []*ChatEvent) *Response {
+	if model == "" {
+		model = a.model
+	}
 	fr := a.finishReason
 	if fr != "" {
 		fr = normalizeFinishReason(fr)
@@ -258,6 +339,137 @@ func (a *Accumulator) BuildResponse(model string, events []*ChatEvent) *Response
 
 func (a *Accumulator) Err() error    { return a.err }
 func (a *Accumulator) Usage() *Usage { return a.usage }
+
+// ---- 方言工作台 ----
+
+// SetStream / IsStream 流式标记（构建 Accumulator 时随上下文写入；
+// ParseAssistantMessage 等无 ctx 入参的路径借它分流）。
+func (a *Accumulator) SetStream(b bool) { a.stream = b }
+func (a *Accumulator) IsStream() bool   { return a.stream }
+
+func (a *Accumulator) SetModel(m string)      { a.model = m }
+func (a *Accumulator) Model() string          { return a.model }
+func (a *Accumulator) SetFinished(b bool)     { a.finished = b }
+func (a *Accumulator) IsFinished() bool       { return a.finished }
+func (a *Accumulator) SetError(err error)     { a.err = err }
+func (a *Accumulator) SetUsage(u *Usage)      { a.usage = u }
+func (a *Accumulator) LastToolCallID() string { return a.lastToolCallID }
+
+// SetLastToolCallID 记录最近一次工具调用 id（id 仅首分片携带，后续分片兜底用）。
+func (a *Accumulator) SetLastToolCallID(id string) {
+	if id != "" {
+		a.lastToolCallID = id
+	}
+}
+
+// SetFinishReason 方言直写结束原因（非空才写；流式事件 Attrs 亦可携带）。
+func (a *Accumulator) SetFinishReason(fr string) {
+	if fr != "" {
+		a.finishReason = fr
+	}
+}
+
+// ToolCallBuilders 流式工具调用构建器表（autoToolCall 出站重建与参数恢复用）。
+func (a *Accumulator) ToolCallBuilders() map[string]*ToolCallBuilder { return a.toolCalls }
+
+// ToolCallOrder 构建器首次出现序（Go map 无序，出站重建需确定序）。
+func (a *Accumulator) ToolCallOrder() []string { return a.toolOrder }
+
+// InThinking / SetInThinking <think> 通道解析状态。
+func (a *Accumulator) InThinking() bool     { return a.inThinking }
+func (a *Accumulator) SetInThinking(b bool) { a.inThinking = b }
+
+// HasReasoningField / SetHasReasoningField 推理字段出现标记（reasoning 协议族）。
+func (a *Accumulator) HasReasoningField() bool     { return a.hasReasoningField }
+func (a *Accumulator) SetHasReasoningField(b bool) { a.hasReasoningField = b }
+
+// ReasoningFieldName / SetReasoningFieldName 本流使用的推理字段名（出站回放参考）。
+func (a *Accumulator) ReasoningFieldName() string        { return a.reasoningFieldName }
+func (a *Accumulator) SetReasoningFieldName(name string) { a.reasoningFieldName = name }
+
+// ---- 终态载体 ----
+
+// TerminalPresent 是否已有终态载体（空结果判定用）。
+func (a *Accumulator) TerminalPresent() bool { return a.terminalPresent }
+
+// SetTerminalMessage 非流式：完整消息整体替换终态载体。
+func (a *Accumulator) SetTerminalMessage(m *AssistantMessage) {
+	a.mergeTerminalMessage(m, true)
+}
+
+// MergeTerminalMessage 流式：仅覆盖非空字段。
+func (a *Accumulator) MergeTerminalMessage(m *AssistantMessage) {
+	a.mergeTerminalMessage(m, false)
+}
+
+func (a *Accumulator) mergeTerminalMessage(m *AssistantMessage, replace bool) {
+	if m == nil {
+		return
+	}
+	a.terminalPresent = true
+	if replace || m.Text != "" {
+		a.terminalText = m.Text
+	}
+	if replace || m.Thinking != "" {
+		a.terminalThinking = m.Thinking
+	}
+	if replace || len(m.ToolCalls) > 0 {
+		a.terminalToolCalls = m.ToolCalls
+	}
+	if replace || len(m.Blocks) > 0 {
+		a.terminalBlocks = m.Blocks
+	}
+	if replace || len(m.SearchResults) > 0 {
+		a.terminalSearchResults = m.SearchResults
+	}
+	if replace || len(m.Citations) > 0 {
+		a.terminalCitations = m.Citations
+	}
+	if replace || len(m.ProtocolStates) > 0 {
+		a.terminalProtocolStates = m.ProtocolStates
+	}
+	if replace || len(m.Metadata) > 0 {
+		a.terminalMetadata = m.Metadata
+	}
+}
+
+// mergeTerminalToolCall END 事件携带的完整 ToolCall → 终态载体（同键字段级合并：
+// 非空字段覆盖；参数空缺回退事件聚合 builder 的累计——END 载体可能只带头部字段）。
+func (a *Accumulator) mergeTerminalToolCall(call ToolCall) {
+	a.terminalPresent = true
+	if call.ArgumentsStr == "" {
+		if b := a.toolCalls[toolKey(&call)]; b != nil {
+			call.ArgumentsStr = b.Args()
+		}
+	}
+	if call.ArgumentsStr != "" && call.Arguments == nil {
+		var m map[string]any
+		if json.Unmarshal([]byte(call.ArgumentsStr), &m) == nil {
+			call.Arguments = m
+		}
+	}
+	merged := append([]ToolCall(nil), a.terminalToolCalls...)
+	for i := range merged {
+		if key := toolKey(&merged[i]); key != "" && key == toolKey(&call) {
+			if call.ID != "" {
+				merged[i].ID = call.ID
+			}
+			if call.Name != "" {
+				merged[i].Name = call.Name
+			}
+			if call.Index != "" {
+				merged[i].Index = call.Index
+			}
+			if call.ArgumentsStr != "" {
+				merged[i].ArgumentsStr = call.ArgumentsStr
+				merged[i].Arguments = call.Arguments
+			}
+			a.terminalToolCalls = merged
+			return
+		}
+	}
+	a.terminalToolCalls = append(merged, call)
+}
 
 // normalizeFinishReason 归一化：含 tool/function → "tool"；含 stop/end → "stop"；
 // 其余透传（"length"/"content_filter"）；空缺默认 "stop"。
