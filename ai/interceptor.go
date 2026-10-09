@@ -100,6 +100,17 @@ func newToolChain(list []Interceptor, terminal func(*ToolRequest) *ToolResult) *
 	return &ToolChain{interceptors: append([]Interceptor(nil), list...), terminal: terminal}
 }
 
+// NewToolRequest 构造工具执行请求（react 等上层编排复用工具拦截链用；
+// call 载荷缺省 nil）。
+func NewToolRequest(toolContext, args map[string]any) *ToolRequest {
+	return &ToolRequest{toolContext: toolContext, args: args}
+}
+
+// NewToolChain 构造工具拦截链（terminal 为真实工具执行）。
+func NewToolChain(list []Interceptor, terminal func(*ToolRequest) *ToolResult) *ToolChain {
+	return newToolChain(list, terminal)
+}
+
 // DoIntercept 依次经过启用的 ToolInterceptor，终点为工具执行。
 func (c *ToolChain) DoIntercept(req *ToolRequest) *ToolResult {
 	for c.pos < len(c.interceptors) {

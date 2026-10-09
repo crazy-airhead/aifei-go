@@ -24,6 +24,16 @@ func (p *Prompt) AddMessage(msgs ...*Message) *Prompt {
 	return p
 }
 
+// Clear 清空消息（attrs 保留——react 轨迹 reset 复用同一实例，对标 Java
+// PromptImpl.clear()）。
+func (p *Prompt) Clear() *Prompt {
+	p.messages = nil
+	return p
+}
+
+// IsEmpty 是否无消息。
+func (p *Prompt) IsEmpty() bool { return len(p.messages) == 0 }
+
 // Attrs 懒初始化的标注袋（显式路由 id、talent 写入位等）。
 func (p *Prompt) Attrs() map[string]any {
 	if p.attrs == nil {
