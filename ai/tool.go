@@ -1,6 +1,191 @@
 package ai
 
-import "encoding/json"
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"reflect"
+)
+
+// FunctionTool 函数工具（对标 Java FunctionTool）：名称/描述/schema/处理器。
+type FunctionTool interface {
+	Name() string
+	Title() string
+	Description() string
+	Meta() map[string]any
+	Strict() *bool
+	ReturnDirect() bool
+	InputSchema() string // JSON Schema（draft-07）字符串
+	OutputSchema() string
+	ReturnType() reflect.Type
+	Handle(ctx context.Context, args map[string]any) (any, error)
+	// Call 包装 Handle：panic recover、error → ToolResultErr（前缀 "Error: "）。
+	Call(ctx context.Context, args map[string]any) *ToolResult
+}
+
+// ToolProvider 工具提供者（可注册到 options / mcp 桥 / talent）。
+type ToolProvider interface {
+	Tools() []FunctionTool
+}
+
+// ParamSpec 声明式参数描述。
+type ParamSpec struct {
+	Name     string
+	Type     string // "string" | "integer" | "number" | "boolean" | "array" | "object"
+	Required bool
+	Desc     string
+	Default  any
+	Format   string // date / date-time / ...
+	Enum     []any
+	Items    map[string]any // type=array 时的 items 子 schema
+	Schema   map[string]any // 完整节点直通（reflect 绑定的嵌套 object/array，优先于 Type 等散字段）
+}
+
+// ToolDesc 声明式工具构建器（主路径）。
+type ToolDesc struct {
+	name, title, desc string
+	params            []ParamSpec
+	inputSchemaStr    string
+	outputSchemaStr   string
+	strict            *bool
+	returnDirect      bool
+	meta              map[string]any
+	resultConverter   func(any) (any, error)
+	handler           func(ctx context.Context, args map[string]any) (any, error)
+	returnType        reflect.Type
+}
+
+func NewTool(name string) *ToolDesc { return &ToolDesc{name: name} }
+
+func (t *ToolDesc) Title(s string) *ToolDesc      { t.title = s; return t }
+func (t *ToolDesc) Desc(s string) *ToolDesc       { t.desc = s; return t }
+func (t *ToolDesc) Strict(b bool) *ToolDesc       { t.strict = &b; return t }
+func (t *ToolDesc) ReturnDirect(b bool) *ToolDesc { t.returnDirect = b; return t }
+
+func (t *ToolDesc) Param(p ParamSpec) *ToolDesc {
+	t.params = append(t.params, p)
+	return t
+}
+
+func (t *ToolDesc) StringParam(name, desc string, required bool) *ToolDesc {
+	return t.Param(ParamSpec{Name: name, Type: "string", Desc: desc, Required: required})
+}
+
+func (t *ToolDesc) IntParam(name, desc string, required bool) *ToolDesc {
+	return t.Param(ParamSpec{Name: name, Type: "integer", Desc: desc, Required: required})
+}
+
+func (t *ToolDesc) FloatParam(name, desc string, required bool) *ToolDesc {
+	return t.Param(ParamSpec{Name: name, Type: "number", Desc: desc, Required: required})
+}
+
+func (t *ToolDesc) BoolParam(name, desc string, required bool) *ToolDesc {
+	return t.Param(ParamSpec{Name: name, Type: "boolean", Desc: desc, Required: required})
+}
+
+func (t *ToolDesc) DateParam(name, desc string, required bool) *ToolDesc {
+	return t.Param(ParamSpec{Name: name, Type: "string", Format: "date", Desc: desc, Required: required})
+}
+
+func (t *ToolDesc) DateTimeParam(name, desc string, required bool) *ToolDesc {
+	return t.Param(ParamSpec{Name: name, Type: "string", Format: "date-time", Desc: desc, Required: required})
+}
+
+// InputSchemaJSON 直接给定 schema（跳过生成）。
+func (t *ToolDesc) InputSchemaJSON(s string) *ToolDesc { t.inputSchemaStr = s; return t }
+
+// OutputSchemaJSON 直接给定输出 schema。
+func (t *ToolDesc) OutputSchemaJSON(s string) *ToolDesc { t.outputSchemaStr = s; return t }
+
+func (t *ToolDesc) MetaSet(k string, v any) *ToolDesc {
+	if t.meta == nil {
+		t.meta = map[string]any{}
+	}
+	t.meta[k] = v
+	return t
+}
+
+func (t *ToolDesc) ResultConverter(fn func(any) (any, error)) *ToolDesc {
+	t.resultConverter = fn
+	return t
+}
+
+func (t *ToolDesc) Handler(fn func(ctx context.Context, args map[string]any) (any, error)) *ToolDesc {
+	t.handler = fn
+	return t
+}
+
+// Build 生成 FunctionTool。
+func (t *ToolDesc) Build() FunctionTool {
+	c := *t
+	return &toolImpl{ToolDesc: &c}
+}
+
+type toolImpl struct{ *ToolDesc }
+
+func (i *toolImpl) Name() string             { return i.name }
+func (i *toolImpl) Title() string            { return i.title }
+func (i *toolImpl) Description() string      { return i.desc }
+func (i *toolImpl) Meta() map[string]any     { return i.meta }
+func (i *toolImpl) Strict() *bool            { return i.strict }
+func (i *toolImpl) ReturnDirect() bool       { return i.returnDirect }
+func (i *toolImpl) ReturnType() reflect.Type { return i.returnType }
+
+func (i *toolImpl) InputSchema() string {
+	if i.inputSchemaStr != "" {
+		return i.inputSchemaStr
+	}
+	return buildInputSchema(i.params)
+}
+
+func (i *toolImpl) OutputSchema() string { return i.outputSchemaStr }
+
+func (i *toolImpl) Handle(ctx context.Context, args map[string]any) (any, error) {
+	if i.handler == nil {
+		return nil, fmt.Errorf("ai: tool %q has no handler", i.name)
+	}
+	return i.handler(ctx, args)
+}
+
+func (i *toolImpl) Call(ctx context.Context, args map[string]any) *ToolResult {
+	result, err := i.callDo(ctx, args)
+	if err != nil {
+		return ToolResultErr("Error: " + err.Error())
+	}
+	return ToolResultOf(resultConvert(result))
+}
+
+func (i *toolImpl) callDo(ctx context.Context, args map[string]any) (result any, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic: %v", r)
+		}
+	}()
+	result, err = i.Handle(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+	if i.resultConverter != nil {
+		result, err = i.resultConverter(result)
+	}
+	return result, err
+}
+
+// resultConvert 工具结果字符串化：nil → 空；string 直出；其余 JSON 序列化
+// （对标 ToolSchemaUtil.resultConvert）。
+func resultConvert(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return x
+	}
+	data, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprintf("%v", v)
+	}
+	return string(data)
+}
 
 // ToolCall 模型发起的工具调用（对标 Java ToolCall）。
 type ToolCall struct {
