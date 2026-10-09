@@ -104,6 +104,27 @@ func (c *Client) newRequest(ctx context.Context, method, rawURL string, body []b
 	return req, nil
 }
 
+// Get 非流式 GET，读全文（无请求体）。非 2xx 返回 *HTTPError（Body 仍带出）。
+func (c *Client) Get(ctx context.Context, rawURL string, header map[string]string) ([]byte, int, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, rawURL, nil, header)
+	if err != nil {
+		return nil, 0, err
+	}
+	resp, err := c.doer.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return data, resp.StatusCode, &HTTPError{Status: resp.StatusCode, Body: data}
+	}
+	return data, resp.StatusCode, nil
+}
+
 // PostJSON 非流式 POST JSON，读全文。非 2xx 返回 *HTTPError（Body 仍带出）。
 func (c *Client) PostJSON(ctx context.Context, rawURL string, body []byte, header map[string]string) ([]byte, int, error) {
 	req, err := c.newRequest(ctx, http.MethodPost, rawURL, body, header)
