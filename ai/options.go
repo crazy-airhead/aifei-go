@@ -7,9 +7,12 @@ import (
 	"sort"
 )
 
-// CacheControl 前缀缓存控制（OpenAI 兼容 prompt_cache_key 等）。
+// CacheControl 前缀缓存控制：OpenAI 兼容 prompt_cache_key；anthropic 缓存断点
+// （Type="ephemeral" + Ttl="5m"|"1h"）；ollama 复用 Ttl 作 keep_alive。
 type CacheControl struct {
 	PromptCacheKey string
+	Ttl            string
+	Type           string
 }
 
 // BaseOptions 请求选项基座（chat/embedding/rerank 共用面）。

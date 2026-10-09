@@ -305,6 +305,7 @@ func (a *Accumulator) Message() *AssistantMessage {
 	}
 	if len(a.terminalProtocolStates) > 0 {
 		m.ProtocolStates = copyMap(a.terminalProtocolStates)
+		BindProtocolStateHashes(m)
 	}
 	if a.thinkingSignature != "" {
 		if m.ProtocolStates == nil {
@@ -356,6 +357,11 @@ func (a *Accumulator) SetUsage(u *Usage)      { a.usage = u }
 func (a *Accumulator) LastToolCallID() string { return a.lastToolCallID }
 
 // SetLastToolCallID 记录最近一次工具调用 id（id 仅首分片携带，后续分片兜底用）。
+// ThinkingSignature / SetThinkingSignature 思考签名幂等态（Gemini thoughtSignature
+// 等方言在解析边界直接读写；事件通道 THINKING_SIGNATURE 走 Merge 同一字段）。
+func (a *Accumulator) ThinkingSignature() string       { return a.thinkingSignature }
+func (a *Accumulator) SetThinkingSignature(sig string) { a.thinkingSignature = sig }
+
 func (a *Accumulator) SetLastToolCallID(id string) {
 	if id != "" {
 		a.lastToolCallID = id
@@ -431,6 +437,17 @@ func (a *Accumulator) mergeTerminalMessage(m *AssistantMessage, replace bool) {
 	if replace || len(m.Metadata) > 0 {
 		a.terminalMetadata = m.Metadata
 	}
+}
+
+// PutTerminalProtocolState 方言终态协议状态写入（对标 Java putTerminalProtocolState：
+// anthropic thinking 签名、gemini thoughtSignature 等）：直接进终态载体袋，
+// Message() 原样透出。终帧一次性写入，不与通用 thinking_signature 键合并。
+func (a *Accumulator) PutTerminalProtocolState(id string, data any) {
+	a.terminalPresent = true
+	if a.terminalProtocolStates == nil {
+		a.terminalProtocolStates = map[string]any{}
+	}
+	a.terminalProtocolStates[id] = data
 }
 
 // mergeTerminalToolCall END 事件携带的完整 ToolCall → 终态载体（同键字段级合并：

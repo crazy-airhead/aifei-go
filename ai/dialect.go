@@ -39,6 +39,13 @@ type Dialect interface {
 	ParseAssistantMessage(acc *Accumulator, node map[string]any) []*AssistantMessage
 }
 
+// HeaderDialect 请求头定制（可选能力，类型断言启用）：在默认头（Headers 副本 →
+// Authorization: Bearer → User-Agent）之后调用，覆盖/追加厂商头（anthropic
+// x-api-key + anthropic-version、gemini x-goog-api-key、dashscope X-DashScope-SSE）。
+type HeaderDialect interface {
+	CustomizeHeader(cfg *Config, opts *ChatOptions, isStream bool, header map[string]string)
+}
+
 type dialectEntry struct {
 	d        Dialect
 	priority int

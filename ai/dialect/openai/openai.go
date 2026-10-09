@@ -4,15 +4,13 @@
 package openai
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/crazy-airhead/aifei-go/ai"
+	"github.com/crazy-airhead/aifei-go/ai/internal/dialectkit"
 )
 
 // OptionInstructionRole 本地方言指令角色策略：auto（默认）/ system / developer。
@@ -22,15 +20,27 @@ const OptionInstructionRole = "openai_instruction_role"
 const snapshotStateKey = "OpenaiStreamSnapshotState"
 
 var (
-	versionRe          = regexp.MustCompile(`/v\d+/?$`)
-	azureDeployRe      = regexp.MustCompile(`/openai/deployments/[^/]+/?$`)
-	thinkOpenTag       = "<think>"
-	thinkCloseTag      = "</think>"
-	emptyToolParams    = map[string]any{"type": "object", "properties": map[string]any{}}
 	schemaInstructionT = "\n\n## [IMPORTANT: OUTPUT FORMAT]\n" +
 		"Format your response as a JSON object strictly following this schema:\n" +
 		"<output_schema>\n%s\n</output_schema>\n" +
 		"Output only the raw JSON, beginning with '{' and ending with '}'."
+
+	// 跨方言共享辅助（dialectkit，P1-b 抽取）的本包别名，保持既有调用点不变
+	getStr              = dialectkit.GetStr
+	getInt              = dialectkit.GetInt
+	getMapStr           = dialectkit.GetMapStr
+	firstMetaStr        = dialectkit.FirstMetaStr
+	decodeDataURL       = dialectkit.DecodeDataURL
+	extractErrorMessage = dialectkit.ExtractErrorMessage
+	contentText         = dialectkit.ContentText
+	messageBlocks       = dialectkit.MessageBlocks
+	assistantOf         = dialectkit.AssistantOf
+
+	// OpenAI 家族帧消息解析与出站节点（dialectkit/openaistyle.go）
+	parseToolCalls         = dialectkit.ParseToolCalls
+	parseUsage             = dialectkit.ParseUsage
+	buildToolsNode         = dialectkit.BuildToolsNode
+	buildOutboundToolCalls = dialectkit.BuildOutboundToolCalls
 )
 
 // Dialect OpenAI chat/completions 方言。
@@ -335,90 +345,10 @@ func openaiContentItem(b ai.ContentBlock) map[string]any {
 }
 
 // mediaDataString URL 优先；否则 data:base64。可播性（含侧车 id）由调用方判断。
-func mediaDataString(url string, data []byte, kind, mime string) string {
-	if !isMediaPlayable(url, data, nil) {
-		return ""
-	}
-	if url != "" {
-		return url
-	}
-	if mime == "" {
-		switch kind {
-		case "image":
-			mime = "image/jpeg"
-		case "audio":
-			mime = "audio/mpeg"
-		default:
-			mime = "video/mpeg"
-		}
-	}
-	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
-}
-
-// isMediaPlayable 会话压缩后 data 空且无 url/侧车 id 时不可回传。
-func isMediaPlayable(url string, data []byte, metas map[string]any) bool {
-	if url != "" || len(data) > 0 {
-		return true
-	}
-	return firstMetaStr(metas, "audio_id", "id", "image_generation_id") != ""
-}
-
-func firstMetaStr(metas map[string]any, keys ...string) string {
-	for _, k := range keys {
-		if v, ok := metas[k]; ok {
-			if s := fmt.Sprint(v); s != "" {
-				return s
-			}
-		}
-	}
-	return ""
-}
-
-// buildOutboundToolCalls 类型化工具调用 → OpenAI 兼容 tool_calls（arguments 净化）。
-func buildOutboundToolCalls(calls []ai.ToolCall) []any {
-	if len(calls) == 0 {
-		return nil
-	}
-	out := make([]any, 0, len(calls))
-	for _, c := range calls {
-		item := map[string]any{"type": "function"}
-		if c.ID != "" {
-			item["id"] = c.ID
-		}
-		item["function"] = map[string]any{
-			"name":      c.Name,
-			"arguments": SanitizeCall(&c),
-		}
-		out = append(out, item)
-	}
-	return out
-}
-
-func buildToolsNode(tools []ai.FunctionTool) []any {
-	out := make([]any, 0, len(tools))
-	for _, t := range tools {
-		schema := map[string]any{}
-		if s := t.InputSchema(); s != "" {
-			var cand map[string]any
-			if json.Unmarshal([]byte(s), &cand) == nil && cand != nil {
-				schema = cand
-			}
-		}
-		if schema == nil {
-			schema = emptyToolParams
-		}
-		fn := map[string]any{
-			"name":        t.Name(),
-			"description": ai.DescriptionAndMeta(t),
-			"parameters":  schema,
-		}
-		if strict := t.Strict(); strict != nil {
-			fn["strict"] = *strict // Chat Completions 的 strict 在 function 内层
-		}
-		out = append(out, map[string]any{"type": "function", "function": fn})
-	}
-	return out
-}
+var (
+	mediaDataString = dialectkit.MediaDataString
+	isMediaPlayable = dialectkit.IsMediaPlayable
+)
 
 // resolveInstructionRole 指令角色策略：显式 system/developer；auto 按模型族
 // （o1 及后续推理族用 developer；o1-preview/o1-mini 早期模型保持 system）。
@@ -585,171 +515,22 @@ func (d *Dialect) parseFrameNode(ctx *ai.StreamContext, acc *ai.Accumulator, roo
 	}
 }
 
-// ParseAssistantMessage 厂商 message/delta 节点 → 聚合助手消息（一帧一条）。
-// 思考与正文同属这一轮模型输出；<think> 标签状态机处理无推理字段的流式思考。
+// ParseAssistantMessage 厂商 message/delta 节点 → 聚合助手消息（dialectkit
+// OpenAI 家族共享实现：<think> 标签状态机处理无推理字段的流式思考）。
 func (d *Dialect) ParseAssistantMessage(acc *ai.Accumulator, node map[string]any) []*ai.AssistantMessage {
-	if node == nil {
-		return nil
-	}
-
-	contentBlocks := parseAssistantContentBlocks(node)
-	content := projectText(contentBlocks)
-	var blocksForMsg []ai.ContentBlock
-	if len(contentBlocks) > 1 || (len(contentBlocks) == 1 && contentBlocks[0].Kind() != "text") {
-		blocksForMsg = contentBlocks
-	}
-
-	toolCalls := parseToolCalls(acc, node["tool_calls"])
-	searchResults := parseSearchResults(node["search_results"])
-
-	if len(toolCalls) > 0 {
-		acc.SetInThinking(false)
-	}
-
-	var reasoningContent string
-	if _, ok := node["reasoning_content"]; ok {
-		reasoningContent = getStr(node, "reasoning_content")
-		acc.SetReasoningFieldName("reasoning_content")
-	} else if _, ok := node["reasoning"]; ok {
-		reasoningContent = getStr(node, "reasoning")
-		acc.SetReasoningFieldName("reasoning")
-	}
-
-	var pendingThinking, splitThinking string
-	if reasoningContent != "" {
-		acc.SetHasReasoningField(true)
-		if ctxStream(acc) {
-			if content == "" {
-				// 只有思考：内容通道承载思考增量，等待后续帧补正文
-				content = reasoningContent
-				acc.SetInThinking(true)
-			} else {
-				splitThinking = reasoningContent
-				acc.SetInThinking(false)
-			}
-		} else {
-			// 非流式双字段：思考单独存放
-			pendingThinking = reasoningContent
-		}
-	} else if content != "" {
-		if acc.HasReasoningField() {
-			acc.SetInThinking(false)
-		} else if ctxStream(acc) {
-			if strings.HasPrefix(content, thinkOpenTag) {
-				acc.SetInThinking(true)
-				content = content[len(thinkOpenTag):]
-			} else if acc.InThinking() {
-				if thinkEnd := strings.Index(content, thinkCloseTag); thinkEnd >= 0 {
-					acc.SetInThinking(false)
-					splitThinking = content[:thinkEnd]
-					content = content[thinkEnd+len(thinkCloseTag):]
-				}
-			}
-		}
-	}
-
-	if content != "" || pendingThinking != "" || splitThinking != "" ||
-		len(toolCalls) > 0 || len(blocksForMsg) > 0 || len(searchResults) > 0 {
-		textOut, thinkingOut := "", ""
-		if acc.InThinking() {
-			thinkingOut = content
-		} else {
-			textOut = content
-			if splitThinking != "" {
-				thinkingOut = splitThinking
-			} else {
-				thinkingOut = pendingThinking
-			}
-		}
-		msg := ai.Snapshot(textOut, thinkingOut, toolCalls)
-		msg.Blocks = blocksForMsg
-		msg.SearchResults = searchResults
-		return []*ai.AssistantMessage{msg}
-	}
-	return nil
+	return dialectkit.ParseAssistantMessage(acc, node)
 }
 
-// ctxStream ParseAssistantMessage 无 ctx 入参，借 acc 上的流式标记（构建时写入）。
-func ctxStream(acc *ai.Accumulator) bool { return acc.IsStream() }
-
-// publishAssistantMessageEvents 帧消息 → 事件通道（聚合由 Accumulator.Merge 统一完成）。
-func publishAssistantMessageEvents(ctx *ai.StreamContext, msg *ai.AssistantMessage) {
-	acc := ctx.Acc()
-	acc.MergeTerminalMessage(msg)
-
-	if msg.Thinking != "" {
-		ev := ctx.Event(ai.EventThinkingDelta)
-		ev.Text = msg.Thinking
-		ctx.Emit(ev)
-	}
-	if msg.Text != "" {
-		ev := ctx.Event(ai.EventTextDelta)
-		ev.Text = msg.Text
-		ctx.Emit(ev)
-	}
-
-	if len(msg.ToolCalls) > 0 {
-		started, _ := ctx.AttrIfAbsent("__startedToolCalls", func() any {
-			return map[string]struct{}{}
-		}).(map[string]struct{})
-		for _, call := range msg.ToolCalls {
-			if key := toolCallEventKey(&call); key == "" {
-				emitToolCallEvent(ctx, ai.EventToolCallStart, &call, "")
-			} else if _, ok := started[key]; !ok {
-				started[key] = struct{}{}
-				emitToolCallEvent(ctx, ai.EventToolCallStart, &call, "")
-			}
-			if call.ArgumentsStr != "" {
-				emitToolCallEvent(ctx, ai.EventToolCallArgsDelta, &call, call.ArgumentsStr)
-			}
-		}
-	}
-
-	for _, b := range msg.Blocks {
-		if b == nil || b.Kind() == "text" {
-			continue
-		}
-		ev := ctx.Event(ai.EventMediaDone)
-		ev.Block = b
-		ctx.Emit(ev)
-	}
-}
-
-func emitToolCallEvent(ctx *ai.StreamContext, t ai.EventType, call *ai.ToolCall, text string) {
-	ev := ctx.Event(t)
-	ev.ToolCall = call
-	ev.ToolCallID = call.ID
-	ev.Text = text
-	if idx := toolCallEventIndex(call); idx >= 0 {
-		ev.Index = idx
-	}
-	ctx.Emit(ev)
-}
-
-func toolCallEventIndex(call *ai.ToolCall) int {
-	if call == nil || call.Index == "" {
-		return -1
-	}
-	idx := strings.TrimPrefix(call.Index, "idx:")
-	n, err := strconv.Atoi(idx)
-	if err != nil {
-		return -1
-	}
-	return n
-}
-
-func toolCallEventKey(call *ai.ToolCall) string {
-	if call == nil {
-		return ""
-	}
-	if call.Index != "" {
-		return "index:" + call.Index
-	}
-	if call.ID != "" {
-		return "id:" + call.ID
-	}
-	return ""
-}
+// publishAssistantMessageEvents 帧消息 → 事件通道（dialectkit 共享管线）。
+var (
+	publishAssistantMessageEvents = dialectkit.PublishMessageEvents
+	emitToolCallEvent             = dialectkit.EmitToolCallEvent
+	toolCallEventIndex            = dialectkit.ToolCallIndex
+	toolCallEventKey              = dialectkit.ToolCallEventKey
+	parseAssistantContentBlocks   = dialectkit.ParseAssistantContentBlocks
+	parseSearchResults            = dialectkit.ParseSearchResults
+	projectText                   = dialectkit.ProjectText
+)
 
 // restoreTerminalToolCallArguments 用 builder 完整累计参数恢复终态 ToolCall。
 func restoreTerminalToolCallArguments(acc *ai.Accumulator, msg *ai.AssistantMessage) {
@@ -804,77 +585,7 @@ func normalizeLegacyFunctionCall(acc *ai.Accumulator, message map[string]any) ma
 	return message
 }
 
-// parseUsage usage 节点 → ai.Usage（total 缺省补和；reasoning_tokens 优先
-// DeepSeek think_tokens 兜底；cached_tokens 优先 prompt_cache_hit_tokens 兜底）。
-func parseUsage(u map[string]any) *ai.Usage {
-	promptTokens := getInt(u, "prompt_tokens")
-	completionTokens := getInt(u, "completion_tokens")
-	totalTokens := promptTokens + completionTokens
-	if _, has := u["total_tokens"]; has {
-		totalTokens = getInt(u, "total_tokens")
-	}
-
-	var thinkTokens int64
-	if details, ok := u["completion_tokens_details"].(map[string]any); ok {
-		if _, has := details["reasoning_tokens"]; has {
-			thinkTokens = getInt(details, "reasoning_tokens")
-		}
-	}
-	if thinkTokens == 0 {
-		if _, has := u["think_tokens"]; has {
-			thinkTokens = getInt(u, "think_tokens")
-		}
-	}
-
-	var cacheRead, cacheCreation int64
-	details, hasDetails := u["prompt_tokens_details"].(map[string]any)
-	if hasDetails {
-		if _, has := details["cached_tokens"]; has {
-			cacheRead = getInt(details, "cached_tokens")
-		}
-		if _, has := details["cache_write_tokens"]; has {
-			cacheCreation = getInt(details, "cache_write_tokens")
-		}
-	}
-	if cacheRead == 0 {
-		if !hasDetails {
-			if _, has := u["prompt_cache_hit_tokens"]; has {
-				cacheRead = getInt(u, "prompt_cache_hit_tokens")
-			}
-		}
-	}
-
-	return &ai.Usage{
-		PromptTokens:               promptTokens,
-		ThinkTokens:                thinkTokens,
-		CompletionTokens:           completionTokens,
-		TotalTokens:                totalTokens,
-		CacheCreationInputTokens:   cacheCreation,
-		CacheReadInputTokens:       cacheRead,
-		CacheCreation5mInputTokens: cacheCreation5m(details),
-		CacheCreation1hInputTokens: cacheCreation1h(details),
-	}
-}
-
-func cacheCreation5m(details map[string]any) int64 {
-	if details == nil {
-		return 0
-	}
-	if _, has := details["cache_creation_5m_tokens"]; !has {
-		return 0
-	}
-	return getInt(details, "cache_creation_5m_tokens")
-}
-
-func cacheCreation1h(details map[string]any) int64 {
-	if details == nil {
-		return 0
-	}
-	if _, has := details["cache_creation_1h_tokens"]; !has {
-		return 0
-	}
-	return getInt(details, "cache_creation_1h_tokens")
-}
+// parseUsage usage 节点 → ai.Usage（dialectkit OpenAI 家族共享实现）。
 
 func emitError(ctx *ai.StreamContext, acc *ai.Accumulator, raw map[string]any) {
 	ev := ctx.Event(ai.EventError)
@@ -918,278 +629,5 @@ func emitRefusalEvents(ctx *ai.StreamContext, root map[string]any) {
 	}
 }
 
-// ---- 响应节点小工具 ----
-
-// parseAssistantContentBlocks content 字段（string | array）→ 内容块。
-func parseAssistantContentBlocks(node map[string]any) []ai.ContentBlock {
-	var blocks []ai.ContentBlock
-	switch c := node["content"].(type) {
-	case string:
-		if c != "" {
-			blocks = append(blocks, ai.TextBlock{Text: c})
-		}
-	case []any:
-		for _, item := range c {
-			m, _ := item.(map[string]any)
-			if m == nil {
-				continue
-			}
-			switch getStr(m, "type") {
-			case "text":
-				if text := getStr(m, "text"); text != "" {
-					blocks = append(blocks, ai.TextBlock{Text: text})
-				}
-			case "image_url":
-				if u := getMapStr(m, "image_url", "url"); u != "" {
-					blocks = append(blocks, imageBlockFromDataString(u))
-				}
-			case "audio_url":
-				if u := getMapStr(m, "audio_url", "url"); u != "" {
-					blocks = append(blocks, audioBlockFromDataString(u))
-				}
-			}
-		}
-	}
-	return blocks
-}
-
-func imageBlockFromDataString(u string) ai.ImageBlock {
-	if strings.HasPrefix(u, "data:") {
-		if b, mime := decodeDataURL(u); mime != "" {
-			return ai.ImageBlock{Data: b, Mime: mime}
-		}
-	}
-	return ai.ImageBlock{URL: u}
-}
-
-func audioBlockFromDataString(u string) ai.AudioBlock {
-	if strings.HasPrefix(u, "data:") {
-		if b, mime := decodeDataURL(u); mime != "" {
-			return ai.AudioBlock{Data: b, Mime: mime}
-		}
-	}
-	return ai.AudioBlock{URL: u}
-}
-
-func decodeDataURL(u string) ([]byte, string) {
-	// data:<mime>;base64,<payload>
-	rest := strings.TrimPrefix(u, "data:")
-	semi := strings.Index(rest, ";")
-	comma := strings.Index(rest, ",")
-	if semi < 0 || comma < 0 || semi > comma {
-		return nil, ""
-	}
-	mime := rest[:semi]
-	data, err := base64.StdEncoding.DecodeString(rest[comma+1:])
-	if err != nil {
-		return nil, ""
-	}
-	return data, mime
-}
-
-func projectText(blocks []ai.ContentBlock) string {
-	var sb strings.Builder
-	for _, b := range blocks {
-		if tb, ok := b.(ai.TextBlock); ok {
-			sb.WriteString(tb.Text)
-		}
-	}
-	return sb.String()
-}
-
-func parseToolCalls(acc *ai.Accumulator, node any) []ai.ToolCall {
-	arr, ok := node.([]any)
-	if !ok {
-		return nil
-	}
-	var out []ai.ToolCall
-	for _, item := range arr {
-		m, _ := item.(map[string]any)
-		if m == nil {
-			continue
-		}
-		out = append(out, parseToolCall(acc, m))
-	}
-	return out
-}
-
-// parseToolCall 流式分片的 index 是聚合主键（id 仅首分片携带）；
-// 无 index 的端点退回 id，再退回 lastToolCallId。
-func parseToolCall(acc *ai.Accumulator, n map[string]any) ai.ToolCall {
-	callID := getStr(n, "id")
-
-	index := ""
-	if idx := getInt(n, "index"); idx >= 0 {
-		index = "idx:" + strconv.FormatInt(idx, 10)
-	}
-	if callID != "" {
-		acc.SetLastToolCallID(callID)
-	}
-	if index == "" {
-		if callID != "" {
-			index = callID
-		} else {
-			index = acc.LastToolCallID()
-		}
-	}
-
-	name, argsStr := "", ""
-	var argsMap map[string]any
-	if fn, ok := n["function"].(map[string]any); ok {
-		name = getStr(fn, "name")
-		switch a := fn["arguments"].(type) {
-		case string:
-			// 流式分片的 arguments 可能是不完整 JSON 片段，解析失败保留字符串形态
-			argsStr = a
-			var m map[string]any
-			if json.Unmarshal([]byte(a), &m) == nil {
-				argsMap = m
-			}
-		case map[string]any:
-			argsMap = a
-			if data, err := json.Marshal(a); err == nil {
-				argsStr = string(data)
-			}
-		}
-	}
-	return ai.ToolCall{Index: index, ID: callID, Name: name, ArgumentsStr: argsStr, Arguments: argsMap}
-}
-
-// parseSearchResults OpenAI 兼容/DashScope 风格搜索结果投影。
-func parseSearchResults(node any) []ai.SearchResult {
-	arr, ok := node.([]any)
-	if !ok || len(arr) == 0 {
-		return nil
-	}
-	var out []ai.SearchResult
-	for _, item := range arr {
-		m, _ := item.(map[string]any)
-		if m == nil {
-			continue
-		}
-		r := ai.SearchResult{
-			Index: int(getInt(m, "index")),
-			ID:    getStr(m, "id"),
-			Title: getStr(m, "title"),
-			URL:   getStr(m, "url"),
-		}
-		if s := getStr(m, "snippet"); s != "" {
-			r.Snippet = s
-		} else {
-			r.Snippet = getStr(m, "summary")
-		}
-		out = append(out, r)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-// extractErrorMessage 标准 error 节点 → "[type] message"；非对象原样。
-func extractErrorMessage(node any) string {
-	if node == nil {
-		return "Unknown error"
-	}
-	if m, ok := node.(map[string]any); ok {
-		message := getStr(m, "message")
-		typ := getStr(m, "type")
-		if typ == "" {
-			typ = getStr(m, "code")
-		}
-		if message == "" {
-			message = "Unknown error"
-		}
-		if typ != "" {
-			return "[" + typ + "] " + message
-		}
-		return message
-	}
-	if s := fmt.Sprint(node); s != "" {
-		return s
-	}
-	return "Unknown error"
-}
-
-// ---- JSON 节点读取小工具 ----
-
-func getStr(m map[string]any, k string) string {
-	if m == nil {
-		return ""
-	}
-	if v, ok := m[k]; ok && v != nil {
-		return fmt.Sprint(v)
-	}
-	return ""
-}
-
-func getInt(m map[string]any, k string) int64 {
-	if m == nil {
-		return 0
-	}
-	switch v := m[k].(type) {
-	case float64:
-		return int64(v)
-	case int64:
-		return v
-	case int:
-		return int64(v)
-	case string:
-		n, err := strconv.ParseInt(v, 10, 64)
-		if err == nil {
-			return n
-		}
-	}
-	return 0
-}
-
-func getMapStr(m map[string]any, outer, inner string) string {
-	sub, _ := m[outer].(map[string]any)
-	return getStr(sub, inner)
-}
-
-// ---- 消息内容读取 ----
-
-func contentText(content any) string {
-	switch c := content.(type) {
-	case nil:
-		return ""
-	case string:
-		return c
-	case *ai.Contents:
-		return c.Text()
-	case ai.TextBlock:
-		return c.Text
-	case *ai.AssistantMessage:
-		return c.Text
-	case *ai.ToolMessage:
-		return c.ResultText()
-	}
-	return ""
-}
-
-// messageBlocks 多模态块形态（[]ContentBlock / ContentBlock / *Contents 的块部分）；
-// 纯 string 返回 nil。
-func messageBlocks(content any) []ai.ContentBlock {
-	switch c := content.(type) {
-	case ai.ContentBlock:
-		return []ai.ContentBlock{c}
-	case []ai.ContentBlock:
-		return c
-	case *ai.Contents:
-		if c.IsMultiModal() {
-			return c.Blocks()
-		}
-		return nil
-	case *ai.AssistantMessage:
-		return c.Blocks
-	}
-	return nil
-}
-
-func assistantOf(m *ai.Message) *ai.AssistantMessage {
-	if am, ok := m.Content.(*ai.AssistantMessage); ok {
-		return am
-	}
-	return nil
-}
+// ---- 响应节点小工具：parseAssistantContentBlocks / parseToolCalls / parseSearchResults
+// ---- / projectText 等已抽取 dialectkit（顶部 var 别名）----

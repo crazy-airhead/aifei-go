@@ -291,6 +291,7 @@ func (r *requestDesc) doCall(req *CallRequest) (*Response, error) {
 	acc := NewAccumulator()
 	ctx := NewStreamContext(req.cfg, acc, false, step, r.collectEvent)
 	ctx.SetResponseID(r.responseID)
+	ctx.SetOptions(req.options)
 
 	resp, stepAcc, recursed, err := r.roundTrip(req, ctx, acc)
 	if err != nil {
@@ -327,7 +328,7 @@ func (r *requestDesc) roundTrip(req *CallRequest, ctx *StreamContext, acc *Accum
 		callCtx, cancel = context.WithTimeout(callCtx, req.cfg.Timeout)
 		defer cancel()
 	}
-	respBody, _, err := client.PostJSON(callCtx, url, body, m.requestHeader())
+	respBody, _, err := client.PostJSON(callCtx, url, body, m.requestHeader(req.options, false))
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -461,8 +462,9 @@ func (r *requestDesc) doToolCall(req *CallRequest, tool FunctionTool, call *Tool
 	return chain.DoIntercept(treq)
 }
 
-// requestHeader 鉴权与默认头（Authorization: Bearer <key> 优先级最低可被 Headers 覆盖）。
-func (m *ChatModel) requestHeader() map[string]string {
+// requestHeader 鉴权与默认头：Headers 副本 → Authorization: Bearer <key>（可被
+// Headers 覆盖）→ User-Agent → HeaderDialect 厂商头定制（x-api-key 等）。
+func (m *ChatModel) requestHeader(opts *ChatOptions, isStream bool) map[string]string {
 	header := map[string]string{}
 	for k, v := range m.config.Headers {
 		header[k] = v
@@ -472,6 +474,9 @@ func (m *ChatModel) requestHeader() map[string]string {
 	}
 	if m.config.UserAgent != "" {
 		header["User-Agent"] = m.config.UserAgent
+	}
+	if hd, ok := m.dialect.(HeaderDialect); ok && hd != nil {
+		hd.CustomizeHeader(m.config, opts, isStream, header)
 	}
 	return header
 }

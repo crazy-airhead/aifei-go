@@ -12,6 +12,8 @@ type StreamContext struct {
 	responseID         string // 框架响应 id（一次请求内恒定）
 	providerResponseID string // 厂商原始 id（chatcmpl-xxx 等）
 
+	options *ChatOptions // 请求选项（方言读取本地控制项，如 ollama_tool_arguments_mode）
+
 	attrs  map[string]any
 	emitTo func(*ChatEvent)
 }
@@ -43,6 +45,12 @@ func (c *StreamContext) SetProviderResponseID(id string) {
 }
 
 func (c *StreamContext) ProviderResponseID() string { return c.providerResponseID }
+
+// SetOptions 记录请求选项（模型层构建后写入；方言读本地控制项用）。
+func (c *StreamContext) SetOptions(opts *ChatOptions) { c.options = opts }
+
+// Options 请求选项（可能为 nil——测试直建 ctx 时未注入）。
+func (c *StreamContext) Options() *ChatOptions { return c.options }
 
 // Event 创建预填 responseID/providerResponseID/step 的事件（Index 默认 -1）。
 func (c *StreamContext) Event(t EventType) *ChatEvent {

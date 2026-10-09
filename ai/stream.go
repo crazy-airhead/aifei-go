@@ -222,6 +222,7 @@ func (st *streamState) doStream(ctx context.Context, req *CallRequest) error {
 
 	sctx := NewStreamContext(req.cfg, acc, true, step, st.emit)
 	sctx.SetResponseID(st.ss.responseID)
+	sctx.SetOptions(req.options)
 	st.curCtx = sctx
 
 	st.emit(sctx.Event(EventStepStart))
@@ -231,7 +232,7 @@ func (st *streamState) doStream(ctx context.Context, req *CallRequest) error {
 
 	frameCount, modelFrameCount := 0, 0
 	lastFrame := ""
-	err = client.PostJSONStream(ctx, url, body, m.requestHeader(), func(_, data string) error {
+	err = client.PostJSONStream(ctx, url, body, m.requestHeader(req.options, true), func(_, data string) error {
 		if st.abort != nil {
 			return st.abort
 		}
