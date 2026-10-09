@@ -1,6 +1,9 @@
 package ai
 
-import "strings"
+import (
+	"context"
+	"strings"
+)
 
 // Interceptor 准备期拦截（对标 ChatInterceptor 的 onPrepare）：系统提示组装
 // 中段介入，可追加指令、改写 options、标注 prompt。
@@ -26,6 +29,12 @@ type CallInterceptor interface {
 type ToolInterceptor interface {
 	Interceptor
 	InterceptTool(req *ToolRequest, chain *ToolChain) *ToolResult
+}
+
+// StreamInterceptor 流式调用拦截（可选能力）：包装整轮流式请求（观测/重试等）。
+type StreamInterceptor interface {
+	Interceptor
+	InterceptStream(ctx context.Context, req *CallRequest, chain *StreamChain) error
 }
 
 // CallRequest 一次模型调用（拦截器可见面；对标 ChatRequest 的只读面）。
@@ -104,4 +113,30 @@ func (c *ToolChain) DoIntercept(req *ToolRequest) *ToolResult {
 		}
 	}
 	return c.terminal(req)
+}
+
+// StreamChain 流式拦截链。
+type StreamChain struct {
+	interceptors []Interceptor
+	pos          int
+	terminal     func(context.Context, *CallRequest) error
+}
+
+func newStreamChain(list []Interceptor, terminal func(context.Context, *CallRequest) error) *StreamChain {
+	return &StreamChain{interceptors: append([]Interceptor(nil), list...), terminal: terminal}
+}
+
+// DoIntercept 依次经过启用的 StreamInterceptor，终点为真实流式调用。
+func (c *StreamChain) DoIntercept(ctx context.Context, req *CallRequest) error {
+	for c.pos < len(c.interceptors) {
+		i := c.interceptors[c.pos]
+		c.pos++
+		if !i.IsEnabled() {
+			continue
+		}
+		if si, ok := i.(StreamInterceptor); ok {
+			return si.InterceptStream(ctx, req, c)
+		}
+	}
+	return c.terminal(ctx, req)
 }

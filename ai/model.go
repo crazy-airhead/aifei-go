@@ -31,15 +31,14 @@ func NewChatModel(cfg Config) (*ChatModel, error) {
 	}
 
 	var hopts []httpx.Option
-	if cfg.Timeout > 0 {
-		hopts = append(hopts, httpx.WithTimeout(cfg.Timeout))
-	}
 	if cfg.Proxy != "" {
 		hopts = append(hopts, httpx.WithProxy(cfg.Proxy))
 	}
 	if cfg.Doer != nil {
 		hopts = append(hopts, httpx.WithDoer(cfg.Doer))
 	}
+	// Timeout 不进 httpx.Client（其 Timeout 是含流式 body 的总超时，会截断长流）；
+	// call/stream 路径各自以 ctx deadline 表达（对标 Java timeout(config)）。
 	return &ChatModel{config: &cfg, dialect: d, client: httpx.New(hopts...)}, nil
 }
 
@@ -97,8 +96,8 @@ func promptOf(p any) *Prompt {
 
 // ---- RequestDesc ----
 
-// RequestDesc 一次聊天请求的描述（对标 ChatRequestDesc）。P0-e 交付 call 路径；
-// Stream/StreamChan/CallStream 在 P1-a 落地。
+// RequestDesc 一次聊天请求的描述（对标 ChatRequestDesc）：Call 非流式、Stream
+// 流式（决策 D1）；channel 形态经包级 StreamChan/CallStream 适配。
 type RequestDesc interface {
 	Session(s Session) RequestDesc
 	Role(role string) RequestDesc
@@ -108,6 +107,7 @@ type RequestDesc interface {
 	EventFilter(f EventFilter) RequestDesc
 
 	Call() (*Response, error)
+	Stream(ctx context.Context, sink ChatSink) error
 }
 
 type requestDesc struct {
@@ -321,7 +321,13 @@ func (r *requestDesc) roundTrip(req *CallRequest, ctx *StreamContext, acc *Accum
 	if fn := req.options.HTTPCustomize; fn != nil {
 		client = httpx.New(httpx.WithDoer(customizeDoer{inner: m.client.Doer(), fn: fn}))
 	}
-	respBody, _, err := client.PostJSON(context.Background(), url, body, m.requestHeader())
+	callCtx := context.Background()
+	if req.cfg.Timeout > 0 {
+		var cancel context.CancelFunc
+		callCtx, cancel = context.WithTimeout(callCtx, req.cfg.Timeout)
+		defer cancel()
+	}
+	respBody, _, err := client.PostJSON(callCtx, url, body, m.requestHeader())
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -387,16 +393,17 @@ func (r *requestDesc) stepEvent(t EventType, step int, resp *Response, u *Usage)
 	return ev
 }
 
-// collectEvent 事件入轨迹（应用过滤器；缺省 DefaultEventFilter 滤除 HEARTBEAT/RAW）。
-func (r *requestDesc) collectEvent(ev *ChatEvent) {
-	if ev == nil {
-		return
-	}
+// passEvent 事件过滤器裁决（缺省 DefaultEventFilter 滤除 HEARTBEAT/RAW）。
+func (r *requestDesc) passEvent(ev *ChatEvent) bool {
 	if r.eventFilter != nil {
-		if !r.eventFilter.Apply(ev) {
-			return
-		}
-	} else if !DefaultEventFilter(ev) {
+		return r.eventFilter.Apply(ev)
+	}
+	return DefaultEventFilter(ev)
+}
+
+// collectEvent 事件入轨迹。
+func (r *requestDesc) collectEvent(ev *ChatEvent) {
+	if ev == nil || !r.passEvent(ev) {
 		return
 	}
 	r.events = append(r.events, ev)
