@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -56,6 +57,22 @@ func WithRoots(listChanged bool, roots ...Root) ClientOption {
 // WithRequestTimeout 单请求超时（默认 20s，Java McpClient.AsyncSpec 同款）。
 func WithRequestTimeout(d time.Duration) ClientOption {
 	return func(c *Client) { c.requestTimeout = d }
+}
+
+// WithHeaders 附加 HTTP 请求头（鉴权等；HTTP/SSE 传输携带）。
+func WithHeaders(header http.Header) ClientOption {
+	return func(c *Client) {
+		for k, vs := range header {
+			for _, v := range vs {
+				c.extraHeaders.Add(k, v)
+			}
+		}
+	}
+}
+
+// WithHTTPClient 自定义 HTTP 客户端（HTTP/SSE 传输；默认共享零配置实例）。
+func WithHTTPClient(hc *http.Client) ClientOption {
+	return func(c *Client) { c.httpClient = hc }
 }
 
 // WithInitializationTimeout 初始化握手超时（默认 20s）。
@@ -129,6 +146,8 @@ type Client struct {
 	requestTimeout     time.Duration
 	initTimeout        time.Duration
 	heartbeatInterval  time.Duration
+	extraHeaders       http.Header
+	httpClient         *http.Client
 
 	roots map[string]Root
 
@@ -154,6 +173,7 @@ func NewClient(factory TransportFactory, opts ...ClientOption) *Client {
 		protocolVersions: SupportedVersions,
 		requestTimeout:   20 * time.Second,
 		initTimeout:      20 * time.Second,
+		extraHeaders:     http.Header{},
 		roots:            map[string]Root{},
 	}
 	for _, o := range opts {

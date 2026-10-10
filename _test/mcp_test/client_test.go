@@ -27,6 +27,9 @@ func TestMain(m *testing.M) {
 		runMiniStdioServer()
 		os.Exit(0)
 	}
+	if os.Getenv(stdioMcpServerEnv) == "1" {
+		runRealStdioServer() // server_test.go：真实 Server.RunStdio 分身
+	}
 	os.Exit(m.Run())
 }
 

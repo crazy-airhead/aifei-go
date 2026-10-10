@@ -40,6 +40,7 @@ const (
 const (
 	MethodNotificationInitialized          = "notifications/initialized"
 	MethodNotificationProgress             = "notifications/progress"
+	MethodNotificationCancelled            = "notifications/cancelled"
 	MethodNotificationToolsListChanged     = "notifications/tools/list_changed"
 	MethodNotificationResourcesListChanged = "notifications/resources/list_changed"
 	MethodNotificationResourcesUpdated     = "notifications/resources/updated"
