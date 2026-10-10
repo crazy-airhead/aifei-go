@@ -6,6 +6,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -16,6 +17,29 @@ import (
 // ErrSessionClosed 会话已关闭（Close 或传输终止时所有 pending 请求以此终止；
 // Java RuntimeException("MCP session with server terminated") 对应物）。
 var ErrSessionClosed = fmt.Errorf("mcp: session closed")
+
+// TransportError 传输层错误（发送失败；Java McpTransportException 对应物）。
+// 桥层（ai/mcp executeWithRetry）以此为据重连——与超时、会话终止共同构成
+// IsTransportError 的三类判定。
+type TransportError struct {
+	Err error
+}
+
+func (e *TransportError) Error() string { return "mcp: transport error: " + e.Err.Error() }
+func (e *TransportError) Unwrap() error { return e.Err }
+
+// IsTransportError 传输层错误判定（Java McpClientProvider.isTransportError：
+// McpTransportException | TimeoutException | 连接类错误）：发送失败、会话终止
+// 或请求超时 → 需要重连重试。
+func IsTransportError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var te *TransportError
+	return errors.As(err, &te) ||
+		errors.Is(err, ErrSessionClosed) ||
+		errors.Is(err, context.DeadlineExceeded)
+}
 
 // Transport 帧传输缝（stdio/HTTP 传输在 P3-b/c 实现本接口）：Send 发出帧、
 // Receive 返回入站帧通道（消息泵消费，通道关闭即传输终止）。
@@ -77,7 +101,7 @@ func (s *Session) SendRequest(ctx context.Context, method string, params any, re
 		Method:  method,
 		Params:  marshalParams(params),
 	}); err != nil {
-		return fmt.Errorf("mcp: send request %s: %w", method, err)
+		return &TransportError{Err: fmt.Errorf("send request %s: %w", method, err)}
 	}
 
 	select {
@@ -103,7 +127,7 @@ func (s *Session) SendNotification(method string, params any) error {
 		Method:  method,
 		Params:  marshalParams(params),
 	}); err != nil {
-		return fmt.Errorf("mcp: send notification %s: %w", method, err)
+		return &TransportError{Err: fmt.Errorf("send notification %s: %w", method, err)}
 	}
 	return nil
 }
@@ -117,6 +141,10 @@ func (s *Session) Close() error {
 	})
 	return s.closeErr
 }
+
+// Done 会话终止信号（Close 或传输 Receive 关闭）。客户端门面据此在下次
+// 操作时自愈重建会话。
+func (s *Session) Done() <-chan struct{} { return s.closed }
 
 func (s *Session) dismissPending() {
 	s.pending.Range(func(key, _ any) bool {

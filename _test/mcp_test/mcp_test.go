@@ -222,9 +222,9 @@ func TestSessionPendingConcurrent(t *testing.T) {
 	defer session.Close()
 
 	type outcome struct {
-		idx  int
-		ans  int
-		err  error
+		idx int
+		ans int
+		err error
 	}
 	outcomes := make(chan outcome, n)
 	var wg sync.WaitGroup

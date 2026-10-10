@@ -174,6 +174,10 @@ func (i *toolImpl) Call(ctx context.Context, args map[string]any) *ToolResult {
 	if err != nil {
 		return ToolResultErr("Error: " + err.Error())
 	}
+	// 处理器直返富结果（MCP 桥等）：块/IsError/Meta 原样透传，不再字符串化。
+	if tr, ok := result.(*ToolResult); ok {
+		return tr
+	}
 	return ToolResultOf(resultConvert(result))
 }
 

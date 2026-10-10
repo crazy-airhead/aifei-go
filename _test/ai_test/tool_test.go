@@ -139,6 +139,34 @@ func TestToolCallResultConvert(t *testing.T) {
 	}
 }
 
+// 处理器直返 *ToolResult：块/IsError/Meta 原样透传，不再字符串化（MCP 桥路径）。
+func TestToolCallRichResultPassThrough(t *testing.T) {
+	rich := ai.NewTool("rich").
+		Handler(func(ctx context.Context, args map[string]any) (any, error) {
+			return &ai.ToolResult{
+				Blocks:  []ai.ContentBlock{ai.TextBlockOf("正文"), ai.ImageBlockOfURL("https://x/1.png")},
+				IsError: true,
+				Meta:    map[string]any{"src": "mcp"},
+			}, nil
+		}).Build()
+	res := rich.Call(context.Background(), nil)
+	if !res.IsError {
+		t.Fatal("IsError 应透传")
+	}
+	if len(res.Blocks) != 2 {
+		t.Fatalf("blocks = %d（应原样保留）", len(res.Blocks))
+	}
+	if tb, ok := res.Blocks[0].(ai.TextBlock); !ok || tb.Text != "正文" {
+		t.Fatalf("b0 = %#v", res.Blocks[0])
+	}
+	if ib, ok := res.Blocks[1].(ai.ImageBlock); !ok || ib.URL != "https://x/1.png" {
+		t.Fatalf("b1 = %#v", res.Blocks[1])
+	}
+	if res.Meta["src"] != "mcp" {
+		t.Fatalf("meta = %v", res.Meta)
+	}
+}
+
 // —— RegisterTools 反射绑定（_OrderTools 样例，Java 测试同名类搬译）——
 
 type shipAddress struct {

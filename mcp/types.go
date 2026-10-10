@@ -17,11 +17,11 @@ const (
 	MethodToolsList = "tools/list"
 	MethodToolsCall = "tools/call"
 
-	MethodResourcesList           = "resources/list"
-	MethodResourcesRead           = "resources/read"
-	MethodResourcesTemplatesList  = "resources/templates/list"
-	MethodResourcesSubscribe      = "resources/subscribe"
-	MethodResourcesUnsubscribe    = "resources/unsubscribe"
+	MethodResourcesList          = "resources/list"
+	MethodResourcesRead          = "resources/read"
+	MethodResourcesTemplatesList = "resources/templates/list"
+	MethodResourcesSubscribe     = "resources/subscribe"
+	MethodResourcesUnsubscribe   = "resources/unsubscribe"
 
 	MethodPromptsList = "prompts/list"
 	MethodPromptsGet  = "prompts/get"
@@ -38,14 +38,14 @@ const (
 
 // 通知方法常量（Java METHOD_NOTIFICATION_*）。
 const (
-	MethodNotificationInitialized           = "notifications/initialized"
-	MethodNotificationProgress              = "notifications/progress"
-	MethodNotificationToolsListChanged      = "notifications/tools/list_changed"
-	MethodNotificationResourcesListChanged  = "notifications/resources/list_changed"
-	MethodNotificationResourcesUpdated      = "notifications/resources/updated"
-	MethodNotificationPromptsListChanged    = "notifications/prompts/list_changed"
-	MethodNotificationMessage               = "notifications/message"
-	MethodNotificationRootsListChanged      = "notifications/roots/list_changed"
+	MethodNotificationInitialized          = "notifications/initialized"
+	MethodNotificationProgress             = "notifications/progress"
+	MethodNotificationToolsListChanged     = "notifications/tools/list_changed"
+	MethodNotificationResourcesListChanged = "notifications/resources/list_changed"
+	MethodNotificationResourcesUpdated     = "notifications/resources/updated"
+	MethodNotificationPromptsListChanged   = "notifications/prompts/list_changed"
+	MethodNotificationMessage              = "notifications/message"
+	MethodNotificationRootsListChanged     = "notifications/roots/list_changed"
 )
 
 // Role 消息角色（Java Role 枚举）。
@@ -84,9 +84,9 @@ type ElicitationCapabilities struct{}
 
 // ClientCapabilities 客户端能力声明。
 type ClientCapabilities struct {
-	Experimental map[string]any          `json:"experimental,omitempty"`
-	Roots        *RootCapabilities       `json:"roots,omitempty"`
-	Sampling     *SamplingCapabilities   `json:"sampling,omitempty"`
+	Experimental map[string]any           `json:"experimental,omitempty"`
+	Roots        *RootCapabilities        `json:"roots,omitempty"`
+	Sampling     *SamplingCapabilities    `json:"sampling,omitempty"`
 	Elicitation  *ElicitationCapabilities `json:"elicitation,omitempty"`
 }
 
@@ -114,12 +114,12 @@ type CompletionCapabilities struct{}
 
 // ServerCapabilities 服务端能力声明。
 type ServerCapabilities struct {
-	Completions *CompletionCapabilities `json:"completions,omitempty"`
-	Experimental map[string]any         `json:"experimental,omitempty"`
-	Logging     *LoggingCapabilities    `json:"logging,omitempty"`
-	Prompts     *PromptCapabilities     `json:"prompts,omitempty"`
-	Resources   *ResourceCapabilities   `json:"resources,omitempty"`
-	Tools       *ToolCapabilities       `json:"tools,omitempty"`
+	Completions  *CompletionCapabilities `json:"completions,omitempty"`
+	Experimental map[string]any          `json:"experimental,omitempty"`
+	Logging      *LoggingCapabilities    `json:"logging,omitempty"`
+	Prompts      *PromptCapabilities     `json:"prompts,omitempty"`
+	Resources    *ResourceCapabilities   `json:"resources,omitempty"`
+	Tools        *ToolCapabilities       `json:"tools,omitempty"`
 }
 
 // InitializeRequest 初始化请求（protocolVersion 为客户端支持的最新版本）。
@@ -199,10 +199,10 @@ type CallToolRequest struct {
 
 // CallToolResult 工具调用结果。
 type CallToolResult struct {
-	Content            []Content      `json:"content,omitempty"`
-	IsError            bool           `json:"isError,omitempty"`
-	StructuredContent  any            `json:"structuredContent,omitempty"`
-	Meta               map[string]any `json:"_meta,omitempty"`
+	Content           []Content      `json:"content,omitempty"`
+	IsError           bool           `json:"isError,omitempty"`
+	StructuredContent any            `json:"structuredContent,omitempty"`
+	Meta              map[string]any `json:"_meta,omitempty"`
 }
 
 // UnmarshalJSON Content 列表经 UnmarshalContent 判别解入。
@@ -260,9 +260,9 @@ type Content interface {
 
 // TextContent 文本内容。
 type TextContent struct {
-	Type        string       `json:"type"`
-	Annotations *Annotations `json:"annotations,omitempty"`
-	Text        string       `json:"text"`
+	Type        string         `json:"type"`
+	Annotations *Annotations   `json:"annotations,omitempty"`
+	Text        string         `json:"text"`
 	Meta        map[string]any `json:"_meta,omitempty"`
 }
 
@@ -276,10 +276,10 @@ func NewTextContent(text string) *TextContent {
 
 // ImageContent 图片内容（base64）。
 type ImageContent struct {
-	Type        string        `json:"type"`
-	Annotations *Annotations  `json:"annotations,omitempty"`
-	Data        string        `json:"data"`
-	MimeType    string        `json:"mimeType"`
+	Type        string         `json:"type"`
+	Annotations *Annotations   `json:"annotations,omitempty"`
+	Data        string         `json:"data"`
+	MimeType    string         `json:"mimeType"`
 	Meta        map[string]any `json:"_meta,omitempty"`
 }
 
@@ -293,10 +293,10 @@ func NewImageContent(data, mimeType string) *ImageContent {
 
 // AudioContent 音频内容（base64）。
 type AudioContent struct {
-	Type        string        `json:"type"`
-	Annotations *Annotations  `json:"annotations,omitempty"`
-	Data        string        `json:"data"`
-	MimeType    string        `json:"mimeType"`
+	Type        string         `json:"type"`
+	Annotations *Annotations   `json:"annotations,omitempty"`
+	Data        string         `json:"data"`
+	MimeType    string         `json:"mimeType"`
 	Meta        map[string]any `json:"_meta,omitempty"`
 }
 
@@ -322,10 +322,10 @@ func (c *EmbeddedResource) ContentType() string { return "resource" }
 // UnmarshalJSON Resource 经 UnmarshalResourceContents 判别解入。
 func (c *EmbeddedResource) UnmarshalJSON(b []byte) error {
 	type alias struct {
-		Type        string            `json:"type"`
-		Annotations *Annotations      `json:"annotations,omitempty"`
-		Resource    json.RawMessage   `json:"resource"`
-		Meta        map[string]any    `json:"_meta,omitempty"`
+		Type        string          `json:"type"`
+		Annotations *Annotations    `json:"annotations,omitempty"`
+		Resource    json.RawMessage `json:"resource"`
+		Meta        map[string]any  `json:"_meta,omitempty"`
 	}
 	var a alias
 	if err := json.Unmarshal(b, &a); err != nil {
@@ -346,14 +346,14 @@ func NewEmbeddedResource(rc ResourceContents) *EmbeddedResource {
 
 // ResourceLink 资源链接内容（客户端可按需再读）。
 type ResourceLink struct {
-	Type        string        `json:"type"`
-	Name        string        `json:"name"`
-	Title       string        `json:"title,omitempty"`
-	URI         string        `json:"uri"`
-	Description string        `json:"description,omitempty"`
-	MimeType    string        `json:"mimeType,omitempty"`
-	Size        *int64        `json:"size,omitempty"`
-	Annotations *Annotations  `json:"annotations,omitempty"`
+	Type        string         `json:"type"`
+	Name        string         `json:"name"`
+	Title       string         `json:"title,omitempty"`
+	URI         string         `json:"uri"`
+	Description string         `json:"description,omitempty"`
+	MimeType    string         `json:"mimeType,omitempty"`
+	Size        *int64         `json:"size,omitempty"`
+	Annotations *Annotations   `json:"annotations,omitempty"`
 	Meta        map[string]any `json:"_meta,omitempty"`
 }
 
@@ -398,24 +398,24 @@ func UnmarshalContent(b []byte) (Content, error) {
 
 // Resource 资源描述。
 type Resource struct {
-	URI         string        `json:"uri"`
-	Name        string        `json:"name"`
-	Title       string        `json:"title,omitempty"`
-	Description string        `json:"description,omitempty"`
-	MimeType    string        `json:"mimeType,omitempty"`
-	Size        *int64        `json:"size,omitempty"`
-	Annotations *Annotations  `json:"annotations,omitempty"`
+	URI         string         `json:"uri"`
+	Name        string         `json:"name"`
+	Title       string         `json:"title,omitempty"`
+	Description string         `json:"description,omitempty"`
+	MimeType    string         `json:"mimeType,omitempty"`
+	Size        *int64         `json:"size,omitempty"`
+	Annotations *Annotations   `json:"annotations,omitempty"`
 	Meta        map[string]any `json:"_meta,omitempty"`
 }
 
 // ResourceTemplate 资源模板（RFC 6570 URI 模板）。
 type ResourceTemplate struct {
-	URITemplate string        `json:"uriTemplate"`
-	Name        string        `json:"name"`
-	Title       string        `json:"title,omitempty"`
-	Description string        `json:"description,omitempty"`
-	MimeType    string        `json:"mimeType,omitempty"`
-	Annotations *Annotations  `json:"annotations,omitempty"`
+	URITemplate string         `json:"uriTemplate"`
+	Name        string         `json:"name"`
+	Title       string         `json:"title,omitempty"`
+	Description string         `json:"description,omitempty"`
+	MimeType    string         `json:"mimeType,omitempty"`
+	Annotations *Annotations   `json:"annotations,omitempty"`
 	Meta        map[string]any `json:"_meta,omitempty"`
 }
 
@@ -443,6 +443,8 @@ type ReadResourceRequest struct {
 // 即二进制，无显式 type 字段）。
 type ResourceContents interface {
 	isResourceContents()
+	ResourceURI() string
+	ResourceMime() string
 }
 
 // TextResourceContents 文本资源内容。
@@ -454,6 +456,10 @@ type TextResourceContents struct {
 }
 
 func (*TextResourceContents) isResourceContents() {}
+func (c *TextResourceContents) ResourceURI() string {
+	return c.URI
+}
+func (c *TextResourceContents) ResourceMime() string { return c.MimeType }
 
 // BlobResourceContents 二进制资源内容（base64）。
 type BlobResourceContents struct {
@@ -464,6 +470,10 @@ type BlobResourceContents struct {
 }
 
 func (*BlobResourceContents) isResourceContents() {}
+func (c *BlobResourceContents) ResourceURI() string {
+	return c.URI
+}
+func (c *BlobResourceContents) ResourceMime() string { return c.MimeType }
 
 // UnmarshalResourceContents 资源内容判别反序列化（DEDUCTION：text/blob 字段
 // 存在性判别）。
@@ -585,7 +595,7 @@ func (m *PromptMessage) UnmarshalJSON(b []byte) error {
 
 // GetPromptResult 提示获取结果。
 type GetPromptResult struct {
-	Description string         `json:"description,omitempty"`
+	Description string          `json:"description,omitempty"`
 	Messages    []PromptMessage `json:"messages"`
 	Meta        map[string]any  `json:"_meta,omitempty"`
 }
@@ -633,16 +643,16 @@ func (l LoggingLevel) Severity() int {
 
 // SetLevelRequest 日志级别设置请求。
 type SetLevelRequest struct {
-	Level LoggingLevel  `json:"level"`
+	Level LoggingLevel   `json:"level"`
 	Meta  map[string]any `json:"_meta,omitempty"`
 }
 
 // LoggingMessageNotification 日志消息通知。
 type LoggingMessageNotification struct {
-	Level LoggingLevel  `json:"level"`
-	Logger string       `json:"logger,omitempty"`
-	Data  string        `json:"data"`
-	Meta  map[string]any `json:"_meta,omitempty"`
+	Level  LoggingLevel   `json:"level"`
+	Logger string         `json:"logger,omitempty"`
+	Data   string         `json:"data"`
+	Meta   map[string]any `json:"_meta,omitempty"`
 }
 
 // ProgressNotification 进度通知（progressToken 回引用）。
@@ -684,10 +694,10 @@ type ModelHint struct {
 
 // ModelPreferences 模型偏好。
 type ModelPreferences struct {
-	Hints               []ModelHint `json:"hints,omitempty"`
-	CostPriority        *float64    `json:"costPriority,omitempty"`
-	SpeedPriority       *float64    `json:"speedPriority,omitempty"`
-	IntelligencePriority *float64   `json:"intelligencePriority,omitempty"`
+	Hints                []ModelHint `json:"hints,omitempty"`
+	CostPriority         *float64    `json:"costPriority,omitempty"`
+	SpeedPriority        *float64    `json:"speedPriority,omitempty"`
+	IntelligencePriority *float64    `json:"intelligencePriority,omitempty"`
 }
 
 // SamplingMessage 采样消息。
@@ -725,25 +735,25 @@ const (
 
 // CreateMessageRequest 采样请求（服务端 → 客户端）。
 type CreateMessageRequest struct {
-	Messages        []SamplingMessage       `json:"messages"`
-	ModelPreferences *ModelPreferences       `json:"modelPreferences,omitempty"`
-	SystemPrompt    string                  `json:"systemPrompt,omitempty"`
-	IncludeContext  ContextInclusionStrategy `json:"includeContext,omitempty"`
-	Temperature     *float64                `json:"temperature,omitempty"`
-	MaxTokens       int                     `json:"maxTokens"`
-	StopSequences   []string                `json:"stopSequences,omitempty"`
-	Metadata        map[string]any          `json:"metadata,omitempty"`
-	Meta            map[string]any          `json:"_meta,omitempty"`
+	Messages         []SamplingMessage        `json:"messages"`
+	ModelPreferences *ModelPreferences        `json:"modelPreferences,omitempty"`
+	SystemPrompt     string                   `json:"systemPrompt,omitempty"`
+	IncludeContext   ContextInclusionStrategy `json:"includeContext,omitempty"`
+	Temperature      *float64                 `json:"temperature,omitempty"`
+	MaxTokens        int                      `json:"maxTokens"`
+	StopSequences    []string                 `json:"stopSequences,omitempty"`
+	Metadata         map[string]any           `json:"metadata,omitempty"`
+	Meta             map[string]any           `json:"_meta,omitempty"`
 }
 
 // StopReason 采样停止原因。
 type StopReason string
 
 const (
-	StopEndTurn      StopReason = "endTurn"
-	StopSequence     StopReason = "stopSequence"
-	StopMaxTokens    StopReason = "maxTokens"
-	StopUnknown      StopReason = "unknown"
+	StopEndTurn   StopReason = "endTurn"
+	StopSequence  StopReason = "stopSequence"
+	StopMaxTokens StopReason = "maxTokens"
+	StopUnknown   StopReason = "unknown"
 )
 
 // CreateMessageResult 采样结果。
@@ -796,9 +806,9 @@ type ElicitRequest struct {
 
 // ElicitResult 征询结果。
 type ElicitResult struct {
-	Action  ElicitAction    `json:"action"`
-	Content map[string]any  `json:"content,omitempty"`
-	Meta    map[string]any  `json:"_meta,omitempty"`
+	Action  ElicitAction   `json:"action"`
+	Content map[string]any `json:"content,omitempty"`
+	Meta    map[string]any `json:"_meta,omitempty"`
 }
 
 // ---- 补全 ----
@@ -828,10 +838,10 @@ type CompleteContext struct {
 
 // CompleteRequest 补全请求。
 type CompleteRequest struct {
-	Ref     json.RawMessage   `json:"ref"` // PromptReference | ResourceReference（按 type 判别）
+	Ref      json.RawMessage  `json:"ref"` // PromptReference | ResourceReference（按 type 判别）
 	Argument CompleteArgument `json:"argument"`
-	Context *CompleteContext  `json:"context,omitempty"`
-	Meta    map[string]any    `json:"_meta,omitempty"`
+	Context  *CompleteContext `json:"context,omitempty"`
+	Meta     map[string]any   `json:"_meta,omitempty"`
 }
 
 // UnmarshalCompleteRef 补全引用判别（ref/prompt | ref/resource）。
@@ -856,9 +866,9 @@ func UnmarshalCompleteRef(b []byte) (any, error) {
 
 // CompleteCompletion 补全建议。
 type CompleteCompletion struct {
-	Values []string `json:"values"`
-	Total  *int     `json:"total,omitempty"`
-	HasMore bool    `json:"hasMore,omitempty"`
+	Values  []string `json:"values"`
+	Total   *int     `json:"total,omitempty"`
+	HasMore bool     `json:"hasMore,omitempty"`
 }
 
 // CompleteResult 补全结果。
