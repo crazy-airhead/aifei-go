@@ -206,6 +206,12 @@
 - **读 glob 怪癖忠实保留**：Java `wrapWithSandbox` 的 `buildReadConfig` 不展开读 glob，bwrap 侧按不存在路径静默跳过；`getFsReadConfig` 是另一条展开路径 → Go 导出 `LinuxExpandReadPaths` 作对应物，wrap 路径行为不变。
 - macOS 宿主测试要点：bwrap 参数序断言用 `\x00` 精确连接（避免 `--tmpfs /etc` 假命中 `--tmpfs /`）；不存在路径规范化原样返回 vs 已存在路径解析 `/private` 前缀——直接 API 测试的基目录须先 canonical 化（Linux 上两者天然相同）；外层 `ShellQuote` 会转义内层脚本的单引号，断言到首个内层引号为止。
 
+**P5-s3 已落地（2026-10-10）**：`proxy_http.go`（HTTP CONNECT 正向代理 + 明文 HTTP 转发）+ `proxy_socks.go`（SOCKS5 无鉴权）+ `parent_proxy.go`（ParentProxyResolver：显式配置/环境变量解析链 + NO_PROXY CIDR/后缀匹配）+ `sandbox.go` 接线（`WithFilterRequest`/`StartProxyServers`/`StopProxyServers`/`ParentProxyResolver`；Reset 关代理）。TLS 终止/mitm 上游本就无实现（`MitmProxyConfig.socketPath` 指向外部进程），Go 保持结构位。`_test/sandbox_test/proxy_test.go` 黑盒 14 用例 + race×2 全绿。移植期发现与偏差（代码注释均已注明）：
+- **三处上游缺陷修正**：Java `handleClient` finally 无条件关 client——异步 pipe 刚返回隧道即断（上游移植缺陷，代理实际不可用），Go `tunnel` 阻塞等双泵；Java BufferedReader 预读吞请求体（其注释自认 unreliable），Go 统一经同一 bufio.Reader；Java 父代理应答的预读字节在 pipe 时丢弃（早发数据丢失），Go `bufferedConn` 并回。
+- **有意增量**：代理服务器 Java 由外部基础设施启动 + `setProxyPorts` 回填，Go 增 `Manager.StartProxyServers()` 便捷接线（端口仍可外部注入）；配置经 provider 每请求读取（兑现 `UpdateConfig` 网络面活切换的既有承诺）；Stop 显式断在飞连接（Java shutdownNow 只中断线程不关 socket）；直连分支 HttpURLConnection → net/http；SOCKS 父路由 `Socket(Proxy.Type.HTTP)` → 手工 `dialViaParent`（两代理共用）。
+- **忠实怪癖保留**：父代理 CONNECT 无端口即失败（对照明文分支有 80/443 回填）；CONNECT 端口非数字静默断连；SOCKS cmd 字段忽略（BIND/UDP 当 CONNECT）；https 父代理走裸 TCP；chunked 请求体按原始字节（含分帧）搬运；SOCKS 直连拨号无超时；filterRequest panic → 拒（Java catch Exception）；逐跳头 = RFC 7230 固定集 ∪ Connection 点名集；响应头每名取首值。
+- **Go 版本勘误（本卡修正库内既有代码）**：当前 Go 的 `net.ParseIP` 对点分十进制也返回 16 字节 v4 映射形——`len(addr)==16` 判家族恒真，令 `127.0.0.0/8` 前 8 位（全零）匹配一切 v4 主机、裸 IP 误配 /128 越界；NO_PROXY CIDR 家族改按字面量判（`parentAddrBytes`），v6/映射形走 16 字节、点分十进制收窄 4 字节。`isValidIPv6Literal` 补 RFC 4291 尾组点分十进制形（`::ffff:127.0.0.1` 此前被判非 IP，v4 映射回环恒直连失效）。
+
 ---
 
 ## 9. 全局验收清单（Definition of Done）
