@@ -1,7 +1,10 @@
 // Package sandbox Claude Code sandbox-runtime 的 Go 移植（对标
 // solon-ai-sandbox；Java 版自身是 TypeScript 的忠实移植）。会话级
-// 命令沙箱：macOS Seatbelt（P5-s1）/ linux bwrap（P5-s2）/ windows
-// WFP（P5-s4）三平台后端 + 域名过滤面（P5-s3 代理）。
+// 命令沙箱：macOS Seatbelt（P5-s1，seatbelt.go）/ linux bwrap（P5-s2，
+// bwrap.go）/ windows WFP（P5-s4 结构位）三平台后端 + 域名过滤面
+// （P5-s3 代理）。后端文件名刻意不带 _darwin/_linux 后缀——Go 的隐式
+// GOOS 构建约束会把它们从交叉构建里剔除，而 argv/profile 生成是纯
+// 字符串操作，全平台编译、全平台可测。
 //
 // 与 Java 的偏差：
 //   - SandboxManager 全静态单例 → Manager 实例（06 契约决策：便于测试
@@ -10,6 +13,9 @@
 //     留 P5-s3（代理服务器落地时一并接线）。
 //   - CommandLookup.which 子进程 which → exec.LookPath（标准库原生）。
 //   - SandboxException → error；SandboxLog → 内部 log 模块。
+//   - linux socat 桥懒建：Java 仅在 initialize() 时且端口已设置才建桥
+//     （实际流程端口总是后到，桥永远建不起来）；Go 在首次受限包装时
+//     按需建桥（ensureLinuxBridge），失败非致命（网络走全拒分支）。
 //
 // 用法骨架：
 //
@@ -40,11 +46,12 @@ type SpawnSpec struct {
 type Manager struct {
 	mu sync.RWMutex
 
-	cfg    *RuntimeConfig
-	ask    AskCallback
-	store  *ViolationStore
-	httpP  *int
-	socksP *int
+	cfg         *RuntimeConfig
+	ask         AskCallback
+	store       *ViolationStore
+	httpP       *int
+	socksP      *int
+	linuxBridge *LinuxBridgeContext
 }
 
 // Option Manager 构造选项。
@@ -76,14 +83,24 @@ func New(cfg RuntimeConfig, opts ...Option) (*Manager, error) {
 	return m, nil
 }
 
-// Reset 复位管理器（清配置与端口；linux 桥接清场在 P5-s2 接线）。
+// Reset 复位管理器：清配置与端口，关停 linux socat 桥（杀进程 + 删
+// socket 文件），强制清理 bwrap 挂载点残留（Java reset 同款）。
 func (m *Manager) Reset() {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	bridge := m.linuxBridge
+	m.linuxBridge = nil
 	m.cfg = nil
 	m.httpP = nil
 	m.socksP = nil
 	m.store = nil
+	m.mu.Unlock()
+
+	if bridge != nil {
+		bridge.Stop()
+	}
+	if DetectPlatform() == Linux {
+		CleanupBwrapMountPoints(true)
+	}
 	log.Debug("sandbox: reset")
 }
 
@@ -159,7 +176,7 @@ func (m *Manager) WrapWithSandbox(command string, binShell string, customConfig 
 	case MacOS:
 		return WrapCommandDarwin(m.buildDarwinParams(command, binShell, customConfig, mainCfg, httpP, socksP))
 	case Linux:
-		return "", ErrLinuxBackendPending
+		return m.wrapLinux(command, binShell, customConfig, mainCfg, httpP, socksP)
 	case Windows:
 		return "", errors.New("sandbox: wrapWithSandbox() returns a shell string and is not supported on Windows. Use WrapWithSandboxArgv() and spawn the result with {shell: false}.")
 	default:
@@ -188,11 +205,110 @@ func (m *Manager) WrapWithSandboxArgv(command string, binShell string, customCon
 	}, nil
 }
 
-// CleanupAfterCommand 命令结束后的轻量清场（linux bwrap 挂载点残留
-// 清理；macOS no-op——P5-s2 接线，签名先行）。ctx 预留给后续卡。
+// CleanupAfterCommand 命令结束后的轻量清场：linux 清 bwrap 挂载点残留
+// （计数减一，归零才删——并发沙箱安全）；macOS no-op。ctx 预留给后续卡。
 func (m *Manager) CleanupAfterCommand(context.Context) error {
-	// linux: LinuxSandboxBackend.cleanupBwrapMountPoints() —— P5-s2
+	if DetectPlatform() == Linux {
+		CleanupBwrapMountPoints(false)
+	}
 	return nil
+}
+
+// wrapLinux linux 分发：合成 LinuxParams 并交 bwrap 后端包装。网络受限
+// 且桥可用时透传桥 socket 路径与端口（Java wrapWithSandbox LINUX 分支）。
+func (m *Manager) wrapLinux(command, binShell string, customConfig, mainCfg *RuntimeConfig, httpP, socksP *int) (string, error) {
+	writeConfig := m.buildWriteConfig(customConfig, mainCfg)
+	readConfig := m.buildReadConfig(customConfig, mainCfg)
+
+	// allowedDomains 已定义（即使空 = 全拒）即启用网络限制
+	hasNetworkConfig := false
+	if c := customConfig; c != nil && c.Network != nil && c.Network.AllowedDomains != nil {
+		hasNetworkConfig = true
+	} else if mainCfg != nil && mainCfg.Network != nil && mainCfg.Network.AllowedDomains != nil {
+		hasNetworkConfig = true
+	}
+
+	// 后端专属配置恒取主配置（custom 只覆盖文件系统面与布尔位——Java 同款）
+	var (
+		weakerNested *bool
+		allowAllUnix *bool
+		ripgrep      *RipgrepConfig
+		depth        *int
+		seccomp      *SeccompConfig
+		bwrapPath    string
+		socatPath    string
+	)
+	if mainCfg != nil {
+		weakerNested = mainCfg.EnableWeakerNestedSandbox
+		ripgrep = mainCfg.Ripgrep
+		depth = mainCfg.MandatoryDenySearchDepth
+		seccomp = mainCfg.Seccomp
+		bwrapPath = mainCfg.BwrapPath
+		socatPath = mainCfg.SocatPath
+		if mainCfg.Network != nil {
+			allowAllUnix = mainCfg.Network.AllowAllUnixSockets
+		}
+	}
+
+	var customGit, mainGit *bool
+	if customConfig != nil && customConfig.Filesystem != nil {
+		customGit = customConfig.Filesystem.AllowGitConfig
+	}
+	if mainCfg != nil && mainCfg.Filesystem != nil {
+		mainGit = mainCfg.Filesystem.AllowGitConfig
+	}
+
+	params := &LinuxParams{
+		Command:                   command,
+		NeedsNetworkRestriction:   hasNetworkConfig,
+		ReadConfig:                readConfig,
+		WriteConfig:               writeConfig,
+		EnableWeakerNestedSandbox: weakerNested,
+		AllowAllUnixSockets:       allowAllUnix,
+		BinShell:                  binShell,
+		RipgrepConfig:             ripgrep,
+		MandatoryDenySearchDepth:  depth,
+		AllowGitConfig:            resolveBool(customGit, mainGit),
+		SeccompConfig:             seccomp,
+		BwrapPath:                 bwrapPath,
+		SocatPath:                 socatPath,
+	}
+
+	if hasNetworkConfig {
+		if bridge := m.ensureLinuxBridge(mainCfg, httpP, socksP); bridge != nil {
+			params.HTTPSocketPath = bridge.HTTPSocketPath
+			params.SocksSocketPath = bridge.SocksSocketPath
+			params.HTTPProxyPort = &bridge.HTTPProxyPort
+			params.SocksProxyPort = &bridge.SocksProxyPort
+		}
+	}
+	return WrapCommandLinux(params)
+}
+
+// ensureLinuxBridge 取或懒建 socat 桥（偏离 Java：Java 仅在 initialize()
+// 且当时端口已设置才建桥——实际流程端口总是后到，桥永远建不起来；Go 在
+// 首次受限包装时按需建桥，失败非致命——网络走无桥全拒分支）。
+func (m *Manager) ensureLinuxBridge(mainCfg *RuntimeConfig, httpP, socksP *int) *LinuxBridgeContext {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.linuxBridge != nil {
+		return m.linuxBridge
+	}
+	if httpP == nil || socksP == nil {
+		return nil
+	}
+	socatPath := ""
+	if mainCfg != nil {
+		socatPath = mainCfg.SocatPath
+	}
+	bridge, err := InitializeLinuxNetworkBridge(*httpP, *socksP, socatPath)
+	if err != nil {
+		log.Debug("sandbox: linux network bridge init failed: %s", err)
+		return nil
+	}
+	m.linuxBridge = bridge
+	log.Debug("sandbox: linux network bridge initialized")
+	return bridge
 }
 
 // buildDarwinParams 由主配置 + 自定义配置合成 darwin 后端参数。
@@ -276,15 +392,22 @@ func (m *Manager) buildDarwinParams(command, binShell string, customConfig, main
 }
 
 // buildWriteConfig 写限制合成（custom 优先于主配置；叠加系统缺省写
-// 路径；尾 glob 后缀剥离）。darwin 保留 glob（Seatbelt 原生支持），
-// linux 在此过滤 glob（P5-s2 分支位）。
+// 路径；尾 glob 后缀剥离）。darwin 保留 glob（Seatbelt 原生支持）；
+// linux 剩余 glob 直接丢弃（bwrap 不支持 glob——Java stripWriteGlobs
+// 平台分支同款）。
 func (m *Manager) buildWriteConfig(customConfig, mainCfg *RuntimeConfig) *WriteRestriction {
 	fs := effectiveFilesystem(customConfig, mainCfg)
+	linux := DetectPlatform() == Linux
 
 	var userAllowWrite, userDenyWrite []string
 	if fs != nil {
-		userAllowWrite = stripTrailingGlobs(fs.AllowWrite)
-		userDenyWrite = stripTrailingGlobs(fs.DenyWrite)
+		if linux {
+			userAllowWrite = StripWriteGlobsForLinux(fs.AllowWrite)
+			userDenyWrite = StripWriteGlobsForLinux(fs.DenyWrite)
+		} else {
+			userAllowWrite = stripTrailingGlobs(fs.AllowWrite)
+			userDenyWrite = stripTrailingGlobs(fs.DenyWrite)
+		}
 	}
 
 	allAllow := append([]string(nil), DefaultWritePaths()...)

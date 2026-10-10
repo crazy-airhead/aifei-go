@@ -100,13 +100,9 @@ func IsSupportedPlatform() bool {
 // ErrUnsupportedPlatform 平台不支持沙箱。
 var ErrUnsupportedPlatform = errors.New("sandbox: configuration is not supported on this platform")
 
-// ErrLinuxBackendPending / ErrWindowsBackendPending 后端结构位占位：
-// linux bwrap 落地在 P5-s2，windows WFP 在 P5-s4（配置结构已就位，
-// 包装分发提前给出明确错误面而非 panic）。
-var (
-	ErrLinuxBackendPending   = errors.New("sandbox: linux bwrap backend lands in P5-s2 (config structs already defined)")
-	ErrWindowsBackendPending = errors.New("sandbox: windows WFP backend lands in P5-s4 (config structs already defined)")
-)
+// ErrWindowsBackendPending windows WFP 后端结构位占位（P5-s4 落地；
+// 配置结构已就位，包装分发提前给出明确错误面而非 panic）。
+var ErrWindowsBackendPending = errors.New("sandbox: windows WFP backend lands in P5-s4 (config structs already defined)")
 
 // DependencyCheck 依赖检查结果（errors 致命、warnings 降级提示）。
 type DependencyCheck struct {
