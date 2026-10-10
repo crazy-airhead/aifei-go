@@ -22,6 +22,7 @@ use (
 	./_test/mcp_test
 	./_test/nacos_test
 	./_test/nami_test
+	./_test/sandbox_test
 	./_test/server_test
 	./_test/storage_test
 	./_test/swagger_test
@@ -50,6 +51,7 @@ use (
 	./plugins/storage
 	./plugins/swagger
 	./plugins/xxljob
+	./sandbox
 	./server
 	./tools/damigen
 	./tools/generator
