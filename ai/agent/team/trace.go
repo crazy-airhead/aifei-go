@@ -94,6 +94,19 @@ func Current(ctx flow.Context) *Trace {
 
 // ---- 生命周期 ----
 
+// NewTracePrepared 构造带运行时环境的轨迹（集成方直调协议方法/测试用——
+// 内部走 prepare 全语义：绑定 config/options/session 与原始输入）。
+func NewTracePrepared(config *Config, session agent.Session, originalPrompt *ai.Prompt) *Trace {
+	t := NewTrace()
+	t.prepare(config, config.DefaultOptions(), session, config.Name())
+	if ctx := session.Context(); ctx != nil {
+		ctx.Put(agent.KeyCurrentTeamTraceKey, config.TraceKey())
+		ctx.Put(config.TraceKey(), t)
+	}
+	t.setOriginalPrompt(originalPrompt)
+	return t
+}
+
 // prepare 运行时环境准备（绑定 transient 引用；每次执行清挂起标记与终态）。
 func (t *Trace) prepare(config *Config, options *Options, session agent.Session, agentName string) {
 	t.config = config

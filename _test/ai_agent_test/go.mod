@@ -17,5 +17,10 @@ require (
 replace (
 	github.com/crazy-airhead/aifei-go/ai => ../../ai
 	github.com/crazy-airhead/aifei-go/ai/agent => ../../ai/agent
+	github.com/crazy-airhead/aifei-go/dami => ../../dami
+	github.com/crazy-airhead/aifei-go/enjoy => ../../enjoy
 	github.com/crazy-airhead/aifei-go/flow => ../../flow
+	github.com/crazy-airhead/aifei-go/json => ../../json
+	github.com/crazy-airhead/aifei-go/log => ../../log
+	github.com/crazy-airhead/aifei-go/mcp => ../../mcp
 )
