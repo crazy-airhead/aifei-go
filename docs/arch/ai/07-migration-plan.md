@@ -175,6 +175,18 @@
 
 每项立项时在本篇追加小节（对照 flow 系列的 `06-mysql-repository.md` 追加式收尾）。
 
+### P5-T talents 五件套（2026-10-10 立项，用户解锁；契约 `06-talents-and-extended.md` §1/§2）
+
+依赖：P0/P1 已落地的 Talent SPI（`ai/talent.go`：接口 7 方法 + `TalentBase` + `ActiveTalents` 管线接线 + wikiTalent 竖切测试）。落位：file/sys/diff/web 基础面 → `./ai` 子包 `ai/talent/<name>`（零新增依赖；web 走 `ai/httpx` + `ai/rag/search`）；text2sql → `./plugins/ai/talent/text2sql`（带 `./db` 依赖，按 06 §2 落位规则出 ai 模块）。测试：前四件入 `_test/ai_test`（`talent_<name>_test.go`），text2sql 入 `_test/ai_plugin_test`。
+
+- **P5-t1 file**：读/写/zip 工具（ReadFile/WriteFile/Zip/Unzip）+ 路径边界校验（根目录逃逸防护）；兼作 SPI 全链路竖切验证（准入/指令块/工具 `talent` meta 染色端到端）。
+- **P5-t2 sys**：Shell/Python/Nodejs 执行工具（`os/exec` 的 ProcessExecutor 等价物：超时/输出捕获/exit code 语义）+ SystemClock。
+- **P5-t3 diff**：apply-diff/apply-patch 工具（diff 语法解析，纯字符串处理）。
+- **P5-t4 web（基础面）**：Webfetch（httpx 拉页抽正文）+ Websearch（走 rag/search 三家）；crawler/flexmark 转 md 留 P5 后期。
+- **P5-t5 text2sql**：方言感知的 SQL 生成工具；复用 `db/dialect` 与 `db.Table` 表元数据注册表。
+
+验收：五件各自黑盒测试全绿（TempDir 假文件系统、真 exec 安全命令、httptest 假回放）；`ChatOptions.Talents` 挂入后指令块 + 工具部署端到端断言；CLAUDE.md 模块表/架构段同步；收口随下一舰队发版。
+
 ---
 
 ## 9. 全局验收清单（Definition of Done）
