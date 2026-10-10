@@ -1,0 +1,4 @@
+markitdown testdata files (test.docx / test.xlsx / test.pptx / test.pdf)
+Source: github.com/conductor-oss/markitdown v0.0.1 testdata/
+License: Apache License 2.0 (Copyright 2026 Conductor OSS)
+Copied verbatim as test fixtures for ragloader black-box tests.
