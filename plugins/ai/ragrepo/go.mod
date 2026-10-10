@@ -4,6 +4,7 @@ go 1.27
 
 require (
 	github.com/crazy-airhead/aifei-go/ai v1.0.3
+	github.com/redis/go-redis/v9 v9.21.0
 	github.com/crazy-airhead/aifei-go/plugins/elasticsearch v0.0.0
 )
 

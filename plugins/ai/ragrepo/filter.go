@@ -379,3 +379,27 @@ func NewUUID() string {
 	}
 	return string(out)
 }
+
+// FieldTypeX SQL 侧元数据列类型（mysql/mariadb 模块的三值面）。
+type FieldTypeX string
+
+const (
+	FieldTextX    FieldTypeX = "TEXT"
+	FieldNumericX FieldTypeX = "NUMERIC"
+	FieldJSONX    FieldTypeX = "JSON"
+)
+
+// MetadataFieldX SQL 侧元数据列。
+type MetadataFieldX struct {
+	Name string
+	Type FieldTypeX
+}
+
+// VectorLiteral 向量的 SQL 字面量（'[0.1,0.2]'::vector 的参数形态）。
+func VectorLiteral(vec []float32) string {
+	parts := make([]string, len(vec))
+	for i, v := range vec {
+		parts[i] = strconv.FormatFloat(float64(v), 'g', -1, 32)
+	}
+	return "[" + strings.Join(parts, ",") + "]"
+}

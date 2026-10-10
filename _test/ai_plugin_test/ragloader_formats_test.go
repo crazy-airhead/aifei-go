@@ -51,8 +51,8 @@ func docxOf(paragraphs ...string) string {
 
 func TestRagloaderWord(t *testing.T) {
 	data := zipOf(t, map[string]string{
-		"[Content_Types].xml":      `<Types/>`,
-		"word/document.xml":        docxOf("第一段文字。", "第二段：含 &lt;特殊&gt; 与 &amp; 符号。", "Third paragraph."),
+		"[Content_Types].xml":          `<Types/>`,
+		"word/document.xml":            docxOf("第一段文字。", "第二段：含 &lt;特殊&gt; 与 &amp; 符号。", "Third paragraph."),
 		"word/_rels/document.xml.rels": `<Relationships/>`,
 	})
 	l := ragloader.NewWordLoader(bytes.NewReader(data))
@@ -117,8 +117,8 @@ func TestRagloaderPpt(t *testing.T) {
 		return `<?xml version="1.0"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree>` + body.String() + `</p:spTree></p:cSld></p:sld>`
 	}
 	data := zipOf(t, map[string]string{
-		"ppt/slides/slide1.xml": slide("封面标题", "副标题"),
-		"ppt/slides/slide2.xml": slide("第二页内容", "要点一", "要点二"),
+		"ppt/slides/slide1.xml":  slide("封面标题", "副标题"),
+		"ppt/slides/slide2.xml":  slide("第二页内容", "要点一", "要点二"),
 		"ppt/slides/slide10.xml": slide("第十页（排序验证）"),
 	})
 

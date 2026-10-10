@@ -167,13 +167,13 @@ func (r *Repository) SearchQuery(ctx context.Context, q *rag.Query) ([]*rag.Docu
 	}
 
 	queryStr := BuildSearchSQL(r.table, "", 0)
-	args := []any{VectorLiteral(vec), VectorLiteral(vec), limit}
+	args := []any{ragrepo.VectorLiteral(vec), ragrepo.VectorLiteral(vec), limit}
 	if q.FilterExpr != "" {
 		if f, ok := r.TransformFilter(q.FilterExpr); ok {
 			sf := f.(SQLFilter)
 			queryStr = BuildSearchSQL(r.table, sf.Clause, len(sf.Args))
-			args = append([]any{VectorLiteral(vec)}, sf.Args...)
-			args = append(args, VectorLiteral(vec), limit)
+			args = append([]any{ragrepo.VectorLiteral(vec)}, sf.Args...)
+			args = append(args, ragrepo.VectorLiteral(vec), limit)
 		}
 	}
 
@@ -233,7 +233,7 @@ func (r *Repository) Save(ctx context.Context, docs []*rag.Document, progress fu
 		}
 		for _, doc := range batch {
 			metaJSON, _ := json.Marshal(doc.Metadata)
-			args := []any{doc.ID, doc.Content, VectorLiteral(doc.Embedding), string(metaJSON)}
+			args := []any{doc.ID, doc.Content, ragrepo.VectorLiteral(doc.Embedding), string(metaJSON)}
 			for _, f := range r.metadataField {
 				args = append(args, metadataColumnValue(doc, f))
 			}
@@ -370,15 +370,6 @@ func buildUpsertSQL(table string, fields []MetadataField) string {
 		names[i] = f.Name
 	}
 	return BuildUpsertSQL(table, names)
-}
-
-// VectorLiteral 向量的 SQL 字面量（'[0.1,0.2]'::vector 的参数形态）。
-func VectorLiteral(vec []float32) string {
-	parts := make([]string, len(vec))
-	for i, v := range vec {
-		parts[i] = strconv.FormatFloat(float64(v), 'g', -1, 32)
-	}
-	return "[" + strings.Join(parts, ",") + "]"
 }
 
 // newUUID UUIDv4 形态。

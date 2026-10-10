@@ -111,7 +111,7 @@ func TestRagrepoToSQLWhereGolden(t *testing.T) {
 
 // stubESClient 记录调用并回放 canned 结果。
 type stubESClient struct {
-	indexExists bool
+	indexExists     bool
 	createdMappings []map[string]any
 	searchBodies    []map[string]any
 	bulkDocs        [][]elasticsearch.BulkDoc
@@ -377,7 +377,7 @@ func TestRagrepoPgvectorSQLSkeleton(t *testing.T) {
 		t.Fatalf("upsert SQL：\n got %s\nwant %s", up, wantUp)
 	}
 
-	if v := pgvector.VectorLiteral([]float32{0.5, -0.25}); v != "[0.5,-0.25]" {
+	if v := ragrepo.VectorLiteral([]float32{0.5, -0.25}); v != "[0.5,-0.25]" {
 		t.Fatalf("向量字面量：%s", v)
 	}
 }

@@ -19,6 +19,7 @@ require (
 require (
 	github.com/PuerkitoBio/goquery v1.10.0 // indirect
 	github.com/andybalholm/cascadia v1.3.2 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/crazy-airhead/aifei-go/ai/agent v1.0.3 // indirect
 	github.com/crazy-airhead/aifei-go/aifei v1.0.3 // indirect
 	github.com/crazy-airhead/aifei-go/dami v1.0.3 // indirect
@@ -34,6 +35,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
+	github.com/redis/go-redis/v9 v9.21.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/richardlehane/mscfb v1.0.4 // indirect
 	github.com/richardlehane/msoleps v1.0.4 // indirect
@@ -44,6 +46,7 @@ require (
 	go.opentelemetry.io/otel v1.38.0 // indirect
 	go.opentelemetry.io/otel/metric v1.38.0 // indirect
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
+	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/crypto v0.28.0 // indirect
 	golang.org/x/net v0.30.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
