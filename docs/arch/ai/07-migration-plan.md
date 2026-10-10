@@ -238,7 +238,7 @@
 ### P7 用户指示修正（2026-10-11）
 
 - **重格式统一处理**：docx/xlsx/pptx/pdf 四件弃自解实现，统一经 `github.com/conductor-oss/markitdown`（pdfium WASM 由 wazero 纯 Go 运行——零外部二进制）；pptx 真页标记切分、xlsx sheet 切分、docx 空行分段、pdf 段块近似页切分（页边界引擎不暴露）；`.doc`/`.ppt` 旧格式显式拒绝维持。测试夹具升级为 markitdown testdata 真实文件（Apache-2.0 注明）。
-- **lucene talent 解禁**（覆盖原 06 §2「不迁」决策，用户指示）：不用 Elasticsearch（需部署服务非等价替代）也不用 gojieba（cgo 绑定无纯 Go 版本）——**Bleve**（blevesearch/bleve/v2，内存索引 + BM25——Lucene 的 Go 等价物）+ **gse**（go-ego/gse，纯 Go 中文分词、jieba 词典系、内嵌词典）。落 `plugins/ai/talent/lucene`：full_text_search/refresh_search_index 双工具语义逐字对标 Java（忽略名/后缀白名单可配、检索自动建索引、得分/行号/预览格式化）；gse CutSearch（搜索引擎模式 + HMM）注册为 Bleve 自定义 analyzer、索引与查询同源分词；特殊字符免转义（MatchQuery 走分析器非查询语法）。测试搬译 Java LuceneTalentTest 六用例 + 中文分词专项。
+- **bleve talent（Java lucene 的 Go 对应物，用户指示解禁并更名）**（覆盖原 06 §2「不迁」决策）：不用 Elasticsearch（需部署服务非等价替代）也不用 gojieba（cgo 绑定无纯 Go 版本）——**Bleve**（blevesearch/bleve/v2，内存索引 + BM25——Lucene 的 Go 等价物）+ **gse**（go-ego/gse，纯 Go 中文分词、jieba 词典系、内嵌词典）。落 `plugins/ai/talent/bleve`：full_text_search/refresh_search_index 双工具语义逐字对标 Java（忽略名/后缀白名单可配、检索自动建索引、得分/行号/预览格式化）；gse CutSearch（搜索引擎模式 + HMM）注册为 Bleve 自定义 analyzer、索引与查询同源分词；特殊字符免转义（MatchQuery 走分析器非查询语法）。测试搬译 Java LuceneTalentTest 六用例 + 中文分词专项。
 - **ragloader 重格式夹具**：markitdown testdata 真实四件（test.docx/xlsx/pptx/pdf）。
 
 

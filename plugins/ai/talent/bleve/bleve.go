@@ -1,4 +1,4 @@
-// Package lucene 本地全文检索能力包（对标 solon-ai-talent-lucene：
+// Package bleve 本地全文检索能力包（对标 solon-ai-talent-lucene：
 // `full_text_search` + `refresh_search_index` 双工具、可配忽略名与可搜索后缀、
 // 索引未建时检索自动先刷新、得分/行号/预览格式化逐字对标）。
 //
@@ -7,7 +7,7 @@
 // 分词，内嵌词典——jieba 词典系；非 gojieba，后者为 cgo 绑定无纯 Go 版本），
 // 不引入 Elasticsearch（需部署服务，非等价替代——用户明确排除）。gse 分词器
 // 注册为 Bleve 自定义 analyzer，索引与查询同源分词。
-package lucene
+package bleve
 
 import (
 	"context"
@@ -166,10 +166,10 @@ func (t *Talent) SearchableExtensions(exts ...string) *Talent {
 }
 
 // Name 能力包名。
-func (t *Talent) Name() string { return "Lucene" }
+func (t *Talent) Name() string { return "Bleve" }
 
 // Description 描述。
-func (t *Talent) Description() string { return "本地全文检索（Bleve + 中文分词）" }
+func (t *Talent) Description() string { return "本地全文检索（Bleve 索引 + 中文分词）" }
 
 // Tools 双工具。
 func (t *Talent) Tools(*ai.Prompt) []ai.FunctionTool {
@@ -196,7 +196,7 @@ func (t *Talent) workPath(ctx context.Context) (string, error) {
 	if t.workDir != "" {
 		return t.workDir, nil
 	}
-	return "", fmt.Errorf("lucene: working directory is not set")
+	return "", fmt.Errorf("bleve: working directory is not set")
 }
 
 // toolRefresh 索引重建（对标 refreshSearchIndex：CREATE 模式——旧索引整体替换）。
@@ -216,7 +216,7 @@ func (t *Talent) toolRefresh(ctx context.Context, _ map[string]any) (any, error)
 // rebuild 扫描 + 重建（忽略目录整棵跳过；后缀过滤；单文件失败跳过计数不受影响）。
 func (t *Talent) rebuild(workPath string) (int, error) {
 	if err := registerAnalyzer(); err != nil {
-		return 0, fmt.Errorf("lucene: gse init: %w", err)
+		return 0, fmt.Errorf("bleve: gse init: %w", err)
 	}
 	im := bleve.NewIndexMapping()
 	im.DefaultAnalyzer = gseAnalyzerName

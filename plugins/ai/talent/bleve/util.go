@@ -1,5 +1,5 @@
-// util.go 扫描与路径小件（lucene 包内）。
-package lucene
+// util.go 扫描与路径小件（bleve 包内）。
+package bleve
 
 import (
 	"os"

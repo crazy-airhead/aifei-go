@@ -1,4 +1,4 @@
-// lucene_test.go 本地全文检索能力包黑盒测试（黄金场景搬译 Java
+// bleve_test.go 本地全文检索能力包黑盒测试（黄金场景搬译 Java
 // LuceneTalentTest 六用例 + gse 中文分词专项 + 索引未建自动刷新 + 自定义配置）。
 package ai_plugin_test
 
@@ -10,12 +10,12 @@ import (
 	"testing"
 
 	ai "github.com/crazy-airhead/aifei-go/ai"
-	lucenet "github.com/crazy-airhead/aifei-go/plugins/ai/talent/lucene"
+	blevet "github.com/crazy-airhead/aifei-go/plugins/ai/talent/bleve"
 )
 
-// newLuceneWorkspace 搬译 Java setUp 的标准工作区（src 两文件 + .git 忽略 +
+// newBleveWorkspace 搬译 Java setUp 的标准工作区（src 两文件 + .git 忽略 +
 // png 后缀外文件）。
-func newLuceneWorkspace(t *testing.T) string {
+func newBleveWorkspace(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src")
@@ -40,7 +40,7 @@ func writeT(t *testing.T, path, content string) {
 	}
 }
 
-func luceneTools(t *testing.T, talent *lucenet.Talent) (search, refresh ai.FunctionTool) {
+func blevetTools(t *testing.T, talent *blevet.Talent) (search, refresh ai.FunctionTool) {
 	t.Helper()
 	tools := talent.Tools(nil)
 	if len(tools) != 2 || tools[0].Name() != "full_text_search" || tools[1].Name() != "refresh_search_index" {
@@ -68,10 +68,10 @@ func callLuceneCtx(t *testing.T, tool ai.FunctionTool, cwd string, args map[stri
 	return r.ContentText()
 }
 
-func TestLuceneRefreshAndSearch(t *testing.T) {
-	dir := newLuceneWorkspace(t)
-	talent := lucenet.New(dir)
-	search, refresh := luceneTools(t, talent)
+func TestBleveRefreshAndSearch(t *testing.T) {
+	dir := newBleveWorkspace(t)
+	talent := blevet.New(dir)
+	search, refresh := blevetTools(t, talent)
 
 	// 索引刷新成功文案
 	out := callLuceneCtx(t, refresh, dir, nil)
@@ -96,10 +96,10 @@ func TestLuceneRefreshAndSearch(t *testing.T) {
 	}
 }
 
-func TestLuceneAutoRefreshOnFirstSearch(t *testing.T) {
-	dir := newLuceneWorkspace(t)
-	talent := lucenet.New(dir)
-	search, _ := luceneTools(t, talent)
+func TestBleveAutoRefreshOnFirstSearch(t *testing.T) {
+	dir := newBleveWorkspace(t)
+	talent := blevet.New(dir)
+	search, _ := blevetTools(t, talent)
 
 	// 不先 refresh：检索自动建索引（Java 同款兜底）
 	out := callLucene(t, search, map[string]any{"query": "login", "__cwd": dir})
@@ -108,10 +108,10 @@ func TestLuceneAutoRefreshOnFirstSearch(t *testing.T) {
 	}
 }
 
-func TestLuceneIgnoreAndExtensionFilter(t *testing.T) {
-	dir := newLuceneWorkspace(t)
-	talent := lucenet.New(dir)
-	search, refresh := luceneTools(t, talent)
+func TestBleveIgnoreAndExtensionFilter(t *testing.T) {
+	dir := newBleveWorkspace(t)
+	talent := blevet.New(dir)
+	search, refresh := blevetTools(t, talent)
 	callLuceneCtx(t, refresh, dir, nil)
 
 	// .git 目录被忽略
@@ -124,10 +124,10 @@ func TestLuceneIgnoreAndExtensionFilter(t *testing.T) {
 	}
 }
 
-func TestLuceneCustomConfiguration(t *testing.T) {
-	dir := newLuceneWorkspace(t)
-	talent := lucenet.New(dir)
-	search, refresh := luceneTools(t, talent)
+func TestBleveCustomConfiguration(t *testing.T) {
+	dir := newBleveWorkspace(t)
+	talent := blevet.New(dir)
+	search, refresh := blevetTools(t, talent)
 
 	// 仅 .png、不忽略任何目录（Java testCustomConfiguration 同款）
 	talent.SearchableExtensions("png")
@@ -138,10 +138,10 @@ func TestLuceneCustomConfiguration(t *testing.T) {
 	}
 }
 
-func TestLuceneSpecialCharactersAndEmpty(t *testing.T) {
-	dir := newLuceneWorkspace(t)
-	talent := lucenet.New(dir)
-	search, refresh := luceneTools(t, talent)
+func TestBleveSpecialCharactersAndEmpty(t *testing.T) {
+	dir := newBleveWorkspace(t)
+	talent := blevet.New(dir)
+	search, refresh := blevetTools(t, talent)
 	callLuceneCtx(t, refresh, dir, nil)
 
 	// 特殊字符（括号/空格）不抛错——Bleve MatchQuery 走分析器免查询语法解析
@@ -152,8 +152,8 @@ func TestLuceneSpecialCharactersAndEmpty(t *testing.T) {
 
 	// 空目录优雅处理
 	empty := t.TempDir()
-	emptyTalent := lucenet.New(empty)
-	eSearch, eRefresh := luceneTools(t, emptyTalent)
+	emptyTalent := blevet.New(empty)
+	eSearch, eRefresh := blevetTools(t, emptyTalent)
 	callLuceneCtx(t, eRefresh, empty, nil)
 	if out := callLucene(t, eSearch, map[string]any{"query": "anything", "__cwd": empty}); out != "未找到匹配内容。" {
 		t.Fatalf("空目录：%q", out)
@@ -162,14 +162,14 @@ func TestLuceneSpecialCharactersAndEmpty(t *testing.T) {
 
 // TestLuceneChineseSegmentation gse 中文分词专项（英文检索引擎的 bigram 语义
 // 差异验证：词级分词命中、无关词不误命中）。
-func TestLuceneChineseSegmentation(t *testing.T) {
+func TestBleveChineseSegmentation(t *testing.T) {
 	dir := t.TempDir()
 	writeT(t, filepath.Join(dir, "notes.md"),
 		"# 项目笔记\n\n用户登录系统采用分布式架构，登录模块负责身份认证。\n\n缓存策略为LRU淘汰。")
 	writeT(t, filepath.Join(dir, "readme.txt"), "这是一个无关文件，讲的是缓存系统。")
 
-	talent := lucenet.New(dir)
-	search, refresh := luceneTools(t, talent)
+	talent := blevet.New(dir)
+	search, refresh := blevetTools(t, talent)
 	callLuceneCtx(t, refresh, dir, nil)
 
 	// 中文词检索（"身份认证" 为分词可命中的词组）
