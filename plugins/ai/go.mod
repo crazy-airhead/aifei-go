@@ -7,6 +7,7 @@ require (
 	github.com/crazy-airhead/aifei-go/ai/agent v1.0.3
 	github.com/crazy-airhead/aifei-go/aifei v1.0.3
 	github.com/crazy-airhead/aifei-go/config v1.0.3
+	github.com/crazy-airhead/aifei-go/db v1.0.3
 	github.com/crazy-airhead/aifei-go/log v1.0.3
 	github.com/crazy-airhead/aifei-go/mcp v1.0.3
 )
@@ -24,6 +25,7 @@ replace (
 	github.com/crazy-airhead/aifei-go/aifei => ../../aifei
 	github.com/crazy-airhead/aifei-go/config => ../../config
 	github.com/crazy-airhead/aifei-go/dami => ../../dami
+	github.com/crazy-airhead/aifei-go/db => ../../db
 	github.com/crazy-airhead/aifei-go/enjoy => ../../enjoy
 	github.com/crazy-airhead/aifei-go/flow => ../../flow
 	github.com/crazy-airhead/aifei-go/log => ../../log
