@@ -220,16 +220,46 @@
 - **有意适配**：安装指引文案去掉 `npx sandbox-runtime windows-install` 行（Node 生态专属），API 提示改 Go 名；`ErrWindowsBackendPending` 占位哨兵随卡删除（其文档声明的生命周期即「P5-s4 落地」）。
 - Windows 后端纯字符串/进程操作全平台编译全平台可测（`wfp.go` 中性文件名，三平台交叉构建门禁绿）；真 WFP 执行只在 windows 有意义，Manager 的 windows 分发分支在其余平台仅编译验证。
 
+### P5-M 模型补全与其余方言扩展（2026-10-10 立项并落地；契约 `02-chat-core.md` §11 与 §2.1 #5/#23）
+
+- **ai/rerank**（02 §11 "rerank P4（RepositoryTool 依赖）" 的补欠）：Model/Builder/RequestDesc + openai/dashscope 两方言；`Rerank` 写回 score 后降序返回，满足 P4-b 预留的 `rag.Reranker` 接口位；条数不等显式报错（Java 直接越界的收敛）。usage 不进 Go 契约（与 embedding 对齐）。
+- **ai/generate**（02 §11 "generate P5"）：Config 带 TaskURL（裸拼接语义，`TaskURLAndId` 不走 path.Join）+ openai/ollama/dashscope 三方言；Content{Text,Data,URL,MimeType} + Value 优先级 url>data>text；模型级默认选项配置形态字符串强类型转换（对标 GenerateOptions.putAll：bool/整数/浮点）。忠实怪癖：dashscope task_id 分支无 taskUrl 守卫（空 taskUrl 时 url=裸拼接结果，对照 openai 有双非空守卫）、ollama error 键存在即错、ollama matched 恒 false 仅兜底。
+- **ai/ui/agui**（06 §6.2）：31 事件型（含 5 个 Deprecated THINKING_*）+ Wrapper 事件映射状态机。忠实语义：TEXT_START 落 default 分支降级 CUSTOM("text_start")（正文开界由 TEXT_DELTA 懒开）、ABORT/ERROR terminal 后 finish 静默、SSE 帧无 [DONE] 终标（与 aisdk 的协议差异）。agent 事件流映射（Java toAgUiAgentStream 的反射版）不在首卡——依赖 ai/agent 事件型，后续需要前端协议时补。
+- **ai/dialect/gemini Interactions API**（00 §2.1 #5 "gemini(+interactions)"）：`InteractionsDialect`（google-interactions）+ URL 归一矩阵 + input[] step 数组请求 + event_type 帧协议解析（step 累积器挂 StreamContext attrs 并发隔离、服务端工具三态、搜索结果逐项投影去重、step.stop 签名绑定、TOOL_CALL_END 由 core 收尾）+ 非流式 steps[] 终态与六终态映射 + usage（prompt=input+tool_use、webSearch=Σsearch 类 grounding 计数）。
+- **MCP×Talent 桥**（06 §8）：`aimcp.NewTalent`（远端 talent://metadataMcp 元数据 + 四 hide 管理工具跨进程回环）+ `RegisterTalent`（本地 talent 导出）。Go 的 Talent 接口无 error 位：IsSupported fail-closed、Instruction/Tools 空值回退、OnAttach 记日志。
+
+**P5-M 已落地（2026-10-10，四提交 06772ea/c2b5f8b/ee619a9）**：黄金样本搬译 Java 两 rerank 测试、三 generate 测试、AgUiStreamWrapperTest 七用例、interactions 五测试文件；httptest 端到端（rerank 回环、generate 强类型转换、agui 假 OpenAI、interactions alt=sse）。
+
+### P5-R ragloader 三件（2026-10-10 立项并落地；契约 `05-rag-design.md` §7）
+
+落位 `plugins/ai/ragloader`（goldmark + goquery + db）：**MarkdownLoader**（Heading 恒切分 + 水平线/代码块/块引用可选切分——块引用切的是块首不切块尾、代码块后恒切分的 commonmark SplitVisitor 语义逐分支对标；标题上 metadata category=header_N+title、行内码/围栏码染色、软硬换行与列表项归一空格）；**HtmlSimpleLoader**（goquery body 归一化正文 + title/description/language 元数据）；**DdlLoader**（SQL 模板全参数化、缺省 MySQL information_schema 形态、`#{key}` 占位符替换、完整 DDL 重组截断保留表体；Java 源码 shcema 笔误在 Go 修正）。pdf/word/excel/ppt 维持 00 §2.2-I 的分批降级决策（解析库按格式独立立项）。测试入 `_test/ai_plugin_test`（markdown 切分矩阵、html 元数据、ddl sqlite 回环三形态）。
+
+### P5-V ragrepo 样板后端（2026-10-10 立项并落地；契约 `05-rag-design.md` §6）
+
+落位 `plugins/ai/ragrepo`：共享 **过滤表达式解析器**（enjoy 判定子集：==/!=/超小于等于/&&/||/!/裸字段/裸布尔/括号/单双引号/裸数值 → 节点树 → ES bool query 与 SQL WHERE 双翻译；方法调用等不可译形态 ok=false 回退 rag.Refilter 内存过滤；SQL 值一律参数化——Java pgvector FilterTransformer 内联字符串的注入面收口）。**es.Repository**（复用 plugins/elasticsearch Client）：检索按 ES8 现代语义重写——VECTOR 走顶层 knn（Java 把 knn 子句误包进 bool.must）、EXACT_KNN script_score、HYBRID 恒 bool should [match+script_score]；批量写入 metadata 平铺 + 分批进度。**pgvector.Repository**（database/sql）：VECTOR(dims)+JSONB+元数据列建表、ivfflat cosine 索引、upsert ON CONFLICT、1−(embedding<=>vec) 相似度 + 过滤 WHERE（声明列直引、其余 metadata->>'k'）+ 占位符随过滤参数偏移。测试面（05 §9.5）：SQL 骨架经导出的 Build* 函数黄金断言 + stubESClient 全链路；真连开关 RAG_PGVECTOR_DSN 留位（FLOW_MYSQL_DSN 先例）。其余后端（milvus/qdrant/redis…）维持 00 §2.1 #22 的按需逐个决策。
+
+### P5-H harness 编排容器（2026-10-10 立项并落地；契约 `06-talents-and-extended.md` §4）
+
+落位 `ai/harness` 新模块（依赖 ai/agent + flow + yaml.v3）：**AgentDefinition**（frontmatter 全字段 + 序列化往返 + 五内置 markdown 代理 embed：explore/general/plan/bash/git-summary——hidden 与无写权限语义照搬）；**PermissionEngine**（priority 降序 + 同序 DENY>ALLOW>ASK + 首条匹配 + glob→正则）与 **HITL 三策略**（Bash 六规则/Write 路径回溯与敏感文件/Web 高风险域名）+ PermissionInterceptor（`ai.Interceptor.InterceptTool` 缝否决——为此给 `ai.ToolRequest` 增量补 Name 位；ASK 经审批回调放行并记忆 allow 规则）；**BashCommandClassifier**（只读白名单含 git 子命令细分、sed -i/重定向/git branch -d 排除、&&/||/; 分段）；**CommandRegistry + MarkdownCommand**（Claude Code 自定义命令兼容：$1..N/$ARGUMENTS 模板、子目录冒号命名）；**AgentManager**（注册表 + 目录回源 + hidden 过滤）与 **AgentFactory**（definition → react.Builder）；**TaskTalent/GenerateTalent**（task 串行与 multitask 并行 XML 聚合、generate 复制 general 覆写 + .soloncode 持久化）；**Engine**（模型注册表/工具池/主代理懒加载热重建/扩展 initialize 生命周期/Prompt 入口）。
+
+域收窄（06 §2 优先级矩阵的 talents 只有五件落地）：工具名映射按 Go 已有 talent 工具集（*/**/pi 展开收窄为 read/write/shell/webfetch 等 + clock 收尾）；terminal/code/memory/skill/lsp 族 talent 未迁移——经 `Engine.SetToolMapper` 缝对接，随后续 talents 解锁补齐。上下文压缩拦截器（Java ContextCompressionInterceptor）同理留缝。
+
+### P5-L loop 持久循环引擎（2026-10-10 立项并落地；契约 `06-talents-and-extended.md` §5）
+
+落位 `ai/loop` 新模块（依赖 ai + flow 单点）：**状态机**（IDLE→PLANNING→EXECUTING→VERIFYING→FIXING→COMPLETED/FAILED(+PAUSED) 转移表）+ 引擎主循环（迭代 → VERIFYING → 验证裁决：passed→续跑/COMPLETED、needsFix→FIXING 修复轮、否则 FAILED）；**Strategy SPI** 三内置：**Ralph**（PRD 文档/用户故事/完成度统计 + Architect→VerificationState→Critic 双层验证与上限强判 + 实现即完成声明语义）、**TeamPipeline**（PLAN→PRD→EXEC→VERIFY→FIX 全程 contextData 驱动、非法转移守卫、取消/保留恢复、fix 溢出 FAILED）、**UltraQA**（质量门禁 + CommandExecutor 缝 + 同失败三连指纹归一 + 轮次上限；ProcessCommandExecutor 走 sh -c/cmd /c）；**磁盘状态**（.loops/{state/{ralph,team,ultraqa,sessions},prd,progress} 布局、_meta 信封 + data 双层 JSON 旧格式兼容、原子写 tmp+rename 无残留）；**互斥守卫**（内存 activeModes + 磁盘同会话双检）；**Autopilot**（五阶段管道 + 适配器 SPI + 跟踪摘要 + 取消）。
+
+Java 两处已知缺陷的 Go 修正（模块文档注明）：① iterationCount 每轮真实递增（保险丝真实生效——Java 恒 0 只对 MaxIterations=0 有效）；② pause 以条件变量阻塞执行 goroutine（resume 真续跑——Java pause 使线程退出、恢复不续跑）。stop→FAILED 的 Java 语义保留。agent/flow/harness 三集成桥（Java integration 包的反射版）不随首卡——loop 的 Strategy/StoryImplementor 已是函数位，宿主直接注入即可。
+
 ---
 
 ## 9. 全局验收清单（Definition of Done）
 
-- [ ] `go test`（显式模块路径列表）全绿；被测模块全部零真实外网依赖。
-- [ ] 流式 6 不变量、copy-before-mutate、MCP 判别/协商矩阵有命名测试固化。
-- [ ] 方言请求 JSON 与关键 SSE 回放用例有黄金样本（来源标注 Java 测试文件）。
-- [ ] `go.work` / CLAUDE.md（模块表 + 测试表）/ `docs/arch/index.md` / VitePress sidebar 同步更新。
-- [ ] 每个 P 期一次多模块标签发布演练（`ai/vX.Y.Z`、`mcp/vX.Y.Z`…，对照打标签约定）。
-- [ ] API 命名走查：无 `Get` 冗余前缀访问器、泛型受限处走包级 helper（与 01 §7 速查一致）。
+- [x] `go test`（显式模块路径列表）全绿（P0–P5 全量：27 测试模块 + 库模块编译检查）；被测模块全部零真实外网依赖（httptest 假服务回放/嵌入式 sqlite/真 sandbox-exec 平台内建）。
+- [x] 流式 6 不变量、copy-before-mutate、MCP 判别/协商矩阵有命名测试固化（`_test/ai_test/stream_test.go`、`_test/ai_agent_test/team_test.go`、`_test/mcp_test/{mcp,client}_test.go`）。
+- [x] 方言请求 JSON 与关键 SSE 回放用例有黄金样本（来源标注 Java 测试文件：rerank/generate/agui/interactions 各测试文件头注明搬译来源；P0–P4 既有黄金沿用）。
+- [x] `go.work` / CLAUDE.md（模块表 + 测试表）/ `docs/arch/index.md` / VitePress sidebar 同步更新（P5 收口一并完成；index/sidebar 自 P3 起收录八篇未再变）。
+- [x] 每个 P 期一次多模块标签发布演练（`ai/v1.0.3`、`mcp/v1.0.3`、`ai/agent/v1.0.3`、`ai/flow/v1.0.3`、`plugins/ai/v1.0.3`；P5 新模块 `sandbox/v1.0.3`、`ai/harness/v1.0.3`、`ai/loop/v1.0.3`、`plugins/ai/ragloader/v1.0.3`、`plugins/ai/ragrepo/v1.0.3` 随本期补打）。
+- [x] API 命名走查：无 `Get` 冗余前缀访问器（P5 新模块 grep 复核零命中）、泛型受限处走包级 helper（与 01 §7 速查一致）。
 
 ## 10. 风险与对策（TDD 视角）
 
