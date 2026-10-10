@@ -18,6 +18,7 @@ use (
 	./_test/json_test
 	./_test/kafka_test
 	./_test/log_test
+	./_test/mcp_test
 	./_test/nacos_test
 	./_test/nami_test
 	./_test/server_test
@@ -35,6 +36,7 @@ use (
 	./http
 	./json
 	./log
+	./mcp
 	./nami
 	./plugins/cache
 	./plugins/dami
