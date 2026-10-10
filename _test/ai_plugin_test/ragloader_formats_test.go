@@ -1,246 +1,43 @@
-// ragloader_formats_test.go 重格式四件黑盒测试：docx/pptx（测试内自造 zip+XML
-// 夹具）、xlsx（excelize 生成夹具）、pdf（手写最小 PDF——文本层抽取）。
+// ragloader_formats_test.go 重格式四件黑盒测试（markitdown 统一引擎）：
+// 夹具为 conductor-oss/markitdown v0.0.1 testdata 的真实文件（Apache-2.0，
+// 见 testdata/LICENSE）——docx 段落/整档双模式、pptx 真页标记切分、xlsx
+// sheet 切分 + 行分批、pdf 段块近似页切分；旧格式拒绝与非法输入错误面。
 package ai_plugin_test
 
 import (
-	"archive/zip"
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/xuri/excelize/v2"
-
 	ragloader "github.com/crazy-airhead/aifei-go/plugins/ai/ragloader"
 )
 
-// zipOf 测试夹具：map{路径→内容} → zip 字节。
-func zipOf(t *testing.T, files map[string]string) []byte {
+// fixture 读取 markitdown testdata 夹具。
+func fixture(t *testing.T, name string) []byte {
 	t.Helper()
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-	for name, content := range files {
-		w, err := zw.Create(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		io.WriteString(w, content)
-	}
-	if err := zw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return buf.Bytes()
-}
-
-func docxOf(paragraphs ...string) string {
-	var body strings.Builder
-	for _, p := range paragraphs {
-		body.WriteString(`<w:p><w:r><w:t>` + p + `</w:t></w:r></w:p>`)
-	}
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:body>` + body.String() + `</w:body></w:document>`
-}
-
-// ---- docx ----
-
-func TestRagloaderWord(t *testing.T) {
-	data := zipOf(t, map[string]string{
-		"[Content_Types].xml":          `<Types/>`,
-		"word/document.xml":            docxOf("第一段文字。", "第二段：含 &lt;特殊&gt; 与 &amp; 符号。", "Third paragraph."),
-		"word/_rels/document.xml.rels": `<Relationships/>`,
-	})
-	l := ragloader.NewWordLoader(bytes.NewReader(data))
-
-	// 缺省 PARAGRAPH 模式
-	docs, err := l.Load(context.Background())
+	data, err := os.ReadFile(filepath.Join("testdata", name))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(docs) != 3 {
-		t.Fatalf("按段切分应 3 文档，得 %d", len(docs))
-	}
-	if docs[0].Content != "第一段文字。" {
-		t.Fatalf("段落 0：%q", docs[0].Content)
-	}
-	if docs[1].Content != "第二段：含 <特殊> 与 & 符号。" {
-		t.Fatalf("XML 转义应还原：%q", docs[1].Content)
-	}
-	if docs[0].Metadata["type"] != "word" {
-		t.Fatalf("元数据：%v", docs[0].Metadata)
-	}
+	return data
+}
 
-	// SINGLE 模式
-	docs, err = ragloader.NewWordLoader(bytes.NewReader(data)).
-		LoadMode(ragloader.WordSingle).Load(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(docs) != 1 || strings.Count(docs[0].Content, "\n") != 2 {
-		t.Fatalf("整文档单文档（\\n 连接）：%q", docs[0].Content)
-	}
-
-	// 空 docx（无段落）
-	empty := zipOf(t, map[string]string{"word/document.xml": docxOf()})
-	if docs, err := ragloader.NewWordLoader(bytes.NewReader(empty)).Load(context.Background()); err != nil || len(docs) != 0 {
-		t.Fatalf("空文档：%v %d", err, len(docs))
-	}
-
-	// 非 zip（.doc 旧格式）报不支持
-	if _, err := ragloader.NewWordLoader(strings.NewReader("OLE2 binary...")).Load(context.Background()); err == nil ||
-		!strings.Contains(err.Error(), "旧格式不支持") {
-		t.Fatalf("旧格式错误面：%v", err)
-	}
-
-	// 文件源
+func writeFixture(t *testing.T, name string, data []byte) string {
+	t.Helper()
 	dir := t.TempDir()
-	path := filepath.Join(dir, "a.docx")
-	osWrite(t, path, data)
-	if docs, err := ragloader.NewWordLoaderFromFile(path).Load(context.Background()); err != nil || len(docs) != 3 {
-		t.Fatalf("文件源：%v %d", err, len(docs))
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
 	}
+	return path
 }
 
-// ---- pptx ----
-
-func TestRagloaderPpt(t *testing.T) {
-	slide := func(texts ...string) string {
-		var body strings.Builder
-		for _, text := range texts {
-			body.WriteString(`<a:p><a:r><a:t>` + text + `</a:t></a:r></a:p>`)
-		}
-		return `<?xml version="1.0"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree>` + body.String() + `</p:spTree></p:cSld></p:sld>`
-	}
-	data := zipOf(t, map[string]string{
-		"ppt/slides/slide1.xml":  slide("封面标题", "副标题"),
-		"ppt/slides/slide2.xml":  slide("第二页内容", "要点一", "要点二"),
-		"ppt/slides/slide10.xml": slide("第十页（排序验证）"),
-	})
-
-	// 缺省 SINGLE
-	docs, err := ragloader.NewPptLoader(bytes.NewReader(data)).Load(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(docs) != 1 {
-		t.Fatalf("整文档应 1 文档：%d", len(docs))
-	}
-	// 数字序（slide2 在 slide10 前）
-	idx2 := strings.Index(docs[0].Content, "第二页内容")
-	idx10 := strings.Index(docs[0].Content, "第十页")
-	if idx2 < 0 || idx10 < 0 || idx2 > idx10 {
-		t.Fatalf("页序（数字序）：%q", docs[0].Content)
-	}
-	if !strings.Contains(docs[0].Content, "\n\n\n") {
-		t.Fatal("缺省页分隔符三换行")
-	}
-
-	// PAGE 模式：每页一文档 + page/total_pages 元数据
-	docs, err = ragloader.NewPptLoader(bytes.NewReader(data)).
-		LoadMode(ragloader.PptPage).Load(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(docs) != 3 {
-		t.Fatalf("每页一文档应 3：%d", len(docs))
-	}
-	if docs[0].Metadata["page"] != 1 || docs[2].Metadata["page"] != 3 || docs[2].Metadata["total_pages"] != 3 {
-		t.Fatalf("页元数据：%v", docs[2].Metadata)
-	}
-	if !strings.Contains(docs[0].Content, "封面标题") {
-		t.Fatalf("页内容：%q", docs[0].Content)
-	}
-
-	// 非 zip 报不支持
-	if _, err := ragloader.NewPptLoader(strings.NewReader("old ppt")).Load(context.Background()); err == nil ||
-		!strings.Contains(err.Error(), "旧格式不支持") {
-		t.Fatalf("旧格式错误面：%v", err)
-	}
-}
-
-// ---- xlsx ----
-
-func TestRagloaderExcel(t *testing.T) {
-	// excelize 造夹具
-	f := excelize.NewFile()
-	sheet1 := f.GetSheetName(0)
-	f.SetSheetRow(sheet1, "A1", &[]any{"名称", "数量", "备注"})
-	f.SetSheetRow(sheet1, "A2", &[]any{"苹果", 3, "新鲜"})
-	f.SetSheetRow(sheet1, "A3", &[]any{"香蕉", 5, ""})
-	f.SetSheetRow(sheet1, "A4", &[]any{"橙子", 7, "酸甜"})
-	f.NewSheet("Sheet2")
-	f.SetSheetRow("Sheet2", "A1", &[]any{"k", "v"})
-	f.SetSheetRow("Sheet2", "A2", &[]any{"a", 1})
-	var buf bytes.Buffer
-	if err := f.Write(&buf); err != nil {
-		t.Fatal(err)
-	}
-	data := buf.Bytes()
-
-	l := ragloader.NewExcelLoader(bytes.NewReader(data))
-	docs, err := l.Load(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(docs) != 2 { // sheet1 3 行（≤200 一批）+ sheet2 1 行
-		t.Fatalf("批文档数：%d", len(docs))
-	}
-	// sheet1 首批：3 行 map JSON
-	var rows []map[string]any
-	if err := json.Unmarshal([]byte(docs[0].Content), &rows); err != nil {
-		t.Fatal(err)
-	}
-	if len(rows) != 3 || rows[0]["名称"] != "苹果" || rows[2]["备注"] != "酸甜" {
-		t.Fatalf("行映射：%v", rows)
-	}
-	if docs[0].Metadata["sheet"] != sheet1 || docs[0].Metadata["type"] != "excel" {
-		t.Fatalf("元数据：%v", docs[0].Metadata)
-	}
-	// 数值经 excelize GetRows 为字符串形态
-	if rows[0]["数量"] != "3" && rows[0]["数量"] != 3.0 {
-		t.Fatalf("数值单元格：%v", rows[0]["数量"])
-	}
-
-	// 分批：maxRows=2 → sheet1 2 批（2+1）
-	docs, err = ragloader.NewExcelLoader(bytes.NewReader(data)).
-		DocumentMaxRows(2).Load(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(docs) != 3 { // 2+1+1
-		t.Fatalf("分批文档数：%d", len(docs))
-	}
-
-	// 不分批：-1
-	docs, _ = ragloader.NewExcelLoader(bytes.NewReader(data)).
-		DocumentMaxRows(-1).Load(context.Background())
-	if len(docs) != 2 {
-		t.Fatalf("不分批每 sheet 一文档：%d", len(docs))
-	}
-
-	// 空行终止：首行标题后空行即停
-	f2 := excelize.NewFile()
-	s := f2.GetSheetName(0)
-	f2.SetSheetRow(s, "A1", &[]any{"h1", "h2"})
-	f2.SetSheetRow(s, "A2", &[]any{"v1", "v2"})
-	f2.SetSheetRow(s, "A4", &[]any{"v3", "v4"}) // A3 空行
-	var buf2 bytes.Buffer
-	f2.Write(&buf2)
-	if docs, _ := ragloader.NewExcelLoader(bytes.NewReader(buf2.Bytes())).Load(context.Background()); len(docs) != 1 {
-		t.Fatalf("空行终止：%d", len(docs))
-	}
-}
-
-// ---- pdf（手写最小 PDF 夹具）----
-
+// minimalPDF 手写最小 PDF（pdf talent 测试共用——markitdown/pdfium 亦可解析）。
 func minimalPDF(lines ...string) []byte {
 	var objs []string
-	// 1=catalog 2=pages 3=page 4=content 5=font
 	content := "BT /F1 12 Tf 72 720 Td 14 TL\n"
 	for _, line := range lines {
 		content += fmt.Sprintf("(%s) Tj T*\n", line)
@@ -253,7 +50,7 @@ func minimalPDF(lines ...string) []byte {
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
 	)
-	var buf bytes.Buffer
+	var buf strings.Builder
 	buf.WriteString("%PDF-1.4\n")
 	offsets := []int{0}
 	for i, obj := range objs {
@@ -266,47 +63,198 @@ func minimalPDF(lines ...string) []byte {
 		fmt.Fprintf(&buf, "%010d 00000 n \n", off)
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xref)
-	return buf.Bytes()
+	return []byte(buf.String())
 }
 
+// ---- docx ----
+
+func TestRagloaderWord(t *testing.T) {
+	data := fixture(t, "test.docx")
+
+	// 缺省 PARAGRAPH：按 Markdown 空行分段（真实文档多段）
+	docs, err := ragloader.NewWordLoaderNamed(strings.NewReader(string(data)), "test.docx").
+		Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(docs) < 5 {
+		t.Fatalf("真实 docx 应多段（≥5），得 %d", len(docs))
+	}
+	for i, doc := range docs {
+		if strings.TrimSpace(doc.Content) == "" {
+			t.Fatalf("段 %d 空", i)
+		}
+		if doc.Metadata["type"] != "word" {
+			t.Fatalf("元数据：%v", doc.Metadata)
+		}
+	}
+	// 首段含标题（markitdown docx 输出：标题行为首段）
+	if !strings.Contains(docs[0].Content, "AutoGen") {
+		t.Fatalf("首段内容：%q", headStr(docs[0].Content, 80))
+	}
+
+	// SINGLE：整档单文档
+	docs, err = ragloader.NewWordLoaderNamed(strings.NewReader(string(data)), "test.docx").
+		LoadMode(ragloader.WordSingle).Load(context.Background())
+	if err != nil || len(docs) != 1 {
+		t.Fatalf("SINGLE：%d %v", len(docs), err)
+	}
+	if !strings.Contains(docs[0].Content, "AutoGen") || len(docs[0].Content) < 3000 {
+		t.Fatalf("整档内容（%d 字）", len(docs[0].Content))
+	}
+
+	// .doc 旧格式拒绝（markitdown 无 OLE2 word 转换器——防纯文本兜底乱码）
+	if _, err := ragloader.NewWordLoaderNamed(strings.NewReader("OLE2"), "a.doc").
+		Load(context.Background()); err == nil || !strings.Contains(err.Error(), "旧格式不支持") {
+		t.Fatalf(".doc 错误面：%v", err)
+	}
+
+	// 文件源
+	path := writeFixture(t, "a.docx", data)
+	if docs, err = ragloader.NewWordLoaderFromFile(path).Load(context.Background()); err != nil || len(docs) < 5 {
+		t.Fatalf("文件源：%d %v", len(docs), err)
+	}
+}
+
+// ---- pptx ----
+
+func TestRagloaderPpt(t *testing.T) {
+	data := fixture(t, "test.pptx")
+
+	// PAGE：真页切分（markitdown 页标记——test.pptx 为 6 页）
+	docs, err := ragloader.NewPptLoaderNamed(strings.NewReader(string(data)), "test.pptx").
+		LoadMode(ragloader.PptPage).Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(docs) != 6 {
+		t.Fatalf("真页应 6 文档，得 %d", len(docs))
+	}
+	for i, doc := range docs {
+		if doc.Metadata["page"] != i+1 || doc.Metadata["total_pages"] != 6 || doc.Metadata["type"] != "ppt" {
+			t.Fatalf("页 %d 元数据：%v", i+1, doc.Metadata)
+		}
+	}
+	if !strings.Contains(docs[0].Content, "AutoGen") {
+		t.Fatalf("首页内容：%q", headStr(docs[0].Content, 80))
+	}
+
+	// SINGLE：剥标记 + 分隔符连接（默认三换行）
+	docs, err = ragloader.NewPptLoaderNamed(strings.NewReader(string(data)), "test.pptx").
+		Load(context.Background())
+	if err != nil || len(docs) != 1 {
+		t.Fatalf("SINGLE：%d %v", len(docs), err)
+	}
+	if strings.Contains(docs[0].Content, "Slide number:") {
+		t.Fatal("SINGLE 应剥除页标记")
+	}
+	if !strings.Contains(docs[0].Content, "\n\n\n") {
+		t.Fatal("缺省页分隔符三换行")
+	}
+
+	// .ppt 旧格式拒绝
+	if _, err := ragloader.NewPptLoaderNamed(strings.NewReader("old"), "a.ppt").
+		Load(context.Background()); err == nil || !strings.Contains(err.Error(), "旧格式不支持") {
+		t.Fatalf(".ppt 错误面：%v", err)
+	}
+}
+
+// ---- xlsx ----
+
+func TestRagloaderExcel(t *testing.T) {
+	data := fixture(t, "test.xlsx")
+
+	// 按 sheet 切分（夹具两 sheet：Sheet1 + UUID 名；各 ≤200 行一文档）
+	docs, err := ragloader.NewExcelLoaderNamed(strings.NewReader(string(data)), "test.xlsx").
+		Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(docs) != 2 {
+		t.Fatalf("两 sheet 应 2 文档，得 %d", len(docs))
+	}
+	doc := docs[0]
+	if doc.Metadata["sheet"] != "Sheet1" || doc.Metadata["type"] != "excel" {
+		t.Fatalf("元数据：%v", doc.Metadata)
+	}
+	if !strings.Contains(doc.Content, "| Alpha |") {
+		t.Fatalf("Markdown 表形态：%q", headStr(doc.Content, 120))
+	}
+	if docs[1].Metadata["sheet"] != "09060124-b5e7-4717-9d07-3c046eb" {
+		t.Fatalf("第二 sheet 名：%v", docs[1].Metadata["sheet"])
+	}
+
+	// 行分批：maxRows=5 → 多批（Sheet1 约 24 行 → 5 批 + UUID sheet 2 批）
+	docs, err = ragloader.NewExcelLoaderNamed(strings.NewReader(string(data)), "test.xlsx").
+		DocumentMaxRows(5).Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(docs) < 5 {
+		t.Fatalf("行分批应多批，得 %d", len(docs))
+	}
+	// 分批保留 sheet 元数据
+	for _, d := range docs {
+		if d.Metadata["sheet"] == nil {
+			t.Fatalf("分批丢失 sheet 元数据：%v", d.Metadata)
+		}
+	}
+
+	// 不分批：-1（每 sheet 一文档）
+	docs, _ = ragloader.NewExcelLoaderNamed(strings.NewReader(string(data)), "test.xlsx").
+		DocumentMaxRows(-1).Load(context.Background())
+	if len(docs) != 2 {
+		t.Fatalf("不分批每 sheet 一文档：%d", len(docs))
+	}
+}
+
+// ---- pdf ----
+
 func TestRagloaderPdf(t *testing.T) {
-	data := minimalPDF("Hello PDF World", "Second line of text")
+	data := fixture(t, "test.pdf")
 
-	// 缺省 PAGE 模式
-	docs, err := ragloader.NewPdfLoader(bytes.NewReader(data)).Load(context.Background())
+	// 缺省 PAGE：Markdown 段块（近似页切分——块序 page 元数据 + summary）
+	docs, err := ragloader.NewPdfLoaderNamed(strings.NewReader(string(data)), "test.pdf").
+		Load(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(docs) != 1 {
-		t.Fatalf("单页 PDF 应 1 文档：%d", len(docs))
+	if len(docs) < 3 {
+		t.Fatalf("真实 PDF 应多段块（≥3），得 %d", len(docs))
 	}
-	if !strings.Contains(docs[0].Content, "Hello PDF World") || !strings.Contains(docs[0].Content, "Second line") {
-		t.Fatalf("文本抽取：%q", docs[0].Content)
+	if docs[0].Metadata["page"] != 1 || docs[0].Metadata["type"] != "pdf" ||
+		docs[0].Metadata["summary"] != "Page 1" {
+		t.Fatalf("块元数据：%v", docs[0].Metadata)
 	}
-	if docs[0].Metadata["page"] != 1 || docs[0].Metadata["total_pages"] != 1 ||
-		docs[0].Metadata["summary"] != "Page 1" || docs[0].Metadata["type"] != "pdf" {
-		t.Fatalf("页元数据：%v", docs[0].Metadata)
+	total, _ := docs[0].Metadata["total_pages"].(int)
+	if total != len(docs) {
+		t.Fatalf("total_pages：%d vs %d", total, len(docs))
+	}
+	if !strings.Contains(docs[0].Content, "Introduction") {
+		t.Fatalf("首块内容：%q", headStr(docs[0].Content, 80))
 	}
 
-	// SINGLE 模式 + pages 元数据
-	docs, err = ragloader.NewPdfLoader(bytes.NewReader(data)).
+	// SINGLE：整档（pages 元数据）
+	docs, err = ragloader.NewPdfLoaderNamed(strings.NewReader(string(data)), "test.pdf").
 		LoadMode(ragloader.PdfSingle).Load(context.Background())
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || len(docs) != 1 {
+		t.Fatalf("SINGLE：%d %v", len(docs), err)
 	}
-	if len(docs) != 1 || docs[0].Metadata["pages"] != 1 {
-		t.Fatalf("整文档：%v", docs[0].Metadata)
+	if docs[0].Metadata["pages"] != 1 || len(docs[0].Content) < 2000 {
+		t.Fatalf("整档（%d 字）：%v", len(docs[0].Content), docs[0].Metadata)
 	}
 
-	// 非法 PDF 报错
-	if _, err := ragloader.NewPdfLoader(strings.NewReader("not a pdf")).Load(context.Background()); err == nil {
+	// 非法 PDF：markitdown/pdfium 报错
+	if _, err := ragloader.NewPdfLoaderNamed(strings.NewReader("not a pdf"), "x.pdf").
+		Load(context.Background()); err == nil {
 		t.Fatal("非法 PDF 应报错")
 	}
 }
 
-func osWrite(t *testing.T, path string, data []byte) {
-	t.Helper()
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		t.Fatal(err)
+func headStr(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
 	}
+	return string(r[:n]) + "..."
 }
