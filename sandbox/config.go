@@ -30,7 +30,7 @@ type RuntimeConfig struct {
 	BwrapPath string
 	// SocatPath linux socat 二进制路径覆写（P5-s2 位）。
 	SocatPath string
-	// Windows windows 后端配置（P5-s4 结构位）。
+	// Windows windows 后端配置（甄别组/sublayer/代理端口段）。
 	Windows *WindowsConfig
 }
 
@@ -83,7 +83,8 @@ type RipgrepConfig struct {
 	Argv0   string
 }
 
-// WindowsConfig windows 后端配置（P5-s4 结构位）。
+// WindowsConfig windows 后端配置（对标 config/WindowsConfig；组引用与
+// sublayer 供 wfp.go 的状态/安装/包装族使用）。
 type WindowsConfig struct {
 	GroupName       string
 	GroupSID        string

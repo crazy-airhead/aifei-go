@@ -100,10 +100,6 @@ func IsSupportedPlatform() bool {
 // ErrUnsupportedPlatform 平台不支持沙箱。
 var ErrUnsupportedPlatform = errors.New("sandbox: configuration is not supported on this platform")
 
-// ErrWindowsBackendPending windows WFP 后端结构位占位（P5-s4 落地；
-// 配置结构已就位，包装分发提前给出明确错误面而非 panic）。
-var ErrWindowsBackendPending = errors.New("sandbox: windows WFP backend lands in P5-s4 (config structs already defined)")
-
 // DependencyCheck 依赖检查结果（errors 致命、warnings 降级提示）。
 type DependencyCheck struct {
 	Errors   []string
@@ -115,7 +111,8 @@ func (d *DependencyCheck) HasErrors() bool { return len(d.Errors) > 0 }
 
 // CheckDependencies 按平台检查沙箱依赖（对标 DependencyChecker.check）：
 // linux 需 ripgrep/bwrap/socat（seccomp 缺失仅告警）；macOS 无外部依赖
-// （sandbox-exec 内建）；windows 在 P5-s4 后端落地时检查 srt-win.exe。
+// （sandbox-exec 内建）；windows 无包级可查项——srt-win.exe/组/WFP 的
+// 就绪检查在 CheckWindowsDependencies（Manager.CheckDependencies 会并入）。
 func CheckDependencies(cfg *RuntimeConfig) *DependencyCheck {
 	if !IsSupportedPlatform() {
 		return &DependencyCheck{Errors: []string{"Unsupported platform"}}

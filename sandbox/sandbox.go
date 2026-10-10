@@ -1,8 +1,9 @@
 // Package sandbox Claude Code sandbox-runtime 的 Go 移植（对标
 // solon-ai-sandbox；Java 版自身是 TypeScript 的忠实移植）。会话级
 // 命令沙箱：macOS Seatbelt（P5-s1，seatbelt.go）/ linux bwrap（P5-s2，
-// bwrap.go）/ windows WFP（P5-s4 结构位）三平台后端 + 域名过滤面 +
-// 代理服务器（P5-s3：HTTP CONNECT 正向代理与 SOCKS5 + 父代理解析）。
+// bwrap.go）/ windows WFP（P5-s4，wfp.go——srt-win.exe CLI 薄包装）三
+// 平台后端 + 域名过滤面 + 代理服务器（P5-s3：HTTP CONNECT 正向代理与
+// SOCKS5 + 父代理解析）。
 // 后端文件名刻意不带 _darwin/_linux 后缀——Go 的隐式 GOOS 构建约束
 // 会把它们从交叉构建里剔除，而 argv/profile 生成是纯字符串操作，
 // 全平台编译、全平台可测。
@@ -136,12 +137,25 @@ func (m *Manager) IsSandboxingEnabled() bool {
 	return m.cfg != nil
 }
 
-// CheckDependencies 平台依赖检查。
+// CheckDependencies 平台依赖检查。windows 追加 srt-win 就绪检查（组 +
+// WFP 过滤器——包级 CheckDependencies 对 windows 无可查项，Java
+// SandboxManager.checkDependencies 的合并分支同款；偏差：Java 计算了
+// sublayerGuid 却调未传入的旧版重载——上游死变量缺陷，Go 传入配置值）。
 func (m *Manager) CheckDependencies() *DependencyCheck {
 	m.mu.RLock()
 	cfg := m.cfg
 	m.mu.RUnlock()
-	return CheckDependencies(cfg)
+	result := CheckDependencies(cfg)
+	if DetectPlatform() == Windows {
+		sublayer := ""
+		if cfg != nil && cfg.Windows != nil {
+			sublayer = cfg.Windows.WfpSublayerGUID
+		}
+		winDeps := CheckWindowsDependencies(windowsGroupRef(cfg), sublayer)
+		result.Errors = append(result.Errors, winDeps.Errors...)
+		result.Warnings = append(result.Warnings, winDeps.Warnings...)
+	}
+	return result
 }
 
 // Config 当前配置（可能 nil——零值 Manager 或已 Reset）。
@@ -274,11 +288,13 @@ func (m *Manager) WrapWithSandbox(command string, binShell string, customConfig 
 	}
 }
 
-// WrapWithSandboxArgv 包装为 spawn 描述（argv + env）：macOS/linux 为
-// [shell, -c, <wrapped>] + 原样系统环境；windows 为专用形态（P5-s4）。
+// WrapWithSandboxArgv 包装为 spawn 描述（argv + env）：windows 为 srt-win
+// exec 专用形态（env 携带完整代理变量集，argv 须 shell:false spawn——
+// 这是 windows 唯一受支持的包装方法）；macOS/linux 为 [shell, -c,
+// <wrapped>] + 原样系统环境，调用方可跨平台统一 spawn。
 func (m *Manager) WrapWithSandboxArgv(command string, binShell string, customConfig *RuntimeConfig) (*SpawnSpec, error) {
 	if DetectPlatform() == Windows {
-		return nil, ErrWindowsBackendPending
+		return m.wrapWindows(command, binShell, customConfig)
 	}
 
 	wrapped, err := m.WrapWithSandbox(command, binShell, customConfig)
@@ -293,6 +309,36 @@ func (m *Manager) WrapWithSandboxArgv(command string, binShell string, customCon
 		Argv: []string{shell, "-c", wrapped},
 		Env:  currentEnv(),
 	}, nil
+}
+
+// wrapWindows windows 分发（Java wrapWithSandboxArgv WINDOWS 分支）：组
+// 引用取主配置 windows 段；仅在启用网络限制时透传代理端口（代理环境
+// 变量在 WrapCommandWindows 内单一来源生成并并进完整环境）。
+func (m *Manager) wrapWindows(command, binShell string, customConfig *RuntimeConfig) (*SpawnSpec, error) {
+	m.mu.RLock()
+	mainCfg := m.cfg
+	httpP, socksP := m.httpP, m.socksP
+	m.mu.RUnlock()
+
+	params := &WindowsParams{
+		Command:  command,
+		Group:    windowsGroupRef(mainCfg),
+		BinShell: binShell,
+	}
+	if hasNetworkRestriction(customConfig, mainCfg) {
+		params.HTTPProxyPort = httpP
+		params.SocksProxyPort = socksP
+	}
+	return WrapCommandWindows(params)
+}
+
+// windowsGroupRef 主配置 windows 段的组引用（段缺省即 nil 引用——
+// groupRefArgs 回落缺省组名）。
+func windowsGroupRef(cfg *RuntimeConfig) *WindowsGroupRef {
+	if cfg == nil || cfg.Windows == nil {
+		return nil
+	}
+	return &WindowsGroupRef{GroupName: cfg.Windows.GroupName, GroupSID: cfg.Windows.GroupSID}
 }
 
 // CleanupAfterCommand 命令结束后的轻量清场：linux 清 bwrap 挂载点残留
@@ -311,12 +357,7 @@ func (m *Manager) wrapLinux(command, binShell string, customConfig, mainCfg *Run
 	readConfig := m.buildReadConfig(customConfig, mainCfg)
 
 	// allowedDomains 已定义（即使空 = 全拒）即启用网络限制
-	hasNetworkConfig := false
-	if c := customConfig; c != nil && c.Network != nil && c.Network.AllowedDomains != nil {
-		hasNetworkConfig = true
-	} else if mainCfg != nil && mainCfg.Network != nil && mainCfg.Network.AllowedDomains != nil {
-		hasNetworkConfig = true
-	}
+	hasNetworkConfig := hasNetworkRestriction(customConfig, mainCfg)
 
 	// 后端专属配置恒取主配置（custom 只覆盖文件系统面与布尔位——Java 同款）
 	var (
@@ -408,12 +449,7 @@ func (m *Manager) buildDarwinParams(command, binShell string, customConfig, main
 
 	// 网络限制：allowedDomains 已定义（即使空 = 全拒）即启用；
 	// 代理端口仅在启用时透传（活切换 + 空白名单全拒都靠代理面）
-	hasNetworkConfig := false
-	if c := customConfig; c != nil && c.Network != nil && c.Network.AllowedDomains != nil {
-		hasNetworkConfig = true
-	} else if mainCfg != nil && mainCfg.Network != nil && mainCfg.Network.AllowedDomains != nil {
-		hasNetworkConfig = true
-	}
+	hasNetworkConfig := hasNetworkRestriction(customConfig, mainCfg)
 
 	effective := customConfig
 	if effective == nil {
@@ -536,6 +572,15 @@ func effectiveFilesystem(customConfig, mainCfg *RuntimeConfig) *FilesystemConfig
 		return mainCfg.Filesystem
 	}
 	return nil
+}
+
+// hasNetworkRestriction 网络限制是否启用：custom 或主配置任一的
+// allowedDomains 已定义（即使空 = 全拒）即启用（Java hasNetworkConfig）。
+func hasNetworkRestriction(customConfig, mainCfg *RuntimeConfig) bool {
+	if c := customConfig; c != nil && c.Network != nil && c.Network.AllowedDomains != nil {
+		return true
+	}
+	return mainCfg != nil && mainCfg.Network != nil && mainCfg.Network.AllowedDomains != nil
 }
 
 // stripTrailingGlobs 尾 "/**" 剥离（子路径语义：macOS subpath 递归匹
