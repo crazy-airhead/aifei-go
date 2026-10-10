@@ -37,6 +37,7 @@ type Engine struct {
 	agentManager        *AgentManager
 	commandRegistry     *CommandRegistry
 	permissionInterceptor *PermissionInterceptor
+	compressionInterceptor *CompressionInterceptor
 	taskTalent          *TaskTalent
 	generateTalent      *GenerateTalent
 	extensions          []Extension
@@ -186,6 +187,15 @@ func NewEngine(opts ...Option) (*Engine, error) {
 	e.taskTalent = NewTaskTalent(e, e.multitaskMax)
 	e.generateTalent = NewGenerateTalent(e)
 
+	// 上下文压缩拦截器（Composite[KeyInfo, Hierarchical]，100/0.75——Java 装配同款）
+	e.compressionInterceptor = NewCompressionInterceptor(CompositeStrategy{
+		Strategies: []CompressionStrategy{KeyInfoExtractionStrategy{}, HierarchicalCompressionStrategy{}},
+	})
+	e.compressionInterceptor.SetConfig(func(c *CompressionInterceptorConfig) {
+		c.MaxMessages = 100
+		c.MaxContextRatio = 0.75
+	})
+
 	// 缺省工具集
 	if len(e.defaultTools) == 0 {
 		e.defaultTools = []string{"*"}
@@ -228,6 +238,9 @@ func (e *Engine) CommandRegistry() *CommandRegistry { return e.commandRegistry }
 
 // PermissionInterceptor 权限拦截器。
 func (e *Engine) PermissionInterceptor() *PermissionInterceptor { return e.permissionInterceptor }
+
+// CompressionInterceptor 上下文压缩拦截器。
+func (e *Engine) CompressionInterceptor() *CompressionInterceptor { return e.compressionInterceptor }
 
 // TaskTalent 子代理调度能力包。
 func (e *Engine) TaskTalent() *TaskTalent { return e.taskTalent }

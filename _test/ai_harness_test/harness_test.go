@@ -34,7 +34,9 @@ type fakeOpenAI struct {
 }
 
 func newFakeOpenAI(t *testing.T, responses ...string) *fakeOpenAI {
-	t.Helper()
+	if t != nil {
+		t.Helper()
+	}
 	f := &fakeOpenAI{responses: responses}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
@@ -53,7 +55,9 @@ func newFakeOpenAI(t *testing.T, responses ...string) *fakeOpenAI {
 		w.Header().Set("Content-Type", "application/json")
 		io.WriteString(w, resp)
 	}))
-	t.Cleanup(f.srv.Close)
+	if t != nil {
+		t.Cleanup(f.srv.Close)
+	}
 	return f
 }
 

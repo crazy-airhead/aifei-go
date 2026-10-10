@@ -100,9 +100,12 @@ func (e *Engine) GetAgentBuilder(def *AgentDefinition, sessionModel string) *rea
 		builder.TalentAdd(e.generateTalent)
 	}
 
-	// 拦截器：权限（hitl 显式列出或引擎启用）+ StopLoop
+	// 拦截器：权限（hitl 显式列出或引擎启用）+ 上下文压缩 + StopLoop
 	if containsTool(names, "hitl") || e.hitlEnabled {
 		builder.InterceptorAdd(e.permissionInterceptor)
+	}
+	if e.compressionInterceptor != nil {
+		builder.InterceptorAdd(e.compressionInterceptor)
 	}
 	builder.InterceptorAdd(react.NewStopLoopInterceptorOf(3, 8))
 
