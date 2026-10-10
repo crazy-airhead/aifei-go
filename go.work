@@ -42,6 +42,7 @@ use (
 	./nami
 	./plugins/ai
 	./plugins/ai/ragloader
+	./plugins/ai/ragrepo
 	./plugins/cache
 	./plugins/dami
 	./plugins/dataisolate

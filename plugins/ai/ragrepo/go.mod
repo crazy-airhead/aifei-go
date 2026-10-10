@@ -1,0 +1,17 @@
+module github.com/crazy-airhead/aifei-go/plugins/ai/ragrepo
+
+go 1.27
+
+require (
+	github.com/crazy-airhead/aifei-go/ai v1.0.3
+	github.com/crazy-airhead/aifei-go/plugins/elasticsearch v0.0.0
+)
+
+replace (
+	github.com/crazy-airhead/aifei-go/ai => ../../../ai
+	github.com/crazy-airhead/aifei-go/db => ../../../db
+	github.com/crazy-airhead/aifei-go/enjoy => ../../../enjoy
+	github.com/crazy-airhead/aifei-go/log => ../../../log
+	github.com/crazy-airhead/aifei-go/plugins/elasticsearch => ../../elasticsearch
+)
+
