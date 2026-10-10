@@ -192,13 +192,19 @@
 依赖：仅内部 `log`，零外部依赖。落位 `./sandbox` 新模块（cli/code/memory talents 与 harness/loop 的前置，06 §9 依赖链）。Java 源 `solon-ai-sandbox`（Claude Code sandbox-runtime 的 Java 移植，6.4K 行）；Go 移植按平台分卡，Manager 实例化（非 Java 静态单例——06 契约决策，便于测试与多配置）。
 
 - **P5-s1 darwin Seatbelt（首卡）**：配置层全家（RuntimeConfig/Network/Filesystem/Seccomp/Ripgrep/Windows 结构位）+ 读写限制结构（读=deny-then-allow-back、写=allow-only）+ 平台探测与依赖检查 + macOS Seatbelt profile 生成（move-blocking 防绕过/符号链接边界防护/强制拒绝清单：shell 启动文件与 .git）+ Manager 门面（WrapWithSandbox/Argv、UpdateConfig 热更新、CleanupAfterCommand、违规存储）+ 域名过滤（DomainPatternMatcher/HostUtils/NetworkFilter，fail-closed：无配置/畸形主机/回调异常一律拒绝）+ 工具层（glob→regex、路径规范化 `~`/相对路径/符号链接、shell 引用、代理环境变量注入）。测试 `_test/sandbox_test`（黑盒；真 `sandbox-exec` 读写拒绝/放行回环）。
-- **P5-s2 linux bwrap**：`backend_linux.go`（bwrap --unshare-net + socat 桥接 + mount 点清理 + ripgrep glob 展开）。
+- **P5-s2 linux bwrap**：`bwrap.go`（外层 bwrap `--unshare-net`/文件系统 bind/tmpfs 限制/`--unshare-pid`+`--proc` + 内层 socat 3128/1080 监听回连桥 socket、apply-seccomp 两段式 unix socket 封锁 + 宿主侧 socat 桥 `InitializeLinuxNetworkBridge` + mount 点计数延迟清理 + 强制拒绝清单 rg 扫描 + 写 glob 过滤/读 glob 展开语义）。
 - **P5-s3 代理服务器**：HTTP CONNECT 正向代理 + SOCKS5 + ParentProxyResolver + TLS 终止/mitm（首卡仅预留 NetworkConfig 结构位与 SetProxyPorts 注入口）。
 - **P5-s4 windows**：WFP 驱动后端（WindowsConfig 结构位已留；srt-win.exe 形态）。
 
 验收（首卡）：profile 生成黄金断言（读写规则次序/网络限制分支/pty/apple events/弱隔离开关）+ 真 sandbox-exec 回环（allowOnly 外写失败、denyRead 读失败、放行路径成功、无限制命令原样返回）+ 过滤矩阵与 glob/路径规范化表驱动；CLAUDE.md 模块表/测试矩阵同步。
 
 **P5-s1 已落地（2026-10-10）**：`./sandbox` 模块 12 文件（platform/config/restriction/glob/path/shell/net/violation/sandbox/backend_darwin + linux/windows 结构位占位）+ `_test/sandbox_test` 黑盒 19 用例全绿（含真 sandbox-exec 回环）。与 Java 的三处对齐勘误（移植期修正）：glob 静态基目录先剥尾 `/` 再 canonicalize（否则基目录与 glob 段间的分隔符在符号链接解析后丢失——Java substring 语义照抄后以测试暴露）；`isValidHost` 是宽松 DNS-label 字符集门（`1.2.3.4.5` 过门，严格拒收在 `CanonicalizeHost`）；`removeTrailingGlobSuffix` 裸 `**` 原样返回（仅剥 `/**` 尾）。真机探针结论留档：读拒绝=进程 SIGABRT（exit 134），写拒绝=EPERM 报错返回——两类都可用 `err != nil` 断言。
+
+**P5-s2 已落地（2026-10-10）**：`bwrap.go`（对标 `LinuxSandboxBackend.java` 1483 行逐函数移植）+ `sandbox.go` 接线（`wrapLinux`/`ensureLinuxBridge`/`buildWriteConfig` 平台分支）+ `_test/sandbox_test/bwrap_test.go` 黑盒 15 用例全绿。移植期发现与偏差（均已在代码注释注明）：
+- **隐式 GOOS 构建约束陷阱（s1 遗留隐患，本次修复）**：`backend_linux.go`/`backend_windows.go` 文件名后缀使它们被其他平台的构建剔除——`GOOS=linux go build` 自 s1 起就坏（darwin 上看不见重复声明、linux 上缺 darwin 符号）。后端文件改名 `seatbelt.go`/`bwrap.go`（argv/profile 生成是纯字符串操作，全平台编译可测；真 sandbox-exec/bwrap 执行自然只在对应平台有意义）。
+- **socat 桥懒建（有意偏离）**：Java 仅在 `initialize()` 且当时端口已设置才建桥——实际流程端口总是后到（代理服务器 P5-s3 启动后回填），桥永远建不起来；Go 在 Manager 首次受限包装时按需建桥（`ensureLinuxBridge`），失败非致命（网络走无桥全拒分支）。
+- **读 glob 怪癖忠实保留**：Java `wrapWithSandbox` 的 `buildReadConfig` 不展开读 glob，bwrap 侧按不存在路径静默跳过；`getFsReadConfig` 是另一条展开路径 → Go 导出 `LinuxExpandReadPaths` 作对应物，wrap 路径行为不变。
+- macOS 宿主测试要点：bwrap 参数序断言用 `\x00` 精确连接（避免 `--tmpfs /etc` 假命中 `--tmpfs /`）；不存在路径规范化原样返回 vs 已存在路径解析 `/private` 前缀——直接 API 测试的基目录须先 canonical 化（Linux 上两者天然相同）；外层 `ShellQuote` 会转义内层脚本的单引号，断言到首个内层引号为止。
 
 ---
 
