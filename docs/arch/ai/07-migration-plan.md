@@ -194,7 +194,7 @@
 - **P5-s1 darwin Seatbelt（首卡）**：配置层全家（RuntimeConfig/Network/Filesystem/Seccomp/Ripgrep/Windows 结构位）+ 读写限制结构（读=deny-then-allow-back、写=allow-only）+ 平台探测与依赖检查 + macOS Seatbelt profile 生成（move-blocking 防绕过/符号链接边界防护/强制拒绝清单：shell 启动文件与 .git）+ Manager 门面（WrapWithSandbox/Argv、UpdateConfig 热更新、CleanupAfterCommand、违规存储）+ 域名过滤（DomainPatternMatcher/HostUtils/NetworkFilter，fail-closed：无配置/畸形主机/回调异常一律拒绝）+ 工具层（glob→regex、路径规范化 `~`/相对路径/符号链接、shell 引用、代理环境变量注入）。测试 `_test/sandbox_test`（黑盒；真 `sandbox-exec` 读写拒绝/放行回环）。
 - **P5-s2 linux bwrap**：`bwrap.go`（外层 bwrap `--unshare-net`/文件系统 bind/tmpfs 限制/`--unshare-pid`+`--proc` + 内层 socat 3128/1080 监听回连桥 socket、apply-seccomp 两段式 unix socket 封锁 + 宿主侧 socat 桥 `InitializeLinuxNetworkBridge` + mount 点计数延迟清理 + 强制拒绝清单 rg 扫描 + 写 glob 过滤/读 glob 展开语义）。
 - **P5-s3 代理服务器**：HTTP CONNECT 正向代理 + SOCKS5 + ParentProxyResolver + TLS 终止/mitm（首卡仅预留 NetworkConfig 结构位与 SetProxyPorts 注入口）。
-- **P5-s4 windows**：WFP 驱动后端（WindowsConfig 结构位已留；srt-win.exe 形态）。
+- **P5-s4 windows**：WFP 后端（srt-win.exe CLI 薄包装：二进制定位/组与 WFP 状态/一次性安装/包装 spawn 描述/就绪检查）。
 
 验收（首卡）：profile 生成黄金断言（读写规则次序/网络限制分支/pty/apple events/弱隔离开关）+ 真 sandbox-exec 回环（allowOnly 外写失败、denyRead 读失败、放行路径成功、无限制命令原样返回）+ 过滤矩阵与 glob/路径规范化表驱动；CLAUDE.md 模块表/测试矩阵同步。
 
@@ -211,6 +211,14 @@
 - **有意增量**：代理服务器 Java 由外部基础设施启动 + `setProxyPorts` 回填，Go 增 `Manager.StartProxyServers()` 便捷接线（端口仍可外部注入）；配置经 provider 每请求读取（兑现 `UpdateConfig` 网络面活切换的既有承诺）；Stop 显式断在飞连接（Java shutdownNow 只中断线程不关 socket）；直连分支 HttpURLConnection → net/http；SOCKS 父路由 `Socket(Proxy.Type.HTTP)` → 手工 `dialViaParent`（两代理共用）。
 - **忠实怪癖保留**：父代理 CONNECT 无端口即失败（对照明文分支有 80/443 回填）；CONNECT 端口非数字静默断连；SOCKS cmd 字段忽略（BIND/UDP 当 CONNECT）；https 父代理走裸 TCP；chunked 请求体按原始字节（含分帧）搬运；SOCKS 直连拨号无超时；filterRequest panic → 拒（Java catch Exception）；逐跳头 = RFC 7230 固定集 ∪ Connection 点名集；响应头每名取首值。
 - **Go 版本勘误（本卡修正库内既有代码）**：当前 Go 的 `net.ParseIP` 对点分十进制也返回 16 字节 v4 映射形——`len(addr)==16` 判家族恒真，令 `127.0.0.0/8` 前 8 位（全零）匹配一切 v4 主机、裸 IP 误配 /128 越界；NO_PROXY CIDR 家族改按字面量判（`parentAddrBytes`），v6/映射形走 16 字节、点分十进制收窄 4 字节。`isValidIPv6Literal` 补 RFC 4291 尾组点分十进制形（`::ffff:127.0.0.1` 此前被判非 IP，v4 映射回环恒直连失效）。
+
+**P5-s4 已落地（2026-10-10）**：`wfp.go`（对标 `WindowsSandboxBackend.java` 955 行 + windows/ 六 DTO——srt-win.exe CLI 薄包装）+ `sandbox.go` 接线（`wrapWindows` 分发/`CheckDependencies` windows 并入/`hasNetworkRestriction` 三处内联收敛为 helper）+ `_test/sandbox_test/wfp_test.go` 黑盒 8 用例全平台可跑（假 srt-win 脚本回放）。移植期发现与偏差（代码注释均已注明）：
+- **网络隔离本体在 srt-win.exe（Rust 助手，非本库产物）**：本地甄别组 + 按组 SID 键控的机器级 WFP 过滤器 + exec 子命令（受限令牌：组翻 deny-only + 加固 job）。真执行前置：一次性 install（单自提权进程=一次 UAC）+ 注销重登（组 SID 进 TokenGroups）。本库只负责 CLI 编排与状态解析。
+- **Java 手写 indexOf 式 JSON 解析 → encoding/json**（对良好形成的 srt-win 输出行为等价，畸形输入错误面更干净）；port_range 缺省/null/单元素宽容为 nil 的 Java 语义保留。
+- **两处上游缺陷修正**：① `SandboxManager.checkWindowsDependencies` 计算了 sublayerGuid 却调用未传入的旧版重载（死变量——配了自定义 sublayer 时依赖检查会查错 sublayer），Go 的 `Manager.CheckDependencies` 传入配置值；② wrap 的组引用分支与 `groupRefArgs` 几乎重复且判空语义不同（只判 null 不判 empty），Go 统一到 `groupRefArgs` 单入口。
+- **runSrtWin 死锁规避**：Java 先读尽 stdout 再读 stderr——stderr 管道写满时互锁；Go exec 两侧并发缓冲。15 秒超时强杀 exit=-1（Java destroyForcibly 同款）。
+- **有意适配**：安装指引文案去掉 `npx sandbox-runtime windows-install` 行（Node 生态专属），API 提示改 Go 名；`ErrWindowsBackendPending` 占位哨兵随卡删除（其文档声明的生命周期即「P5-s4 落地」）。
+- Windows 后端纯字符串/进程操作全平台编译全平台可测（`wfp.go` 中性文件名，三平台交叉构建门禁绿）；真 WFP 执行只在 windows 有意义，Manager 的 windows 分发分支在其余平台仅编译验证。
 
 ---
 
