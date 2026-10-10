@@ -52,14 +52,17 @@ func (r *CallRequest) Session() Session      { return r.session }
 func (r *CallRequest) Messages() []*Message  { return r.messages }
 func (r *CallRequest) IsStream() bool        { return r.isStream }
 
-// ToolRequest 工具执行请求（对标 Java ToolRequest）。
+// ToolRequest 工具执行请求（对标 Java ToolRequest）。Name 为工具名（Go 增量：
+// 权限类拦截器在执行前识别工具用；NewToolRequest 便捷构造缺省空名）。
 type ToolRequest struct {
 	call        *CallRequest
+	name        string
 	toolContext map[string]any
 	args        map[string]any
 }
 
 func (r *ToolRequest) Call() *CallRequest          { return r.call }
+func (r *ToolRequest) Name() string                { return r.name }
 func (r *ToolRequest) ToolContext() map[string]any { return r.toolContext }
 func (r *ToolRequest) Args() map[string]any        { return r.args }
 
@@ -104,6 +107,11 @@ func newToolChain(list []Interceptor, terminal func(*ToolRequest) *ToolResult) *
 // call 载荷缺省 nil）。
 func NewToolRequest(toolContext, args map[string]any) *ToolRequest {
 	return &ToolRequest{toolContext: toolContext, args: args}
+}
+
+// NewToolRequestWithName 带工具名构造（权限类拦截器在执行前识别工具用）。
+func NewToolRequestWithName(name string, toolContext, args map[string]any) *ToolRequest {
+	return &ToolRequest{name: name, toolContext: toolContext, args: args}
 }
 
 // NewToolChain 构造工具拦截链（terminal 为真实工具执行）。

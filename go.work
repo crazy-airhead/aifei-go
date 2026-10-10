@@ -3,6 +3,7 @@ go 1.27
 use (
 	./_test/ai_agent_test
 	./_test/ai_flow_test
+	./_test/ai_harness_test
 	./_test/ai_plugin_test
 	./_test/ai_test
 	./_test/cache_test
@@ -29,6 +30,7 @@ use (
 	./ai
 	./ai/agent
 	./ai/flow
+	./ai/harness
 	./aifei
 	./config
 	./dami

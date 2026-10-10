@@ -455,7 +455,7 @@ func (r *requestDesc) buildToolMessage(req *CallRequest, acm *AssistantMessage,
 
 // doToolCall 执行工具（经 ToolInterceptor 链；ctx 携带 toolContext）。
 func (r *requestDesc) doToolCall(req *CallRequest, tool FunctionTool, call *ToolCall) *ToolResult {
-	treq := &ToolRequest{call: req, toolContext: r.options.ToolContext, args: call.Arguments}
+	treq := &ToolRequest{call: req, name: tool.Name(), toolContext: r.options.ToolContext, args: call.Arguments}
 	chain := newToolChain(r.options.Interceptors, func(*ToolRequest) *ToolResult {
 		return tool.Call(ContextWithToolContext(context.Background(), treq.toolContext), treq.args)
 	})
