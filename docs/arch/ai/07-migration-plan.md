@@ -235,6 +235,13 @@
 
 **验收（全绿）**：全量 27 测试模块 + 库模块编译检查零失败；黄金样本覆盖（协议场景/过滤翻译七族/OpenAPI 解析/HMAC/PDF/快照）；race 抽查绿；CLAUDE.md/go.work 同步；零真实外网依赖（httptest 回放/sqlite/真 sh -c 执行器）。
 
+### P7 用户指示修正（2026-10-11）
+
+- **重格式统一处理**：docx/xlsx/pptx/pdf 四件弃自解实现，统一经 `github.com/conductor-oss/markitdown`（pdfium WASM 由 wazero 纯 Go 运行——零外部二进制）；pptx 真页标记切分、xlsx sheet 切分、docx 空行分段、pdf 段块近似页切分（页边界引擎不暴露）；`.doc`/`.ppt` 旧格式显式拒绝维持。测试夹具升级为 markitdown testdata 真实文件（Apache-2.0 注明）。
+- **lucene talent 解禁**（覆盖原 06 §2「不迁」决策，用户指示）：不用 Elasticsearch（需部署服务非等价替代）也不用 gojieba（cgo 绑定无纯 Go 版本）——**Bleve**（blevesearch/bleve/v2，内存索引 + BM25——Lucene 的 Go 等价物）+ **gse**（go-ego/gse，纯 Go 中文分词、jieba 词典系、内嵌词典）。落 `plugins/ai/talent/lucene`：full_text_search/refresh_search_index 双工具语义逐字对标 Java（忽略名/后缀白名单可配、检索自动建索引、得分/行号/预览格式化）；gse CutSearch（搜索引擎模式 + HMM）注册为 Bleve 自定义 analyzer、索引与查询同源分词；特殊字符免转义（MatchQuery 走分析器非查询语法）。测试搬译 Java LuceneTalentTest 六用例 + 中文分词专项。
+- **ragloader 重格式夹具**：markitdown testdata 真实四件（test.docx/xlsx/pptx/pdf）。
+
+
 ### P5-M 模型补全与其余方言扩展（2026-10-10 立项并落地；契约 `02-chat-core.md` §11 与 §2.1 #5/#23）
 
 - **ai/rerank**（02 §11 "rerank P4（RepositoryTool 依赖）" 的补欠）：Model/Builder/RequestDesc + openai/dashscope 两方言；`Rerank` 写回 score 后降序返回，满足 P4-b 预留的 `rag.Reranker` 接口位；条数不等显式报错（Java 直接越界的收敛）。usage 不进 Go 契约（与 embedding 对齐）。

@@ -51,7 +51,7 @@ type TalentBase struct{}               // 默认实现（恒支持、无副作�
 | **gateway** | 4,626 行 | swagger-parser 等价 | P5 后 | OpenAPI→MCP 工具网关；Go 侧 kin-openapi |
 | **lsp** | 7,135 行 | lsp4j 等价 | 缓 | LSP 客户端（jsonrpc over stdio，可复用 `./mcp` 的帧层思路） |
 | **mount** | 4,569 行 | 标准库 | 缓 | MountSource/SkillCatalog 统一资源系统（harness 依赖） |
-| lucene | 235 行 | — | 不迁 | 全文检索由 ES/内存索引覆盖 |
+| lucene | 235 行 | bleve + gse | **已迁**（用户解锁） | 不用 Lucene（Java 专属）也不用 ES（需部署非等价替代，用户明确排除）；Bleve（内存索引 + BM25）+ gse（纯 Go 中文分词——gojieba 为 cgo 无纯 Go 版本）；落 `plugins/ai/talent/lucene` |
 | mail | 95 行 | 三方 SMTP | 按需 | simple-java-mail → net/smtp 或三方 |
 | social | 345 行 | 标准库 | 按需 | 钉钉/飞书/企微 webhook（纯 POST） |
 | pdf | 353 行 | pdf 解析库 | 按需 | 随 ragloader 的 pdf 能力 |
