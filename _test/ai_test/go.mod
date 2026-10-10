@@ -7,6 +7,8 @@ require (
 	github.com/crazy-airhead/aifei-go/json v1.0.2
 )
 
+require github.com/crazy-airhead/aifei-go/enjoy v1.0.2 // indirect
+
 replace (
 	github.com/crazy-airhead/aifei-go/ai => ../../ai
 	github.com/crazy-airhead/aifei-go/json => ../../json
