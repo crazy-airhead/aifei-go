@@ -43,3 +43,5 @@ replace (
 	github.com/crazy-airhead/aifei-go/mcp => ../../mcp
 	github.com/crazy-airhead/aifei-go/plugins/ai => ../../plugins/ai
 )
+
+replace github.com/crazy-airhead/aifei-go/plugins/ai/ragloader => ../../plugins/ai/ragloader

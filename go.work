@@ -41,6 +41,7 @@ use (
 	./mcp
 	./nami
 	./plugins/ai
+	./plugins/ai/ragloader
 	./plugins/cache
 	./plugins/dami
 	./plugins/dataisolate
