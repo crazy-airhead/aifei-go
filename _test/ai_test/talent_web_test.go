@@ -6,6 +6,8 @@
 package ai_test
 
 import (
+	"encoding/json"
+	"io"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -322,4 +324,111 @@ func TestWebTalentPipeline(t *testing.T) {
 			t.Fatalf("tool %q meta.talent = %q", tl.Name(), name)
 		}
 	}
+}
+
+// ---- crawler（P5 补全件：JINA/Firecrawl 双驱动）----
+
+// stubCrawlerDoer 记录请求并回放响应。
+type stubCrawlerDoer struct {
+	status  int
+	body    string
+	lastReq *http.Request
+	lastBody []byte
+}
+
+func (d *stubCrawlerDoer) Do(req *http.Request) (*http.Response, error) {
+	d.lastReq = req
+	if req.Body != nil {
+		d.lastBody, _ = io.ReadAll(req.Body)
+		req.Body.Close()
+	}
+	return &http.Response{
+		StatusCode: d.status, Body: io.NopCloser(strings.NewReader(d.body)),
+		Header: http.Header{"Content-Type": []string{"text/markdown"}},
+	}, nil
+}
+
+func TestTalentWebCrawlerJina(t *testing.T) {
+	doer := &stubCrawlerDoer{status: 200, body: "# 页面标题\n\n正文内容"}
+	c := web.NewCrawler(web.NewJinaCrawlerDriver(doer)).APIKey("jk")
+
+	tools := c.Tools(nil)
+	if len(tools) != 1 || tools[0].Name() != "crawl_url" {
+		t.Fatalf("工具：%v", tools)
+	}
+	if c.Name() != "Crawler" || c.Description() == "" {
+		t.Fatalf("能力包元数据：%s %s", c.Name(), c.Description())
+	}
+
+	out := callCrawlerTool(t, tools[0], "https://example.com/x")
+	if out != "# 页面标题\n\n正文内容" {
+		t.Fatalf("输出：%q", out)
+	}
+	// 请求形态：GET r.jina.ai/{url} + markdown 头 + Bearer
+	if doer.lastReq.Method != "GET" || doer.lastReq.URL.String() != "https://r.jina.ai/https://example.com/x" {
+		t.Fatalf("JINA 请求：%s %s", doer.lastReq.Method, doer.lastReq.URL)
+	}
+	if doer.lastReq.Header.Get("X-Return-Format") != "markdown" ||
+		doer.lastReq.Header.Get("Authorization") != "Bearer jk" {
+		t.Fatalf("JINA 头：%v", doer.lastReq.Header)
+	}
+
+	// 无效 URL
+	if out := callCrawlerTool(t, tools[0], "ftp://x"); out != "错误：URL 无效。" {
+		t.Fatalf("无效 URL：%q", out)
+	}
+	if out := callCrawlerTool(t, tools[0], ""); out != "错误：URL 无效。" {
+		t.Fatalf("空 URL：%q", out)
+	}
+}
+
+func TestTalentWebCrawlerFirecrawl(t *testing.T) {
+	doer := &stubCrawlerDoer{status: 200,
+		body: `{"success":true,"data":{"markdown":"# MD 内容"}}`}
+	c := web.NewCrawler(web.NewFirecrawlCrawlerDriver(doer)).APIKey("fk")
+	tools := c.Tools(nil)
+
+	out := callCrawlerTool(t, tools[0], "https://example.com")
+	if out != "# MD 内容" {
+		t.Fatalf("输出：%q", out)
+	}
+	// 请求形态：POST /v1/scrape + body 形状
+	if doer.lastReq.Method != "POST" || doer.lastReq.URL.String() != "https://api.firecrawl.dev/v1/scrape" {
+		t.Fatalf("Firecrawl 请求：%s %s", doer.lastReq.Method, doer.lastReq.URL)
+	}
+	if doer.lastReq.Header.Get("Authorization") != "Bearer fk" {
+		t.Fatalf("鉴权头：%v", doer.lastReq.Header)
+	}
+	var body map[string]any
+	json.Unmarshal(doer.lastBody, &body)
+	if body["url"] != "https://example.com" || body["onlyMainContent"] != true {
+		t.Fatalf("body：%v", body)
+	}
+	if formats := body["formats"].([]any); len(formats) != 1 || formats[0] != "markdown" {
+		t.Fatalf("formats：%v", formats)
+	}
+
+	// 失败形态：success=false + error
+	doer.body = `{"success":false,"error":"payment required"}`
+	if out := callCrawlerTool(t, tools[0], "https://example.com"); out != "抓取失败: web: firecrawl: payment required" {
+		t.Fatalf("失败文案：%q", out)
+	}
+	// 无 success 的错误回退
+	doer.body = `{"success":false}`
+	if out := callCrawlerTool(t, tools[0], "https://example.com"); !strings.Contains(out, "unsuccessful scrape") {
+		t.Fatalf("缺省失败：%q", out)
+	}
+}
+
+func callCrawlerTool(t *testing.T, tool ai.FunctionTool, url string) string {
+	t.Helper()
+	args := map[string]any{}
+	if url != "" {
+		args["url"] = url
+	}
+	r := tool.Call(context.Background(), args)
+	if r == nil {
+		t.Fatal("空结果")
+	}
+	return r.ContentText()
 }
