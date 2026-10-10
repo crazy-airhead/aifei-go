@@ -220,6 +220,21 @@
 - **有意适配**：安装指引文案去掉 `npx sandbox-runtime windows-install` 行（Node 生态专属），API 提示改 Go 名；`ErrWindowsBackendPending` 占位哨兵随卡删除（其文档声明的生命周期即「P5-s4 落地」）。
 - Windows 后端纯字符串/进程操作全平台编译全平台可测（`wfp.go` 中性文件名，三平台交叉构建门禁绿）；真 WFP 执行只在 windows 有意义，Manager 的 windows 分发分支在其余平台仅编译验证。
 
+### P6 按需解锁项全量落地（2026-10-11 立项并当日收口；对应前述对比表「部分/按需」清单）
+
+> 本节覆盖 2026-10-11 用户解锁的全部「部分/按需」项：team 协议 5/8 → 8/8、ragloader 4/7 重格式 → 7/7、ragrepo 12/14 → 14/14、talents 13/18 → 18/18、web crawler、agui agent 流映射、loop 集成桥、harness 压缩拦截器。九提交全绿。
+
+- **team 五协议（8/8）**：A2A（点对点接力：`__transfer_to__` 工具 + handover 快车道 + 5 次熔断 + 模态检查 + 失败回退上一位专家）；ContractNet（合同网招投标：`__call_for_bids__`/`__submit_proposal__` + bidding 算法自动投标（role 词边界 +10 / capabilities 保底 60 加成 15 / 上限 95）+ 双层守卫（resolve 四段 + OnSupervisorRouting 旁路封堵）+ 中标执行门禁 + 轮次上限 2）；Blackboard（黑板：`__sync_to_blackboard__` 四可选参数 + 共享 KV + 保序 todo 队列（completed 精确删/result 命中联动/merge 结构化）+ FINISH 硬门禁（todo 未清或 FAILED）+ FAILED 回派）；MarketBased（市场：EMA 结算（0.6/0.4）+ 动态定价（base×(0.5+Q)×ln1p×多模态 1.5）+ ROI King/Budget Pick 看板）；None（透明容器：BuildGraph 留空，编排交 graphAdjuster）。
+- **ragloader 重格式（7/7）**：docx/pptx zip+XML 自解（w:p/a:t 遍历，.doc/.ppt 旧格式显式不支持——00 §2.2-I）；xlsx（excelize：首行标题 → 行 map JSON、documentMaxRows 分批缺省 200、空行终止）；pdf（ledongthuc/pdf：同句合并按基线判行、PAGE/SINGLE 双模式缺省 PAGE）。
+- **ragrepo 12 后端（14/14）**：REST 基座（RESTClient/RestRepositoryBase/ClampScore）；chroma（v1/v2 heartbeat 自适应、双层列表响应、where 字典）；dashvector（一套 REST 覆盖 dashvector + dashvector-official 两模块——官方 SDK 即该 REST 的封装）；sqlrepo（mysql：JSON embedding + COSINE_SIMILARITY 纯 SQL 存储函数——Java 全表扫描原语义；mariadb：VECTOR 列 + VEC_DISTANCE_EUCLIDEAN 服务端排序 + 客户端余弦重算）；redisrepo（RediSearch FT.CREATE ON JSON VECTOR HNSW + FT.SEARCH KNN Dialect2 小端 BLOB + JSON.SET pipeline，go-redis 与 cache 插件同客户端；drop 不 FLUSHDB）；vectorest（opensearch knn_vector + 内联 filter / weaviate GraphQL nearVector + certainty + where 枚举不加引号 / tcvectordb 唯一服务端 embedding——save 不嵌入检索传原文 / vectorex basic auth + 余弦 clamp）。
+- **talents 13/18 → 18/18**：零依赖批七件——generation（ImageDriver/VideoDriver SPI + generate.Model 适配 + 文件名消毒/去重/沙箱）、social（钉钉签名在 URL / 飞书签名在 body / 企微无签名——HmacSHA256(ts+"\n"+secret, secret) 双位置）、mail（net/smtp + MIME 混合附件 + HTML 探测）、mount（Mount/MountSource/MountManager/SkillCatalog/AgentCatalog——@alias 逻辑路径 + SKILL.md/AGENT.md 限深扫描）、memory（md 原子写 + CJK bi-gram 分词 + idf² 两段评分 + TTL 分档 + scope 覆盖序 + 五工具含 consolidate 读回校验）、code（LanguageProvider SPI 六内置 + CODE.md 规约生成）、data（KVStore SPI + ai:memory: 键 + 30 天 TTL）；依赖批四件——gateway（OpenAPI V3+V2 解析：参数四桶/$ref 展开/PathItem 级合并/multipart/outputSchema + call_api 运行时 + 四档位）、pdf（parse 复用 ragloader + create 声明式降级 .html 载体——Go 无 openhtmltopdf）、cli（bash 同步 + bash_start/wait/stop 异步会话 + 进程树终止 + 快照形态）、lsp（Content-Length 帧层 jsonrpc over stdio 自实现 + initialize/didOpen/publishDiagnostics + 14 内置服务器命令面）。不迁维持两项：lucene（ES/内存覆盖）、聚合包。
+- **web crawler**：JINA（r.jina.ai/{url} + X-Return-Format markdown）与 Firecrawl（/v1/scrape + onlyMainContent）双驱动 + crawl_url 工具。
+- **agui agent 流映射**：AgentEventAdapter 最小能力接口（Java 反射的 Go 对应物）+ 六分支分派（SupervisorDelta 恒 CUSTOM、ChatEvent 委托复用状态机、工具三件、终态只记、其余 CUSTOM）；ai/agent/aguiadapt.go 适配器（Meta 键 callId/toolName 与 react 真实事件对齐）。
+- **loop 集成桥**：AgentIntegration（Ralph/UltraQA/agent 驱动三启动 + ExecutionStatus）、FlowIntegration（变量提取/回写/flowId 状态）、HarnessIntegration（HarnessCaller 最小接口解耦 + 工具驱动/harness 驱动两形态）。
+- **harness 压缩拦截器**：OnReasonStart 非强制触发（消息数/token 阈值）+ OnReasonRetry PTL 九关键词强制（forceLevel 递减预算）；固定前缀/双维度截断/原子对对齐/语义锚定/策略摘要+兜底/悬空清理/工作记忆重建全链；KeyInfo（四维脱水）+ Hierarchical（滚动摘要 trace attr 持久 + PTL 二分降级）+ Composite 缺省装配（100/0.75）；近似 token 计数器（jtokkit 的零依赖保守替代，WithTokenCounter 可注入）。
+
+**验收（全绿）**：全量 27 测试模块 + 库模块编译检查零失败；黄金样本覆盖（协议场景/过滤翻译七族/OpenAPI 解析/HMAC/PDF/快照）；race 抽查绿；CLAUDE.md/go.work 同步；零真实外网依赖（httptest 回放/sqlite/真 sh -c 执行器）。
+
 ### P5-M 模型补全与其余方言扩展（2026-10-10 立项并落地；契约 `02-chat-core.md` §11 与 §2.1 #5/#23）
 
 - **ai/rerank**（02 §11 "rerank P4（RepositoryTool 依赖）" 的补欠）：Model/Builder/RequestDesc + openai/dashscope 两方言；`Rerank` 写回 score 后降序返回，满足 P4-b 预留的 `rag.Reranker` 接口位；条数不等显式报错（Java 直接越界的收敛）。usage 不进 Go 契约（与 embedding 对齐）。

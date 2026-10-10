@@ -5,7 +5,7 @@
 > 源码参照：`/Users/airhead/WorkSpace/goldsyear/solon-ai`（`org.noear:solon-ai-framework` 4.1.1，git tag `4.1.1`）。
 > 目标宿主：`aifei-go` 工作区（Go 1.27，多模块；核心模块零外部依赖）。
 >
-> **迁移状态（2026-10-10 收口）**：P0–P4 主干与 P5 全部立项项已落地——P5-T talents 五件、P5-S sandbox 四卡（darwin/linux/代理/windows）、P5-M（rerank/generate/agui/gemini-interactions/MCP×Talent 桥）、P5-R ragloader、P5-V ragrepo、P5-H harness、P5-L loop。DoD 六项验收全过（见 [`07-migration-plan.md`](07-migration-plan.md) §9）。明确不迁/缓迁项维持 §2.2 决策不变。
+> **迁移状态（2026-10-11 全量收口）**：P0–P4 主干、P5 全部立项项、以及 2026-10-11 解锁的全部按需项（team 协议 8/8、ragloader 7 格式、ragrepo 14 后端、talents 18/18、web crawler、agui agent 流、loop 集成桥、harness 压缩）均已落地——P5-T talents 五件、P5-S sandbox 四卡（darwin/linux/代理/windows）、P5-M（rerank/generate/agui/gemini-interactions/MCP×Talent 桥）、P5-R ragloader、P5-V ragrepo、P5-H harness、P5-L loop。DoD 六项验收全过（见 [`07-migration-plan.md`](07-migration-plan.md) §9）。明确不迁/缓迁项维持 §2.2 决策不变。
 >
 > 本文**不写实现代码**，只给出：solon-ai 是什么、迁什么不迁什么、概念词典、模块地图、关键设计决策、可行性结论——作为后续逐篇的**契约**。所有设计均为**提案**，供最终审核与逐步调整。
 
