@@ -1,16 +1,21 @@
 // Package sandbox Claude Code sandbox-runtime 的 Go 移植（对标
 // solon-ai-sandbox；Java 版自身是 TypeScript 的忠实移植）。会话级
 // 命令沙箱：macOS Seatbelt（P5-s1，seatbelt.go）/ linux bwrap（P5-s2，
-// bwrap.go）/ windows WFP（P5-s4 结构位）三平台后端 + 域名过滤面
-// （P5-s3 代理）。后端文件名刻意不带 _darwin/_linux 后缀——Go 的隐式
-// GOOS 构建约束会把它们从交叉构建里剔除，而 argv/profile 生成是纯
-// 字符串操作，全平台编译、全平台可测。
+// bwrap.go）/ windows WFP（P5-s4 结构位）三平台后端 + 域名过滤面 +
+// 代理服务器（P5-s3：HTTP CONNECT 正向代理与 SOCKS5 + 父代理解析）。
+// 后端文件名刻意不带 _darwin/_linux 后缀——Go 的隐式 GOOS 构建约束
+// 会把它们从交叉构建里剔除，而 argv/profile 生成是纯字符串操作，
+// 全平台编译、全平台可测。
 //
 // 与 Java 的偏差：
 //   - SandboxManager 全静态单例 → Manager 实例（06 契约决策：便于测试
 //     与多配置）；JVM 关机钩子不迁——调用方 defer Reset() 即得。
-//   - ParentProxyResolver 构造与环境变量探测（HTTP_PROXY/HTTPS_PROXY）
-//     留 P5-s3（代理服务器落地时一并接线）。
+//   - 代理服务器由 Java 的「外部基础设施启动 + setProxyPorts 回填」
+//     增量为 Manager.StartProxyServers 便捷接线（端口仍可经
+//     SetProxyPorts 外部注入）；代理配置每请求读取（活切换）。
+//   - HttpProxyServer 三处上游缺陷修正：handleClient finally 即关 client
+//     掐断 CONNECT 隧道、BufferedReader 预读吞请求体、父代理应答的
+//     预读字节在 pipe 时丢弃（详见 proxy_http.go 注释）。
 //   - CommandLookup.which 子进程 which → exec.LookPath（标准库原生）。
 //   - SandboxException → error；SandboxLog → 内部 log 模块。
 //   - linux socat 桥懒建：Java 仅在 initialize() 时且端口已设置才建桥
@@ -22,6 +27,8 @@
 //	m, err := sandbox.New(sandbox.RuntimeConfig{...})
 //	wrapped, err := m.WrapWithSandbox("cargo build", "bash", nil)
 //	// 或 spawn 形态：spec, _ := m.WrapWithSandboxArgv(cmd, "", nil)
+//	// 受限网络：启动双代理回填端口（HTTP_PROXY/ALL_PROXY 指向它们）
+//	httpPort, socksPort, _ := m.StartProxyServers()
 package sandbox
 
 import (
@@ -48,9 +55,13 @@ type Manager struct {
 
 	cfg         *RuntimeConfig
 	ask         AskCallback
+	filter      FilterRequestCallback
+	parent      *ParentProxyResolver
 	store       *ViolationStore
 	httpP       *int
 	socksP      *int
+	httpProxy   *HTTPProxyServer
+	socksProxy  *SocksProxyServer
 	linuxBridge *LinuxBridgeContext
 }
 
@@ -62,15 +73,23 @@ func WithAskCallback(cb AskCallback) Option {
 	return func(m *Manager) { m.ask = cb }
 }
 
+// WithFilterRequest 注入代理的每请求过滤回调（StartProxyServers 启动的
+// HTTP 代理生效；fail-closed——返回 false 或 panic 即拒）。
+func WithFilterRequest(cb FilterRequestCallback) Option {
+	return func(m *Manager) { m.filter = cb }
+}
+
 // WithViolationStore 注入自定义违规存储（缺省内建）。
 func WithViolationStore(s *ViolationStore) Option {
 	return func(m *Manager) { m.store = s }
 }
 
 // New 构造并做依赖检查（缺依赖即报错——Java initialize 的 fail-fast）。
-// cfg 允许为零值（最严：写仅缺省路径、网络全拒）。
+// cfg 允许为零值（最严：写仅缺省路径、网络全拒）。父代理解析随构造
+// 落定（显式 network.parentProxy 优先，否则环境变量存在即环境解析——
+// Java initialize 同款）。
 func New(cfg RuntimeConfig, opts ...Option) (*Manager, error) {
-	m := &Manager{cfg: &cfg, store: NewViolationStore(cfg.IgnoreViolations)}
+	m := &Manager{cfg: &cfg, store: NewViolationStore(cfg.IgnoreViolations), parent: resolveParentProxy(&cfg)}
 	for _, opt := range opts {
 		opt(m)
 	}
@@ -83,13 +102,16 @@ func New(cfg RuntimeConfig, opts ...Option) (*Manager, error) {
 	return m, nil
 }
 
-// Reset 复位管理器：清配置与端口，关停 linux socat 桥（杀进程 + 删
-// socket 文件），强制清理 bwrap 挂载点残留（Java reset 同款）。
+// Reset 复位管理器：关停代理服务器与 linux socat 桥（杀进程 + 删
+// socket 文件），清配置与端口，强制清理 bwrap 挂载点残留（Java reset
+// 同款）。
 func (m *Manager) Reset() {
+	m.StopProxyServers()
 	m.mu.Lock()
 	bridge := m.linuxBridge
 	m.linuxBridge = nil
 	m.cfg = nil
+	m.parent = nil
 	m.httpP = nil
 	m.socksP = nil
 	m.store = nil
@@ -139,12 +161,80 @@ func (m *Manager) UpdateConfig(cfg RuntimeConfig) {
 	log.Debug("sandbox: configuration updated")
 }
 
-// SetProxyPorts 注入代理端口（代理服务器由外部/P5-s3 启动后回填）。
+// SetProxyPorts 注入代理端口（外部代理基础设施启动后回填；用
+// StartProxyServers 自建时无需调用）。
 func (m *Manager) SetProxyPorts(http, socks int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.httpP = &http
 	m.socksP = &socks
+}
+
+// ParentProxyResolver 父代理解析器（nil = 未配置——New 时显式配置或
+// 代理环境变量二选一命中才有）。
+func (m *Manager) ParentProxyResolver() *ParentProxyResolver {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.parent
+}
+
+// StartProxyServers 启动 HTTP CONNECT + SOCKS5 双代理（127.0.0.1 临时
+// 端口）并回填 ProxyPort/SocksProxyPort——Java 由外部代理基础设施启动
+// 后调 setProxyPorts，Go 在此提供便捷接线（有意增量）。过滤面按请求
+// 读当前配置与构造注入的回调（UpdateConfig 活切换）。幂等：已启动
+// 直接返回现端口。
+func (m *Manager) StartProxyServers() (httpPort, socksPort int, err error) {
+	m.mu.RLock()
+	httpSrv, socksSrv := m.httpProxy, m.socksProxy
+	ask, filter, parent := m.ask, m.filter, m.parent
+	hp, sp := m.httpP, m.socksP
+	m.mu.RUnlock()
+	if httpSrv != nil && socksSrv != nil && hp != nil && sp != nil {
+		return *hp, *sp, nil
+	}
+
+	httpSrv = NewHTTPProxyServerFunc(m.currentConfig, ask, parent, filter)
+	socksSrv = NewSocksProxyServerFunc(m.currentConfig, ask, parent)
+	httpPort, err = httpSrv.Start(0)
+	if err != nil {
+		return 0, 0, err
+	}
+	socksPort, err = socksSrv.Start(0)
+	if err != nil {
+		httpSrv.Stop()
+		return 0, 0, err
+	}
+
+	m.mu.Lock()
+	m.httpProxy = httpSrv
+	m.socksProxy = socksSrv
+	m.httpP = &httpPort
+	m.socksP = &socksPort
+	m.mu.Unlock()
+	return httpPort, socksPort, nil
+}
+
+// StopProxyServers 关停双代理并清端口（Reset 亦调用）。
+func (m *Manager) StopProxyServers() {
+	m.mu.Lock()
+	httpSrv, socksSrv := m.httpProxy, m.socksProxy
+	m.httpProxy, m.socksProxy = nil, nil
+	m.httpP, m.socksP = nil, nil
+	m.mu.Unlock()
+
+	if httpSrv != nil {
+		httpSrv.Stop()
+	}
+	if socksSrv != nil {
+		socksSrv.Stop()
+	}
+}
+
+// currentConfig 代理过滤面的每请求配置读取（活切换）。
+func (m *Manager) currentConfig() *RuntimeConfig {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.cfg
 }
 
 // ProxyPort / SocksProxyPort 当前代理端口（nil = 未设）。

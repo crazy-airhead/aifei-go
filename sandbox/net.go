@@ -44,6 +44,19 @@ func isValidIPv4(s string) bool {
 }
 
 func isValidIPv6Literal(s string) bool {
+	// RFC 4291 尾组点分十进制形（x:x:x:x:x:x:d.d.d.d——v4 映射形
+	// ::ffff:127.0.0.1 即此）：点只允许出现在尾组
+	if dot := strings.IndexByte(s, '.'); dot != -1 {
+		lastColon := strings.LastIndexByte(s, ':')
+		if lastColon < 0 || dot < lastColon || !isValidIPv4(s[lastColon+1:]) {
+			return false
+		}
+		s = s[:lastColon]
+		if !isValidIPv6Literal(s) {
+			return false
+		}
+		return strings.Count(s, ":") >= 2
+	}
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F' || c == ':') {
