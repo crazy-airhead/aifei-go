@@ -147,7 +147,7 @@ func TestHarnessCompressionTokenCounter(t *testing.T) {
 // TestHarnessCompressionEngineWired 引擎装配：压缩拦截器入链（OnReasonStart
 // 触发时工作记忆被重建——经假模型端到端验证）。
 func TestHarnessCompressionEngineWired(t *testing.T) {
-	f := newFakeOpenAI(t, "完成")
+	f := newFakeOpenAI(t)
 	e, err := harness.NewEngine(
 		harness.WithModel(f.model(t)),
 		harness.WithTools(testTools()...),
