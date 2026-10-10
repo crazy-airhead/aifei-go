@@ -3,14 +3,14 @@ module github.com/crazy-airhead/aifei-go/_test/ai_flow_test
 go 1.27
 
 require (
-	github.com/crazy-airhead/aifei-go/ai v0.0.0
-	github.com/crazy-airhead/aifei-go/ai/flow v0.0.0
-	github.com/crazy-airhead/aifei-go/dami v1.0.2
-	github.com/crazy-airhead/aifei-go/flow v0.0.0
+	github.com/crazy-airhead/aifei-go/ai v1.0.3
+	github.com/crazy-airhead/aifei-go/ai/flow v1.0.3
+	github.com/crazy-airhead/aifei-go/dami v1.0.3
+	github.com/crazy-airhead/aifei-go/flow v1.0.3
 )
 
 require (
-	github.com/crazy-airhead/aifei-go/enjoy v1.0.2 // indirect
+	github.com/crazy-airhead/aifei-go/enjoy v1.0.3 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
