@@ -6,6 +6,8 @@
 // plugins/ai/ragrepo（P5 按需逐个）。
 package rag
 
+import "fmt"
+
 // Document 检索文档（对标 Java Document）：内容 + 元数据 + 嵌入矢量。Score 为
 // 搜索命中得分——瞬态值，由仓储打分产生、不随文档持久化。
 type Document struct {
@@ -55,3 +57,10 @@ func (d *Document) Score() float64 { return d.score }
 
 // SetScore 设置得分（链式；仓储命中打分用，Java score(v) 对应物）。
 func (d *Document) SetScore(s float64) *Document { d.score = s; return d }
+
+// String 调试表示（Java toString 同款；PromptAugment 的 References 段经
+// fmt %s 走到这里）。
+func (d *Document) String() string {
+	return fmt.Sprintf("Document{id='%s', score=%v, content='%s', metadata=%v}",
+		d.ID, d.score, d.Content, d.Metadata)
+}
