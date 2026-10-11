@@ -50,6 +50,18 @@ export default withMermaid(defineConfig({
           ],
         },
         {
+          text: 'AI 能力（LLM / 智能体 / MCP / RAG）',
+          collapsed: true,
+          items: [
+            { text: 'ai — 聊天核心（消息 / 方言 / 工具 / 流式）', link: '/guide/ai' },
+            { text: 'ai/agent — 智能体（Simple / ReAct / Team）+ ai/flow', link: '/guide/ai-agent' },
+            { text: 'mcp — MCP 协议双端 + ai 桥 + 配置装配', link: '/guide/mcp' },
+            { text: 'ai-rag — RAG 检索增强（SPI / 加载器 / 向量仓储）', link: '/guide/ai-rag' },
+            { text: 'ai-talent — 能力包（26 件）与配置插件', link: '/guide/ai-talent' },
+            { text: 'ai-harness — 编码代理容器 / 持久循环 / 沙箱', link: '/guide/ai-harness' },
+          ],
+        },
+        {
           text: '运行时',
           collapsed: true,
           items: [

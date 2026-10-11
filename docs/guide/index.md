@@ -28,6 +28,17 @@ Aifei-Go 各模块的说明文档集合。每篇深入讲解一个模块的**背
 | [log](log.md) | `./log` | 日志接口抽象，一行替换即可对接 zap/logrus/slog |
 | [config](config.md) | `./config` | 分层加载（L1-L5）、泛型 `Props`/`Sub`/`Bind`、`CloudLoader` 扩展点 |
 
+## AI（LLM 应用 / 智能体 / 工具协议 / RAG）
+
+| 文档 | 模块 | 说明 |
+|------|------|------|
+| [ai](ai.md) | `./ai` | 聊天核心：消息/多模态、`ChatModel` 调用链、工具调用、流式事件、7 方言、会话、embedding/rerank/generate、模型路由、拦截器、Talent SPI、前端流协议（aisdk+agui） |
+| [ai-agent](ai-agent.md) | `./ai/agent` + `./ai/flow` | 智能体三形态（Simple/ReAct/Team 8 协议）+ HITL 挂起恢复 + AI 流编排 12 组件（YAML 链） |
+| [mcp](mcp.md) | `./mcp` + `ai/mcp` + `plugins/ai` | MCP 协议双端（客户端/服务端/三传输）+ ai 桥（工具/Talent）+ `ai.*` 配置装配 |
+| [ai-rag](ai-rag.md) | `./ai/rag` + `plugins/ai/ragloader` + `ragrepo` | RAG SPI（文档/切分器/仓储/查询过滤表达式）+ 7 格式加载器 + 11 向量仓储后端 |
+| [ai-talent](ai-talent.md) | `ai/talent/*` + `plugins/ai/talent/*` | 26 件能力包总览：每件的构造、工具清单与最小用法 |
+| [ai-harness](ai-harness.md) | `./ai/harness` + `./ai/loop` + `./sandbox` | 编码代理容器（子智能体/权限审批/上下文压缩/命令）+ 持久循环引擎（三策略）+ 命令沙箱 |
+
 ## Runtime（net/http 适配与生产启动）
 
 | 文档 | 模块 | 说明 |
@@ -76,6 +87,7 @@ Aifei-Go 各模块的说明文档集合。每篇深入讲解一个模块的**背
 - **RPC 调用**：[nami](nami.md) → [nacos](nacos.md)（服务发现）
 - **流程编排/审批流**：[flow](flow.md) → [flow-plugin](flow-plugin.md) → [db](db.md)
 - **多租户/权限**：[data-isolate](data-isolate.md) → [config](config.md)
+- **LLM 应用主线**：[ai](ai.md) → [ai-agent](ai-agent.md) → [ai-rag](ai-rag.md)；工具协议走 [mcp](mcp.md)；能力注入看 [ai-talent](ai-talent.md)；编码代理看 [ai-harness](ai-harness.md)
 
 ## 相关文档
 
@@ -84,4 +96,4 @@ Aifei-Go 各模块的说明文档集合。每篇深入讲解一个模块的**背
 
 ---
 
-共 26 篇说明文档（含本索引与框架总览），约 11,800 行。
+共 32 篇说明文档（含本索引与框架总览），约 14,000 行。
