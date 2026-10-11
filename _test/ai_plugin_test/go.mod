@@ -3,14 +3,14 @@ module github.com/crazy-airhead/aifei-go/_test/ai_plugin_test
 go 1.27
 
 require (
-	github.com/crazy-airhead/aifei-go/ai v1.0.3
-	github.com/crazy-airhead/aifei-go/config v1.0.3
-	github.com/crazy-airhead/aifei-go/db v1.0.3
-	github.com/crazy-airhead/aifei-go/mcp v1.0.3
-	github.com/crazy-airhead/aifei-go/plugins/ai v1.0.3
-	github.com/crazy-airhead/aifei-go/plugins/ai/ragloader v0.0.0
-	github.com/crazy-airhead/aifei-go/plugins/ai/ragrepo v0.0.0
-	github.com/crazy-airhead/aifei-go/plugins/elasticsearch v0.0.0
+	github.com/crazy-airhead/aifei-go/ai v1.2.0
+	github.com/crazy-airhead/aifei-go/config v1.2.0
+	github.com/crazy-airhead/aifei-go/db v1.2.0
+	github.com/crazy-airhead/aifei-go/mcp v1.2.0
+	github.com/crazy-airhead/aifei-go/plugins/ai v1.2.0
+	github.com/crazy-airhead/aifei-go/plugins/ai/ragloader v1.2.0
+	github.com/crazy-airhead/aifei-go/plugins/ai/ragrepo v1.2.0
+	github.com/crazy-airhead/aifei-go/plugins/elasticsearch v1.2.0
 	github.com/elastic/go-elasticsearch/v8 v8.18.0
 	modernc.org/sqlite v1.53.0
 )
@@ -43,12 +43,12 @@ require (
 	github.com/blevesearch/zapx/v17 v17.2.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/conductor-oss/markitdown v0.0.1 // indirect
-	github.com/crazy-airhead/aifei-go/ai/agent v1.0.3 // indirect
-	github.com/crazy-airhead/aifei-go/aifei v1.0.3 // indirect
-	github.com/crazy-airhead/aifei-go/dami v1.0.3 // indirect
-	github.com/crazy-airhead/aifei-go/enjoy v1.0.3 // indirect
-	github.com/crazy-airhead/aifei-go/flow v1.0.3 // indirect
-	github.com/crazy-airhead/aifei-go/log v1.0.3 // indirect
+	github.com/crazy-airhead/aifei-go/ai/agent v1.2.0 // indirect
+	github.com/crazy-airhead/aifei-go/aifei v1.2.0 // indirect
+	github.com/crazy-airhead/aifei-go/dami v1.2.0 // indirect
+	github.com/crazy-airhead/aifei-go/enjoy v1.2.0 // indirect
+	github.com/crazy-airhead/aifei-go/flow v1.2.0 // indirect
+	github.com/crazy-airhead/aifei-go/log v1.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/elastic/elastic-transport-go/v8 v8.7.0 // indirect
 	github.com/extrame/ole2 v0.0.0-20160812065207-d69429661ad7 // indirect

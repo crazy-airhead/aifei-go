@@ -4,14 +4,14 @@ go 1.27
 
 require (
 	github.com/blevesearch/bleve/v2 v2.6.1
-	github.com/crazy-airhead/aifei-go/ai v1.0.3
-	github.com/crazy-airhead/aifei-go/ai/agent v1.0.3
-	github.com/crazy-airhead/aifei-go/aifei v1.0.3
-	github.com/crazy-airhead/aifei-go/config v1.0.3
-	github.com/crazy-airhead/aifei-go/db v1.0.3
-	github.com/crazy-airhead/aifei-go/log v1.0.3
-	github.com/crazy-airhead/aifei-go/mcp v1.0.3
-	github.com/crazy-airhead/aifei-go/plugins/ai/ragloader v0.0.0
+	github.com/crazy-airhead/aifei-go/ai v1.2.0
+	github.com/crazy-airhead/aifei-go/ai/agent v1.2.0
+	github.com/crazy-airhead/aifei-go/aifei v1.2.0
+	github.com/crazy-airhead/aifei-go/config v1.2.0
+	github.com/crazy-airhead/aifei-go/db v1.2.0
+	github.com/crazy-airhead/aifei-go/log v1.2.0
+	github.com/crazy-airhead/aifei-go/mcp v1.2.0
+	github.com/crazy-airhead/aifei-go/plugins/ai/ragloader v1.2.0
 	github.com/go-ego/gse v1.1.0
 )
 
@@ -41,9 +41,9 @@ require (
 	github.com/blevesearch/zapx/v16 v16.3.4 // indirect
 	github.com/blevesearch/zapx/v17 v17.2.3 // indirect
 	github.com/conductor-oss/markitdown v0.0.1 // indirect
-	github.com/crazy-airhead/aifei-go/dami v1.0.3 // indirect
-	github.com/crazy-airhead/aifei-go/enjoy v1.0.3 // indirect
-	github.com/crazy-airhead/aifei-go/flow v1.0.3 // indirect
+	github.com/crazy-airhead/aifei-go/dami v1.2.0 // indirect
+	github.com/crazy-airhead/aifei-go/enjoy v1.2.0 // indirect
+	github.com/crazy-airhead/aifei-go/flow v1.2.0 // indirect
 	github.com/extrame/ole2 v0.0.0-20160812065207-d69429661ad7 // indirect
 	github.com/extrame/xls v0.0.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
@@ -77,7 +77,6 @@ require (
 )
 
 replace (
-
 	github.com/crazy-airhead/aifei-go/ai => ../../ai
 	github.com/crazy-airhead/aifei-go/ai/agent => ../../ai/agent
 	github.com/crazy-airhead/aifei-go/aifei => ../../aifei

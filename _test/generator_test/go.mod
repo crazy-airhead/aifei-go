@@ -3,14 +3,14 @@ module github.com/crazy-airhead/aifei-go/_test/generator_test
 go 1.27
 
 require (
-	github.com/crazy-airhead/aifei-go/db v1.0.3
-	github.com/crazy-airhead/aifei-go/tools/generator v1.0.3
+	github.com/crazy-airhead/aifei-go/db v1.2.0
+	github.com/crazy-airhead/aifei-go/tools/generator v1.2.0
 	modernc.org/sqlite v1.53.0
 )
 
 require (
-	github.com/crazy-airhead/aifei-go/enjoy v1.0.3 // indirect
-	github.com/crazy-airhead/aifei-go/log v1.0.3 // indirect
+	github.com/crazy-airhead/aifei-go/enjoy v1.2.0 // indirect
+	github.com/crazy-airhead/aifei-go/log v1.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
