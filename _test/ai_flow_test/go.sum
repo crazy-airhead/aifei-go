@@ -1,7 +1,3 @@
-github.com/crazy-airhead/aifei-go/dami v1.0.2 h1:P4j4ym1K7wuKHMiL4vVPa1McyJdvwY4Llr/GoGsq9yc=
-github.com/crazy-airhead/aifei-go/dami v1.0.2/go.mod h1:0r6xe2kK/egfQVryTkiYKto629oDrLhL6Z66pRw8J38=
-github.com/crazy-airhead/aifei-go/enjoy v1.0.2 h1:7LhZCjZXrAoZIMHUXedtYeMdKZqkR2C2or9MMjrB790=
-github.com/crazy-airhead/aifei-go/enjoy v1.0.2/go.mod h1:RpfYKnvmyFyd/lWwM4bBFtPPbTPVxMuA4I1mJpeuJLI=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=

@@ -4,7 +4,7 @@ go 1.27
 
 require (
 	github.com/crazy-airhead/aifei-go/ai v1.0.3
-	github.com/crazy-airhead/aifei-go/ai/agent v0.0.0-00010101000000-000000000000
+	github.com/crazy-airhead/aifei-go/ai/agent v1.0.3
 	github.com/crazy-airhead/aifei-go/flow v1.0.3
 	github.com/crazy-airhead/aifei-go/log v1.0.3
 )

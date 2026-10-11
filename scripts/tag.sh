@@ -58,6 +58,13 @@ MODULES=(
   nami          # github.com/crazy-airhead/aifei-go/nami     (./nami/go.mod)
   dami          # github.com/crazy-airhead/aifei-go/dami     (./dami/go.mod)
   flow          # github.com/crazy-airhead/aifei-go/flow     (./flow/go.mod)            → dami, enjoy
+  mcp           # github.com/crazy-airhead/aifei-go/mcp      (./mcp/go.mod)             → log
+  sandbox       # github.com/crazy-airhead/aifei-go/sandbox  (./sandbox/go.mod)         → log
+  ai            # github.com/crazy-airhead/aifei-go/ai       (./ai/go.mod)              → enjoy, log, mcp
+  ai/agent      # github.com/crazy-airhead/aifei-go/ai/agent (./ai/agent/go.mod)        → ai, flow
+  ai/flow       # github.com/crazy-airhead/aifei-go/ai/flow  (./ai/flow/go.mod)         → ai, dami, enjoy, flow
+  ai/harness    # github.com/crazy-airhead/aifei-go/ai/harness (./ai/harness/go.mod)    → ai, ai/agent, log
+  ai/loop       # github.com/crazy-airhead/aifei-go/ai/loop  (./ai/loop/go.mod)         → ai, ai/agent, flow, log
   http       # github.com/crazy-airhead/aifei-go/http  (./http/go.mod)        → aifei
   tools/generator # github.com/crazy-airhead/aifei-go/tools/generator (./tools/generator/go.mod) → db, enjoy
   tools/damigen  # github.com/crazy-airhead/aifei-go/tools/damigen  (./tools/damigen/go.mod)  → enjoy
@@ -72,6 +79,9 @@ MODULES=(
   plugins/elasticsearch # github.com/crazy-airhead/aifei-go/plugins/elasticsearch (./plugins/elasticsearch/go.mod) → aifei, config, log
   plugins/xxljob  # github.com/crazy-airhead/aifei-go/plugins/xxljob  (./plugins/xxljob/go.mod)  → aifei, config, log
   plugins/flow    # github.com/crazy-airhead/aifei-go/plugins/flow    (./plugins/flow/go.mod)    → aifei, config, db, flow, log
+  plugins/ai/ragloader # github.com/crazy-airhead/aifei-go/plugins/ai/ragloader (./plugins/ai/ragloader/go.mod) → ai
+  plugins/ai/ragrepo   # github.com/crazy-airhead/aifei-go/plugins/ai/ragrepo   (./plugins/ai/ragrepo/go.mod)   → ai, plugins/elasticsearch
+  plugins/ai           # github.com/crazy-airhead/aifei-go/plugins/ai           (./plugins/ai/go.mod)           → ai, ai/agent, aifei, config, db, log, mcp, plugins/ai/ragloader
 )
 
 # Test/example modules under _test/. They are NOT importable libraries, so they
@@ -80,6 +90,12 @@ MODULES=(
 # to keep the whole repo on one version. (Library modules first, then _test, so
 # a module is always bumped before anything that depends on it is tidy'd.)
 TEST_MODULES=(
+  _test/ai_agent_test
+  _test/ai_flow_test
+  _test/ai_harness_test
+  _test/ai_loop_test
+  _test/ai_plugin_test
+  _test/ai_test
   _test/cache_test
   _test/config_test
   _test/dami_test
@@ -94,8 +110,10 @@ TEST_MODULES=(
   _test/json_test
   _test/kafka_test
   _test/log_test
+  _test/mcp_test
   _test/nacos_test
   _test/nami_test
+  _test/sandbox_test
   _test/server_test
   _test/storage_test
   _test/swagger_test
@@ -163,7 +181,11 @@ if [[ "$DO" == "--do" || "$DO" == "--push" ]]; then
     # version) and works for both block and single-line require forms.
     while IFS= read -r DEP_PATH; do
       [[ -z "$DEP_PATH" ]] && continue
-      sed -i '' "s|\\(${DEP_PATH}\\) v[0-9][0-9.]*|\\1 ${VERSION}|g" "$MOD_FILE"
+      # The version char class must cover pseudo-versions (v0.0.0-00010101…):
+      # local-replace-only deps tidy to the zero pseudo-version, and a plain
+      # `v[0-9.]*` match would leave the "-00010101…" suffix glued onto the
+      # new version.
+      sed -i '' "s|\\(${DEP_PATH}\\) v[0-9][0-9A-Za-z.-]*|\\1 ${VERSION}|g" "$MOD_FILE"
       echo "  ${mod}/go.mod: ${DEP_PATH#github.com/crazy-airhead/aifei-go/} → ${VERSION}"
       MODIFIED=1
     done < <(grep -oE 'github.com/crazy-airhead/aifei-go/[a-z/]+ v[0-9]' "$MOD_FILE" \
