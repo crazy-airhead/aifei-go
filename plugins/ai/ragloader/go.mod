@@ -45,4 +45,5 @@ replace (
 	github.com/crazy-airhead/aifei-go/db => ../../../db
 	github.com/crazy-airhead/aifei-go/enjoy => ../../../enjoy
 	github.com/crazy-airhead/aifei-go/log => ../../../log
+	github.com/crazy-airhead/aifei-go/mcp => ../../../mcp
 )

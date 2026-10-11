@@ -14,5 +14,8 @@ replace (
 	github.com/crazy-airhead/aifei-go/enjoy => ../../../enjoy
 	github.com/crazy-airhead/aifei-go/log => ../../../log
 	github.com/crazy-airhead/aifei-go/plugins/elasticsearch => ../../elasticsearch
+	github.com/crazy-airhead/aifei-go/aifei => ../../../aifei
+	github.com/crazy-airhead/aifei-go/config => ../../../config
+	github.com/crazy-airhead/aifei-go/mcp => ../../../mcp
 )
 
