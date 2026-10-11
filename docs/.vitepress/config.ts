@@ -20,6 +20,7 @@ export default withMermaid(defineConfig({
       { text: '首页', link: '/' },
       { text: '指南', link: '/guide/', activeMatch: '/guide/' },
       { text: '架构设计', link: '/arch/', activeMatch: '/arch/' },
+      { text: '更新记录', link: '/changelog', activeMatch: '/changelog' },
     ],
     sidebar: {
       '/guide/': [
