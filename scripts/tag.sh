@@ -72,6 +72,7 @@ MODULES=(
   plugins/elasticsearch # github.com/crazy-airhead/aifei-go/plugins/elasticsearch (./plugins/elasticsearch/go.mod) → aifei, config, log
   plugins/xxljob  # github.com/crazy-airhead/aifei-go/plugins/xxljob  (./plugins/xxljob/go.mod)  → aifei, config, log
   plugins/flow    # github.com/crazy-airhead/aifei-go/plugins/flow    (./plugins/flow/go.mod)    → aifei, config, db, flow, log
+  plugins/goose   # github.com/crazy-airhead/aifei-go/plugins/goose   (./plugins/goose/go.mod)   → aifei, config, db, log
 )
 
 # Test/example modules under _test/. They are NOT importable libraries, so they
@@ -91,6 +92,7 @@ TEST_MODULES=(
   _test/flow_plugin_test
   _test/flow_test
   _test/generator_test
+  _test/goose_test
   _test/json_test
   _test/kafka_test
   _test/log_test

@@ -11,11 +11,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # …) carry no tests and are listed only to compile-check them.
 go test ./aifei ./config ./dami ./db ./enjoy ./flow ./http ./json ./log ./nami ./server \
          ./tools/generator ./tools/damigen \
-         ./plugins/cache ./plugins/dami ./plugins/dataisolate ./plugins/flow ./plugins/kafka ./plugins/nacos ./plugins/storage ./plugins/swagger ./plugins/elasticsearch ./plugins/xxljob \
+         ./plugins/cache ./plugins/dami ./plugins/dataisolate ./plugins/flow ./plugins/goose ./plugins/kafka ./plugins/nacos ./plugins/storage ./plugins/swagger ./plugins/elasticsearch ./plugins/xxljob \
          ./_test/json_test ./_test/log_test ./_test/config_test ./_test/dami_test \
          ./_test/server_test ./_test/nami_test ./_test/storage_test ./_test/swagger_test \
          ./_test/nacos_test ./_test/damigen_test ./_test/generator_test \
-         ./_test/dataisolate_test ./_test/db_test ./_test/cache_test ./_test/kafka_test ./_test/enjoy_test ./_test/flow_test ./_test/flow_plugin_test
+         ./_test/dataisolate_test ./_test/db_test ./_test/cache_test ./_test/kafka_test ./_test/enjoy_test ./_test/flow_test ./_test/flow_plugin_test ./_test/goose_test
 
 # Run tests for a single area (tests live under _test/<area>_test)
 go test ./_test/db_test
@@ -27,6 +27,7 @@ go test ./_test/generator_test
 go test ./_test/config_test
 go test ./_test/dami_test
 go test ./_test/flow_test
+go test ./_test/goose_test
 
 # Run db integration tests (requires sqlite)
 go test ./_test/db_test
@@ -36,6 +37,9 @@ go test ./_test/cache_test
 
 # Run kafka integration tests (embedded franz-go kfake broker; no external kafka)
 go test ./_test/kafka_test
+
+# Run goose migration plugin tests (embedded sqlite; no external db)
+go test ./_test/goose_test
 
 # Run a single test
 go test ./enjoy -run TestOutputExpr
@@ -126,6 +130,7 @@ This project uses a Go workspace (`go.work`) of independent modules, layered by 
 | Plugin | `…/aifei-go/plugins/storage` | `./plugins/storage` | aifei, config, log + `minio-go` |
 | Plugin | `…/aifei-go/plugins/swagger` | `./plugins/swagger` | aifei, config, log + `swaggo/swag` |
 | Plugin | `…/aifei-go/plugins/dataisolate` | `./plugins/dataisolate` | aifei, config, db, http, log, server + `github.com/ajitpratap0/GoSQLX` |
+| Plugin | `…/aifei-go/plugins/goose` | `./plugins/goose` | aifei, config, db, log + `pressly/goose/v3` |
 | Example | `_test/demo` | `./_test/demo` | core + db + generator + `modernc.org/sqlite` |
 | Example | `_test/db_test` | `./_test/db_test` | db + `modernc.org/sqlite` |
 | Example | `_test/cache_test` | `./_test/cache_test` | `miniredis` |
@@ -143,6 +148,7 @@ This project uses a Go workspace (`go.work`) of independent modules, layered by 
 | Example | `_test/nacos_test` | `./_test/nacos_test` | plugins/nacos |
 | Example | `_test/damigen_test` | `./_test/damigen_test` | tools/damigen |
 | Example | `_test/generator_test` | `./_test/generator_test` | tools/generator + `modernc.org/sqlite` |
+| Example | `_test/goose_test` | `./_test/goose_test` | plugins/goose + `modernc.org/sqlite` |
 
 `…` = `github.com/crazy-airhead`. In the Dependencies column, bare names are internal modules; backticked names are external libraries; `—` means no dependencies.
 
@@ -157,6 +163,7 @@ Users can import individual modules without pulling unwanted dependencies:
 - `go get github.com/crazy-airhead/aifei-go/plugins/swagger` — knife4j-vue3 OpenAPI docs plugin (embedded UI, serves spec via swaggo/swag)
 - `go get github.com/crazy-airhead/aifei-go/plugins/kafka` — Kafka plugin (franz-go producer/consumer, multi-cluster, at-least-once Subscribe)
 - `go get github.com/crazy-airhead/aifei-go/plugins/dataisolate` — data isolation plugin (tenant isolation + row/column isolation; AST SQL rewriting via GoSQLX)
+- `go get github.com/crazy-airhead/aifei-go/plugins/goose` — goose migration plugin (pressly/goose/v3 provider; startup schema convergence, embed or disk migrations)
 
 Requires Go 1.26. All library code uses only the Go standard library.
 

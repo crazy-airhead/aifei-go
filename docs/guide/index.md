@@ -65,6 +65,7 @@ Aifei-Go 各模块的说明文档集合。每篇深入讲解一个模块的**背
 | [dami-plugin](dami-plugin.md) | `./plugins/dami` | dami 事件总线的 aifei 插件封装（生命周期托管） |
 | [data-isolate](data-isolate.md) | `./plugins/dataisolate` | 数据隔离：租户 + 行范围 + 列脱敏，AST SQL 改写 |
 | [flow-plugin](flow-plugin.md) | `./plugins/flow` | flow 引擎组装插件：图加载 + MySQL 状态仓储 + 任务历史 |
+| [goose](goose.md) | `./plugins/goose` | 数据库迁移：启动期 schema 收敛 + 版本表，基于 pressly/goose/v3 |
 
 ---
 
@@ -76,6 +77,7 @@ Aifei-Go 各模块的说明文档集合。每篇深入讲解一个模块的**背
 - **RPC 调用**：[nami](nami.md) → [nacos](nacos.md)（服务发现）
 - **流程编排/审批流**：[flow](flow.md) → [flow-plugin](flow-plugin.md) → [db](db.md)
 - **多租户/权限**：[data-isolate](data-isolate.md) → [config](config.md)
+- **schema 版本管理**：[goose](goose.md) → [generator](generator.md) → [db](db.md)
 
 ## 相关文档
 

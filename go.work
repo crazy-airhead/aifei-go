@@ -7,6 +7,7 @@ use (
 	./_test/dataisolate_test
 	./_test/damigen_test
 	./_test/generator_test
+	./_test/goose_test
 	./_test/db_test
 	./_test/demo
 	./_test/enjoy_test
@@ -35,6 +36,7 @@ use (
 	./plugins/dataisolate
 	./plugins/elasticsearch
 	./plugins/flow
+	./plugins/goose
 	./plugins/kafka
 	./plugins/nacos
 	./plugins/storage
