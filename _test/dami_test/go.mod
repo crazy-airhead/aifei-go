@@ -3,13 +3,13 @@ module github.com/crazy-airhead/aifei-go/_test/dami_test
 go 1.26
 
 require (
-	github.com/crazy-airhead/aifei-go/dami v0.1.3
-	github.com/crazy-airhead/aifei-go/plugins/dami v0.1.3
+	github.com/crazy-airhead/aifei-go/dami v0.1.4
+	github.com/crazy-airhead/aifei-go/plugins/dami v0.1.4
 )
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v0.1.3 // indirect
-	github.com/crazy-airhead/aifei-go/log v0.1.3 // indirect
+	github.com/crazy-airhead/aifei-go/aifei v0.1.4 // indirect
+	github.com/crazy-airhead/aifei-go/log v0.1.4 // indirect
 )
 
 replace (

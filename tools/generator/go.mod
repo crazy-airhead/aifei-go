@@ -3,11 +3,11 @@ module github.com/crazy-airhead/aifei-go/tools/generator
 go 1.26
 
 require (
-	github.com/crazy-airhead/aifei-go/db v0.1.3
-	github.com/crazy-airhead/aifei-go/enjoy v0.1.3
+	github.com/crazy-airhead/aifei-go/db v0.1.4
+	github.com/crazy-airhead/aifei-go/enjoy v0.1.4
 )
 
-require github.com/crazy-airhead/aifei-go/log v0.1.3 // indirect
+require github.com/crazy-airhead/aifei-go/log v0.1.4 // indirect
 
 replace (
 	github.com/crazy-airhead/aifei-go/db => ../../db

@@ -3,8 +3,8 @@ module github.com/crazy-airhead/aifei-go/db
 go 1.26
 
 require (
-	github.com/crazy-airhead/aifei-go/enjoy v0.1.3
-	github.com/crazy-airhead/aifei-go/log v0.1.3
+	github.com/crazy-airhead/aifei-go/enjoy v0.1.4
+	github.com/crazy-airhead/aifei-go/log v0.1.4
 )
 
 replace github.com/crazy-airhead/aifei-go/enjoy => ../enjoy

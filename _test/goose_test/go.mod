@@ -3,16 +3,16 @@ module github.com/crazy-airhead/aifei-go/_test/goose_test
 go 1.26.0
 
 require (
-	github.com/crazy-airhead/aifei-go/config v0.1.3
-	github.com/crazy-airhead/aifei-go/db v0.1.3
-	github.com/crazy-airhead/aifei-go/log v0.1.3
-	github.com/crazy-airhead/aifei-go/plugins/goose v0.1.3
+	github.com/crazy-airhead/aifei-go/config v0.1.4
+	github.com/crazy-airhead/aifei-go/db v0.1.4
+	github.com/crazy-airhead/aifei-go/log v0.1.4
+	github.com/crazy-airhead/aifei-go/plugins/goose v0.1.4
 	modernc.org/sqlite v1.62.0
 )
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v0.1.3 // indirect
-	github.com/crazy-airhead/aifei-go/enjoy v0.1.3 // indirect
+	github.com/crazy-airhead/aifei-go/aifei v0.1.4 // indirect
+	github.com/crazy-airhead/aifei-go/enjoy v0.1.4 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect

@@ -9,9 +9,9 @@ replace (
 )
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v0.1.3
-	github.com/crazy-airhead/aifei-go/config v0.1.3
-	github.com/crazy-airhead/aifei-go/log v0.1.3
+	github.com/crazy-airhead/aifei-go/aifei v0.1.4
+	github.com/crazy-airhead/aifei-go/config v0.1.4
+	github.com/crazy-airhead/aifei-go/log v0.1.4
 	github.com/swaggo/swag v1.16.6
 )
 
