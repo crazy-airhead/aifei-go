@@ -1,0 +1,4 @@
+-- +goose NO TRANSACTION
+
+-- +goose Up
+CREATE TABLE notx (id INTEGER PRIMARY KEY);

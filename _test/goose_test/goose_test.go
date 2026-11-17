@@ -4,11 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
-	"testing/fstest"
 
 	_ "modernc.org/sqlite" // register the sqlite driver
 
@@ -19,47 +20,61 @@ import (
 )
 
 // ---- fixtures ----
+//
+// Migrations are real .sql files under testdata/ (the production layout).
+// Tests copy them into a per-test temp dir via migrDir, so every test
+// exercises the os.DirFS disk-reading path and tests can grow the file set
+// mid-run (TestUpIncremental):
+//
+//	testdata/migrations/  00001_create_users.sql, 00002_create_posts.sql,
+//	                      00003_add_users_email.sql
+//	testdata/notx/        00001_create_notx.sql   (NO TRANSACTION)
+//	testdata/broken/      00001_broken.sql        (invalid SQL → fail-fast)
+//	testdata/seed/        00001_init_dict.sql     (DDL + INSERT DML)
+//	testdata/embed/       00001_create_embedtable.sql (go:embed path)
 
 const (
-	sqlUsers = `-- +goose Up
-CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);
-
--- +goose Down
-DROP TABLE users;
-`
-	sqlPosts = `-- +goose Up
-CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER, title TEXT);
-
--- +goose Down
-DROP TABLE posts;
-`
-	sqlEmail = `-- +goose Up
-ALTER TABLE users ADD COLUMN email TEXT;
-`
-	sqlNoTx = `-- +goose NO TRANSACTION
-
--- +goose Up
-CREATE TABLE notx (id INTEGER PRIMARY KEY);
-`
-	sqlBroken = `-- +goose Up
-THIS IS NOT VALID SQL AT ALL;
-`
+	migUsers = "00001_create_users.sql"
+	migPosts = "00002_create_posts.sql"
+	migEmail = "00003_add_users_email.sql"
 )
 
-// mapFS builds an fs.FS from name → content pairs.
-func mapFS(files map[string]string) fstest.MapFS {
-	m := fstest.MapFS{}
-	for name, content := range files {
-		m[name] = &fstest.MapFile{Data: []byte(content)}
+// migrDir copies the selected .sql files (all of them when names is empty)
+// from testdata/<src> into a fresh temp dir and returns its path — the
+// production os.DirFS layout, so every test runs against real files.
+func migrDir(t *testing.T, src string, names ...string) string {
+	t.Helper()
+	dst := t.TempDir()
+	entries, err := os.ReadDir(filepath.Join("testdata", src))
+	if err != nil {
+		t.Fatalf("read testdata/%s: %v", src, err)
 	}
-	return m
+	for _, e := range entries {
+		if e.IsDir() || (len(names) > 0 && !slices.Contains(names, e.Name())) {
+			continue
+		}
+		copyMigr(t, src, dst, e.Name())
+	}
+	return dst
 }
 
-func initialFS() fstest.MapFS {
-	return mapFS(map[string]string{
-		"00001_create_users.sql": sqlUsers,
-		"00002_create_posts.sql": sqlPosts,
-	})
+// copyMigr copies one migration file from testdata/<src> into dstDir — used
+// on its own to grow a dir's migration set mid-test (TestUpIncremental).
+func copyMigr(t *testing.T, src, dstDir, name string) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("testdata", src, name))
+	if err != nil {
+		t.Fatalf("read testdata/%s/%s: %v", src, name, err)
+	}
+	if err := os.WriteFile(filepath.Join(dstDir, name), data, 0o644); err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
+}
+
+// initialDir returns a temp migrations dir holding the first two files
+// (users + posts); the email migration stays out until a test copies it in.
+func initialDir(t *testing.T) string {
+	return migrDir(t, "migrations", migUsers, migPosts)
 }
 
 // newDB initializes the "main" db.Config on a fresh sqlite file and returns
@@ -74,18 +89,19 @@ func newDB(t *testing.T) string {
 	return dsn
 }
 
-// newGoose builds a Goose over the given fs rooted at "." with sqlite defaults.
-func newGoose(t *testing.T, fsys fstest.MapFS, mutate func(*goose.Config)) *goose.Goose {
+// newGoose builds a Goose over a real migrations dir (fsys nil → os.DirFS
+// path, same as the plugin default) with sqlite defaults.
+func newGoose(t *testing.T, dir string, mutate func(*goose.Config)) *goose.Goose {
 	t.Helper()
 	cfg := &goose.Config{
 		DBID:  "main",
-		Dir:   ".",
+		Dir:   dir,
 		Table: "goose_db_version",
 	}
 	if mutate != nil {
 		mutate(cfg)
 	}
-	g, err := goose.New(cfg, fsys, nil)
+	g, err := goose.New(cfg, nil, nil)
 	if err != nil {
 		t.Fatalf("goose.New: %v", err)
 	}
@@ -204,7 +220,7 @@ func TestPackageLevelNotStarted(t *testing.T) {
 func TestNewMissingDBConfig(t *testing.T) {
 	db.ResetConfigs()
 	cfg := &goose.Config{DBID: "main", Dir: "."}
-	if _, err := goose.New(cfg, initialFS(), nil); err == nil {
+	if _, err := goose.New(cfg, nil, nil); err == nil {
 		t.Fatal("New without db.InitWithID should fail-fast, got nil error")
 	}
 }
@@ -212,7 +228,7 @@ func TestNewMissingDBConfig(t *testing.T) {
 func TestNewDialectMapping(t *testing.T) {
 	// sqlite maps and connects end-to-end.
 	dsn := newDB(t)
-	g := newGoose(t, initialFS(), nil)
+	g := newGoose(t, initialDir(t), nil)
 	if g == nil || g.Raw() == nil {
 		t.Fatal("driver sqlite: New should succeed with a non-nil Raw()")
 	}
@@ -221,7 +237,7 @@ func TestNewDialectMapping(t *testing.T) {
 	if err := db.InitWithID("main", "oracle", dsn); err != nil {
 		t.Fatalf("InitWithID(oracle): %v", err)
 	}
-	_, err := goose.New(&goose.Config{DBID: "main", Dir: ".", Table: "goose_db_version"}, initialFS(), nil)
+	_, err := goose.New(&goose.Config{DBID: "main", Dir: ".", Table: "goose_db_version"}, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "unsupported driver") {
 		t.Errorf("unknown driver error = %v, want contains %q", err, "unsupported driver")
 	}
@@ -233,7 +249,7 @@ func TestNewDialectMapping(t *testing.T) {
 		if err := db.InitWithID("main", driver, "user:pass@127.0.0.1/db?multiStatements=true"); err != nil {
 			t.Fatalf("InitWithID(%s): %v", driver, err)
 		}
-		_, err := goose.New(&goose.Config{DBID: "main", Dir: ".", Table: "goose_db_version"}, initialFS(), nil)
+		_, err := goose.New(&goose.Config{DBID: "main", Dir: ".", Table: "goose_db_version"}, nil, nil)
 		if err == nil {
 			t.Errorf("driver %s: expected a driver-layer error, got nil", driver)
 		} else if strings.Contains(err.Error(), "unsupported driver") {
@@ -250,7 +266,7 @@ func TestMySQLDSNWarn(t *testing.T) {
 	}
 	t.Cleanup(db.ResetConfigs)
 	logger := &recordingLogger{}
-	_, _ = goose.New(&goose.Config{DBID: "main", Dir: ".", Table: "goose_db_version"}, initialFS(), logger)
+	_, _ = goose.New(&goose.Config{DBID: "main", Dir: ".", Table: "goose_db_version"}, nil, logger)
 	if logger.warnCount() == 0 {
 		t.Error("expected a Warn about multiStatements for a mysql DSN lacking it")
 	}
@@ -260,7 +276,7 @@ func TestMySQLDSNWarn(t *testing.T) {
 
 func TestUpInitial(t *testing.T) {
 	dsn := newDB(t)
-	g := newGoose(t, initialFS(), nil)
+	g := newGoose(t, initialDir(t), nil)
 	ctx := context.Background()
 	if err := g.Up(ctx); err != nil {
 		t.Fatalf("Up: %v", err)
@@ -282,16 +298,16 @@ func TestUpIncremental(t *testing.T) {
 	dsn := newDB(t)
 	ctx := context.Background()
 
-	g1 := newGoose(t, initialFS(), nil)
+	dir := initialDir(t)
+	g1 := newGoose(t, dir, nil)
 	if err := g1.Up(ctx); err != nil {
 		t.Fatalf("first Up: %v", err)
 	}
 
-	// A third migration file appears; a fresh Goose over the same db applies
-	// only the new file.
-	fsys := initialFS()
-	fsys["00003_add_email.sql"] = &fstest.MapFile{Data: []byte(sqlEmail)}
-	g2 := newGoose(t, fsys, nil)
+	// A third migration file appears on disk; a fresh Goose over the same db
+	// applies only the new file.
+	copyMigr(t, "migrations", dir, migEmail)
+	g2 := newGoose(t, dir, nil)
 	if err := g2.Up(ctx); err != nil {
 		t.Fatalf("second Up: %v", err)
 	}
@@ -314,9 +330,7 @@ func TestUpIncremental(t *testing.T) {
 func TestUpByOne(t *testing.T) {
 	newDB(t)
 	ctx := context.Background()
-	fsys := initialFS()
-	fsys["00003_add_email.sql"] = &fstest.MapFile{Data: []byte(sqlEmail)}
-	g := newGoose(t, fsys, nil)
+	g := newGoose(t, migrDir(t, "migrations"), nil)
 
 	for want := int64(1); want <= 3; want++ {
 		if err := g.UpByOne(ctx); err != nil {
@@ -330,7 +344,7 @@ func TestUpByOne(t *testing.T) {
 
 func TestDown(t *testing.T) {
 	dsn := newDB(t)
-	g := newGoose(t, initialFS(), nil)
+	g := newGoose(t, initialDir(t), nil)
 	ctx := context.Background()
 	if err := g.Up(ctx); err != nil {
 		t.Fatalf("Up: %v", err)
@@ -357,9 +371,7 @@ func TestDown(t *testing.T) {
 func TestReset(t *testing.T) {
 	dsn := newDB(t)
 	ctx := context.Background()
-	fsys := initialFS()
-	fsys["00003_add_email.sql"] = &fstest.MapFile{Data: []byte(sqlEmail)}
-	g := newGoose(t, fsys, nil)
+	g := newGoose(t, migrDir(t, "migrations"), nil)
 	if err := g.Up(ctx); err != nil {
 		t.Fatalf("Up: %v", err)
 	}
@@ -381,7 +393,7 @@ func TestReset(t *testing.T) {
 
 func TestStatus(t *testing.T) {
 	newDB(t)
-	g := newGoose(t, initialFS(), nil)
+	g := newGoose(t, initialDir(t), nil)
 	ctx := context.Background()
 	if err := g.UpByOne(ctx); err != nil {
 		t.Fatalf("UpByOne: %v", err)
@@ -412,7 +424,7 @@ func TestStatus(t *testing.T) {
 
 func TestNoTransaction(t *testing.T) {
 	dsn := newDB(t)
-	g := newGoose(t, mapFS(map[string]string{"00001_create_notx.sql": sqlNoTx}), nil)
+	g := newGoose(t, migrDir(t, "notx"), nil)
 	ctx := context.Background()
 	if err := g.Up(ctx); err != nil {
 		t.Fatalf("Up with NO TRANSACTION: %v", err)
@@ -422,6 +434,46 @@ func TestNoTransaction(t *testing.T) {
 	}
 	if v, err := g.Version(ctx); err != nil || v != 1 {
 		t.Errorf("Version = %d, %v; want 1 (NO TRANSACTION still records the version)", v, err)
+	}
+}
+
+// TestDataMigration: a migration file mixing DDL and DML executes for real —
+// the inserted rows are queryable after Up and the table is gone after Down.
+func TestDataMigration(t *testing.T) {
+	dsn := newDB(t)
+	g := newGoose(t, migrDir(t, "seed"), nil)
+	ctx := context.Background()
+	if err := g.Up(ctx); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+
+	conn, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer conn.Close()
+
+	var n int
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM dict`).Scan(&n); err != nil {
+		t.Fatalf("count dict rows: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("dict rows = %d, want 2", n)
+	}
+	var name string
+	if err := conn.QueryRow(`SELECT name FROM dict WHERE id = 2`).Scan(&name); err != nil {
+		t.Fatalf("query dict row: %v", err)
+	}
+	if name != "beta" {
+		t.Errorf("dict[2].name = %q, want beta", name)
+	}
+
+	// Down rolls the file back — the table (and its rows) disappear.
+	if err := g.Down(ctx); err != nil {
+		t.Fatalf("Down: %v", err)
+	}
+	if tableExists(t, dsn, "dict") {
+		t.Error("dict table should be gone after Down")
 	}
 }
 
@@ -471,8 +523,8 @@ func setPluginConfig(t *testing.T, dbID, dir string, enabled, auto bool) {
 
 func TestPluginStart_Auto(t *testing.T) {
 	dsn := newDB(t)
-	setPluginConfig(t, "main", ".", true, true)
-	p, err := goose.NewPlugin(nil, goose.WithFS(initialFS()))
+	setPluginConfig(t, "main", initialDir(t), true, true)
+	p, err := goose.NewPlugin(nil)
 	if err != nil {
 		t.Fatalf("NewPlugin: %v", err)
 	}
@@ -489,8 +541,8 @@ func TestPluginStart_Auto(t *testing.T) {
 
 func TestPluginStart_AutoFalse(t *testing.T) {
 	dsn := newDB(t)
-	setPluginConfig(t, "main", ".", true, false)
-	p, err := goose.NewPlugin(nil, goose.WithFS(initialFS()))
+	setPluginConfig(t, "main", initialDir(t), true, false)
+	p, err := goose.NewPlugin(nil)
 	if err != nil {
 		t.Fatalf("NewPlugin: %v", err)
 	}
@@ -511,8 +563,8 @@ func TestPluginStart_AutoFalse(t *testing.T) {
 
 func TestPluginStart_Disabled(t *testing.T) {
 	dsn := newDB(t)
-	setPluginConfig(t, "main", ".", false, true)
-	p, err := goose.NewPlugin(nil, goose.WithFS(initialFS()))
+	setPluginConfig(t, "main", initialDir(t), false, true)
+	p, err := goose.NewPlugin(nil)
 	if err != nil {
 		t.Fatalf("NewPlugin: %v", err)
 	}
@@ -529,10 +581,8 @@ func TestPluginStart_Disabled(t *testing.T) {
 
 func TestPluginStart_FailFast(t *testing.T) {
 	newDB(t)
-	setPluginConfig(t, "main", ".", true, true)
-	p, err := goose.NewPlugin(nil, goose.WithFS(mapFS(map[string]string{
-		"00001_broken.sql": sqlBroken,
-	})))
+	setPluginConfig(t, "main", migrDir(t, "broken"), true, true)
+	p, err := goose.NewPlugin(nil)
 	if err != nil {
 		t.Fatalf("NewPlugin: %v", err)
 	}
@@ -545,8 +595,8 @@ func TestPluginStart_FailFast(t *testing.T) {
 // helpers delegate to the installed default instance.
 func TestPackageLevelAPI(t *testing.T) {
 	dsn := newDB(t)
-	setPluginConfig(t, "main", ".", true, false)
-	p, err := goose.NewPlugin(nil, goose.WithFS(initialFS()))
+	setPluginConfig(t, "main", initialDir(t), true, false)
+	p, err := goose.NewPlugin(nil)
 	if err != nil {
 		t.Fatalf("NewPlugin: %v", err)
 	}

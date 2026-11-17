@@ -1,0 +1,2 @@
+-- +goose Up
+THIS IS NOT VALID SQL AT ALL;
