@@ -3,15 +3,15 @@ module github.com/crazy-airhead/aifei-go/plugins/goose
 go 1.26.0
 
 require (
-	github.com/crazy-airhead/aifei-go/aifei v0.1.4
-	github.com/crazy-airhead/aifei-go/config v0.1.4
-	github.com/crazy-airhead/aifei-go/db v0.1.4
-	github.com/crazy-airhead/aifei-go/log v0.1.4
+	github.com/crazy-airhead/aifei-go/aifei v0.1.5
+	github.com/crazy-airhead/aifei-go/config v0.1.5
+	github.com/crazy-airhead/aifei-go/db v0.1.5
+	github.com/crazy-airhead/aifei-go/log v0.1.5
 	github.com/pressly/goose/v3 v3.30.1
 )
 
 require (
-	github.com/crazy-airhead/aifei-go/enjoy v0.1.4 // indirect
+	github.com/crazy-airhead/aifei-go/enjoy v0.1.5 // indirect
 	github.com/mfridman/interpolate v0.2.0 // indirect
 	github.com/sethvargo/go-retry v0.5.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
